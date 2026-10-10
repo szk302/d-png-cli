@@ -1,8 +1,8 @@
 # Chromiumの出力モードと描画互換性
 
-`dip embed --renderer chromium --chromium-mode raw|desktop|vscode` で出力方式を選ぶ。CLI指定がなければ `DIP_CHROMIUM_MODE` を読み、両方未指定なら `vscode`。モードを指定しても実行エンジンの選択は変わらない。`--renderer auto` はDesktopを優先し、Desktopが選ばれた場合の `--chromium-mode` 指定はエラーにする。
+`drawio-png-cli embed --renderer chromium --chromium-mode raw|desktop|vscode` で出力方式を選ぶ。CLI指定がなければ `DRAWIO_PNG_CHROMIUM_MODE` を読み、両方未指定なら `vscode`。モードを指定しても実行エンジンの選択は変わらない。`--renderer auto` はDesktopを優先し、Desktopが選ばれた場合の `--chromium-mode` 指定はエラーにする。
 
-`DIP_CHROMIUM_MODE` はChromiumが選ばれたときだけ参照し、CLIの明示モードを優先する。値は小文字の `raw`・`desktop`・`vscode` の完全一致とし、空文字・未知値・非Unicode値は描画前に拒否する。Desktop選択時、no-render、XML抽出・検証では参照しない。
+`DRAWIO_PNG_CHROMIUM_MODE` はChromiumが選ばれたときだけ参照し、CLIの明示モードを優先する。値は小文字の `raw`・`desktop`・`vscode` の完全一致とし、空文字・未知値・非Unicode値は描画前に拒否する。Desktop選択時、no-render、XML抽出・検証では参照しない。
 
 | モード | 描画・PNG取得 | 100×40矩形の検証寸法 |
 | --- | --- | --- |
@@ -30,13 +30,13 @@ rawの取得画像はRGBAで64 MiB（16,777,216画素）以下。desktopは2倍�
 
 基準はVS Code拡張 `hediet.vscode-drawio` の安定版1.9.0（タグ `v1.9.0`、`132921f1c189d1b6239e2b0246ebd8190ca23ba5`、2025-02-19）。同梱するvscode用Web資材は、このタグが固定するdraw.ioサブモジュール `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）である。raw・desktop用の資材（31.4.5）とは別に同梱する。
 
-拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、dipのvscodeモードはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](vscode-rendering.md) に残している。
+拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、drawio-png-cliのvscodeモードはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](vscode-rendering.md) に残している。
 
 拡張v1.9.0のWebview HTMLとメッセージ送受信をGoogle Chrome 154.0.8037.97 / Linux ARM64上で再現し、エディターの表示倍率100%で保存したPNGを基準にする。VS Code本体での実機検証ではない。拡張側はlightテーマ、`simpleLabels=false`、追加プラグイン・カスタムスタイルなし。
 
 ### VS Code本体の保存結果との差
 
-- 拡張の保存結果は、保存時のエディターの表示倍率に依存する。倍率100%では一致するが、ウィンドウに合わせて縮小表示していると線の位置がずれる。dipは倍率100%の結果に合わせる。
+- 拡張の保存結果は、保存時のエディターの表示倍率に依存する。倍率100%では一致するが、ウィンドウに合わせて縮小表示していると線の位置がずれる。drawio-png-cliは倍率100%の結果に合わせる。
 - 画面の拡大率（DPR 1・1.25・1.5・1.75・2）は結果に影響しない。
 - devcontainer・WSLを使う場合も、Webviewはホスト側のVS Codeが描画する。WindowsとLinuxでは文字（Helveticaの代替フォント）、点線・アイコンの丸めが異なり、寸法・配置が一致しても画素差が残る。
 - OS・フォント・ブラウザー・Web資材・拡張設定が異なる場合の完全一致は保証しない。
@@ -64,14 +64,14 @@ VS Code側の大画像に対する自動縮小は適用しない。CLIは上限�
 
 外部画像・Webフォントのネットワーク取得は既定で禁止する。`vscode` モードでは `--allow-network` 使用時も、Canvasへ埋め込むには配信元のCORS許可が必要。draw.ioの公開画像プロキシへは転送しない。取得・デコードに失敗した資材を検出した場合はエラーにする。
 
-同梱資材で扱えない図形等には `DIP_DRAWIO_WEB_PATH` を利用できる。vscodeモードでは、拡張と同じく指定先の `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込み、`shapes/*.js` は取得しない。draw.io 26.0.2には `shapes/` がなく、AWS等の図形はこれらのファイルから読み込む。図形・アイコン（AWS図形の `resIcon`・`grIcon`、ステンシルの `include-shape` 等）が見つからない場合、上流は空白のまま描画を続けるが、dipはエラーにして既存出力を保持する。ただし、draw.io 26.0.2のサイドバー自身が書き出すのにどの版にも登録されていない図形名（`rect`・`text`・`mxgraph.android.rect` など8種類）は、セルの図形名に指定された場合に限り、上流と同じく既定の四角形として描画する。同じ名前をアイコン（`resIcon`・`grIcon` 等）に指定した場合は、上流が何も描かないため、従来どおりエラーにする。指定先の `export3.html` が、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop` では `render()`・`LoadingComplete` を提供する必要がある。確認済みの資材は、vscodeが `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）、raw・desktopが `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）。別コミットの資材は互換性の検証対象外。
+同梱資材で扱えない図形等には `DRAWIO_PNG_DRAWIO_WEB_PATH` を利用できる。vscodeモードでは、拡張と同じく指定先の `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込み、`shapes/*.js` は取得しない。draw.io 26.0.2には `shapes/` がなく、AWS等の図形はこれらのファイルから読み込む。図形・アイコン（AWS図形の `resIcon`・`grIcon`、ステンシルの `include-shape` 等）が見つからない場合、上流は空白のまま描画を続けるが、drawio-png-cliはエラーにして既存出力を保持する。ただし、draw.io 26.0.2のサイドバー自身が書き出すのにどの版にも登録されていない図形名（`rect`・`text`・`mxgraph.android.rect` など8種類）は、セルの図形名に指定された場合に限り、上流と同じく既定の四角形として描画する。同じ名前をアイコン（`resIcon`・`grIcon` 等）に指定した場合は、上流が何も描かないため、従来どおりエラーにする。指定先の `export3.html` が、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop` では `render()`・`LoadingComplete` を提供する必要がある。確認済みの資材は、vscodeが `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）、raw・desktopが `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）。別コミットの資材は互換性の検証対象外。
 
 ## 回帰テスト
 
 vscodeの文字なし矩形と `scale=2, border=10` のPNGは、拡張v1.9.0の保存経路で独立生成した固定fixtureとRGBAを比較する。Desktop互換はDesktop基準fixtureと比較し、rawは直接取得の寸法とXML保持を確認する。複数ページの選択、透明背景・明示背景、HTML・埋め込み画像、外部画像の許可／禁止、容量超過、不正倍率、タイムアウトもChromium実機テストで確認する。
 
 ```sh
-DIP_TEST_CHROME_PATH=/usr/bin/google-chrome \
-  DIP_TEST_CHROME_ARGS=--disable-dev-shm-usage \
+DRAWIO_PNG_TEST_CHROME_PATH=/usr/bin/google-chrome \
+  DRAWIO_PNG_TEST_CHROME_ARGS=--disable-dev-shm-usage \
   mise exec -- cargo test --locked --test chromium -- --ignored --nocapture --test-threads=1
 ```

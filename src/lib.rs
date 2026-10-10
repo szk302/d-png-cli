@@ -12,9 +12,9 @@ pub mod storage;
 
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
-/// Licenses and notices for dip, its Cargo dependencies, and bundled works.
+/// Licenses and notices for drawio-png-cli, its Cargo dependencies, and bundled works.
 pub const BUNDLED_LICENSES: &str = concat!(
-    "--- dip original code (MIT) ---\n",
+    "--- drawio-png-cli original code (MIT) ---\n",
     include_str!("../LICENSE"),
     "\n\n--- Third-party notices ---\n",
     include_str!("../THIRD_PARTY_NOTICES.md"),

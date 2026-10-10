@@ -1,29 +1,29 @@
-# drawio-png: dip で .drawio.png を扱う（vscode モード）
+# drawio-png: drawio-png-cli で .drawio.png を扱う（vscode モード）
 
 `.drawio.png` は、見た目の PNG 画像と、編集用の draw.io XML（PNG のテキストチャンク内）を 1 ファイルに持つ。
-`dip` はこの XML を取り出し（extract）、検証し（validate）、編集後の XML から画像を描き直して書き戻す（embed）CLI。
-PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず dip を経由する。
+`drawio-png-cli` はこの XML を取り出し（extract）、検証し（validate）、編集後の XML から画像を描き直して書き戻す（embed）CLI。
+PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず drawio-png-cli を経由する。
 
 このスキルは、**VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる vscode モード
 （Chrome / Chromium で描画）を使う。Desktop レンダラー、`raw`・`desktop` モード、フォント指定、
-`--no-render` など、ここに無い機能が必要なときは `dip skill --full` を読む。
+`--no-render` など、ここに無い機能が必要なときは `drawio-png-cli skill --full` を読む。
 その場合も、ユーザーが別のレンダラー・モードを明示的に求めない限り、embed の
 `--renderer chromium --chromium-mode vscode` は変えない。
 
 ## 準備
 
-描画には Chrome（無ければ Chromium）が必要。見つからない場合は、導入または `DIP_CHROME_PATH` の設定をユーザーに案内する。
-この手順は `dip --version` の dip に対応している。
+描画には Chrome（無ければ Chromium）が必要。見つからない場合は、導入または `DRAWIO_PNG_CHROME_PATH` の設定をユーザーに案内する。
+この手順は `drawio-png-cli --version` の drawio-png-cli に対応している。
 
 ## 基本の流れ
 
 一時ファイルはリポジトリの外（スクラッチ領域や `mktemp -d`）に置く。作業用 XML をリポジトリに残さない。
 
 ```sh
-dip extract diagram.drawio.png -o "$tmp/diagram.xml"   # 全ページを非圧縮 XML で取得
+drawio-png-cli extract diagram.drawio.png -o "$tmp/diagram.xml"   # 全ページを非圧縮 XML で取得
 # … XML を編集 …
-dip validate "$tmp/diagram.xml"                         # 構造を検証
-dip embed --renderer chromium --chromium-mode vscode \
+drawio-png-cli validate "$tmp/diagram.xml"                         # 構造を検証
+drawio-png-cli embed --renderer chromium --chromium-mode vscode \
   -i "$tmp/diagram.xml" -o diagram.drawio.png           # 先頭ページを描画し、全ページの XML を保存
 ```
 
@@ -40,7 +40,7 @@ dip embed --renderer chromium --chromium-mode vscode \
 
 ## XML を編集するときの注意
 
-dip は図面の構造（`mxfile`/`mxGraphModel`、各ページの `root` 直下の `<mxCell id="0"/>` と
+drawio-png-cli は図面の構造（`mxfile`/`mxGraphModel`、各ページの `root` 直下の `<mxCell id="0"/>` と
 `<mxCell id="1" parent="0"/>`）を検証するが、見た目の崩れまでは検出しない。
 
 - **必要な箇所だけ変える。** extract 結果はページ順・ページ名・未知の属性や要素を保持している。
@@ -75,34 +75,34 @@ dip は図面の構造（`mxfile`/`mxGraphModel`、各ページの `root` 直下
 ## アイコン・図形を入れる（ライブラリ）
 
 ロゴやアイコン、AWS などの draw.io の図形は、ライブラリから探して入れる。style を推測で書かない。
-ライブラリは 2 種類あり、どちらも同じコマンド（`dip library search` など）でまとめて扱う。
+ライブラリは 2 種類あり、どちらも同じコマンド（`drawio-png-cli library search` など）でまとめて扱う。
 
 - **利用者のライブラリ**: draw.io のカスタムライブラリ（`<mxlibrary>` の XML。Simple Icons など）。
-  環境変数 `DIP_LIBRARY_PATH`（ファイルやディレクトリを `PATH` と同じ区切りで指定）で決まる。ユーザーがライブラリの
+  環境変数 `DRAWIO_PNG_LIBRARY_PATH`（ファイルやディレクトリを `PATH` と同じ区切りで指定）で決まる。ユーザーがライブラリの
   ファイルを示した場合は、各コマンドに `--library-file <ファイル>` を付ける（このときは組み込みを使わない）。
 - **組み込みライブラリ（`drawio/*`）**: VS Code 拡張 1.9.0 と同じ draw.io 26.0.2 のサイドバーの図形
-  （AWS・Azure・Google Cloud（GCP2）・Kubernetes・UML など）。dip に同梱している。描画には後述の Web 資材が必要。
+  （AWS・Azure・Google Cloud（GCP2）・Kubernetes・UML など）。drawio-png-cli に同梱している。描画には後述の Web 資材が必要。
 
 ```sh
-dip library search lambda                       # ライブラリ名・番号・タイトル・サイズ（style や画像データは出ない）
-dip library style drawio/aws4-compute 16        # 単一セルの図形の style を 1 行で出力（XML を書くときに写す）
-dip insert --library drawio/aws4-compute --index 16 -i "$tmp/diagram.xml" -o "$tmp/diagram.xml" \
+drawio-png-cli library search lambda                       # ライブラリ名・番号・タイトル・サイズ（style や画像データは出ない）
+drawio-png-cli library style drawio/aws4-compute 16        # 単一セルの図形の style を 1 行で出力（XML を書くときに写す）
+drawio-png-cli insert --library drawio/aws4-compute --index 16 -i "$tmp/diagram.xml" -o "$tmp/diagram.xml" \
   --id fn --x 40 --y 40                         # 挿入したセルの ID を出力
-dip library preview lambda -o "$tmp/icons.png"  # 候補を画像で見比べる（任意）
+drawio-png-cli library preview lambda -o "$tmp/icons.png"  # 候補を画像で見比べる（任意）
 ```
 
 - 検索語はタイトルの部分一致（大文字小文字は区別しない）。見つからなければ短い語や別名で探し直す。
 - 検索結果の 1 列目（ライブラリ名）を `--library` に、2 列目（番号）を `--index` に写す。タイトルで選ぶなら
   `--name`（一意に決まる必要がある。複数のライブラリにあれば `--library` を付ける）。
-- 図面を XML で丸ごと書くときは、組み込みの図形は `dip library style` の出力を `style="…"` にそのまま写す
+- 図面を XML で丸ごと書くときは、組み込みの図形は `drawio-png-cli library style` の出力を `style="…"` にそのまま写す
   （XML の属性値としてエスケープ済みなので、`&quot;` などを戻さない）。
   `shape=` や `resIcon=` だけを抜き出さない。幅・高さは検索結果のサイズを使う（縦横比を保てば拡大・縮小してよい）。
 - 画像のアイコン（利用者のライブラリの多く）や、カード・グループなど複数セルの図形は、style を写せない
-  （`dip library style` はエラーになる）。`dip insert` で入れる。アイコンの `style` には大きな Base64 が入るので、自分で書き写さない。
+  （`drawio-png-cli library style` はエラーになる）。`drawio-png-cli insert` で入れる。アイコンの `style` には大きな Base64 が入るので、自分で書き写さない。
 - 組み込みには旧版の図形集（`drawio/aws3-*`・`drawio/aws3d`・`drawio/aws4b-*` など）も含まれる。ユーザーが求めない限り、
   AWS は `drawio/aws4-*`、Azure は `drawio/azure2-*`、Google Cloud は `drawio/gcp2-*`、Kubernetes は `drawio/kubernetes` を使う。
   同じものが利用者のライブラリにもあれば（最新の公式アイコンなど）、そちらを使ってよい。
-- 見た目で選ぶ必要があるときだけ `dip library preview` を使う。各図形の上に「ライブラリ #番号」とタイトルが出る（図形自身のラベルは下に出る）。
+- 見た目で選ぶ必要があるときだけ `drawio-png-cli library preview` を使う。各図形の上に「ライブラリ #番号」とタイトルが出る（図形自身のラベルは下に出る）。
   一度に 60 件まで。多すぎれば検索語か `--library` で絞る。組み込みの図形の描画には Web 資材が必要。
 - 挿入後のラベル付けや接続線は、出力された ID（`--id` で指定可）を使って XML を編集する。
   `--label` でラベルも付けられるが、位置・書式はライブラリの `style` のまま（アイコンに重なることがある）。
@@ -121,19 +121,19 @@ embed は**先頭ページだけ**を画像にする。2 ページ目以降を�
 
 `shape=mxgraph.aws4.*`・`mxgraph.gcp2.*` などの draw.io 図形集は、描画用の資材を同梱していないので、
 `Unsupported shape: ...` になる。VS Code 拡張 1.9.0 と同じ **draw.io 26.0.2**
-（コミット `96a916a337d13fc8bf622c8a67d422bd284eabe5`）の Web 資材を `DIP_DRAWIO_WEB_PATH` で指定する。
+（コミット `96a916a337d13fc8bf622c8a67d422bd284eabe5`）の Web 資材を `DRAWIO_PNG_DRAWIO_WEB_PATH` で指定する。
 他のコミット（例: `f3abfe0f…` の 31.4.5）は使わない。VS Code 拡張と見た目が 1px ずれる。
 
 ```sh
 git clone https://github.com/jgraph/drawio.git "$tmp/drawio"
 git -C "$tmp/drawio" checkout 96a916a337d13fc8bf622c8a67d422bd284eabe5
-DIP_DRAWIO_WEB_PATH="$tmp/drawio/src/main/webapp" \
-  dip embed --renderer chromium --chromium-mode vscode -i "$tmp/diagram.xml" -o diagram.drawio.png
+DRAWIO_PNG_DRAWIO_WEB_PATH="$tmp/drawio/src/main/webapp" \
+  drawio-png-cli embed --renderer chromium --chromium-mode vscode -i "$tmp/diagram.xml" -o diagram.drawio.png
 ```
 
-- **`DIP_DRAWIO_WEB_PATH` が既に設定されていれば、そのまま embed する。** 指定先のディレクトリは開かない
+- **`DRAWIO_PNG_DRAWIO_WEB_PATH` が既に設定されていれば、そのまま embed する。** 指定先のディレクトリは開かない
   （`ls`・`find`・`grep`、版や git コミットの確認、図形・アイコンの有無の確認をしない）。
-  資材の確認は dip が行い、使えない資材ならエラーになる。図形の有無は、資材ではなく `dip library search` で調べる。
+  資材の確認は drawio-png-cli が行い、使えない資材ならエラーになる。図形の有無は、資材ではなく `drawio-png-cli library search` で調べる。
 - 設定されていなければ、資材の場所をユーザーに尋ねるか、了承を得て上記のとおり clone する
   （clone は外部への通信）。ディスク上の draw.io 資材を探し回らない。
 - 「Google Cloud Platform 2026」（`mxgraph.gcp3.*`）は 26.0.2 に無く、VS Code 拡張 1.9.0 でも表示されない。使わない。
@@ -145,11 +145,11 @@ DIP_DRAWIO_WEB_PATH="$tmp/drawio/src/main/webapp" \
 
 | エラー | 対応 |
 | --- | --- |
-| `Chromium/Chrome not found` | Chrome / Chromium の導入、または `DIP_CHROME_PATH` の設定をユーザーに案内する |
+| `Chromium/Chrome not found` | Chrome / Chromium の導入、または `DRAWIO_PNG_CHROME_PATH` の設定をユーザーに案内する |
 | `Unsupported shape: ...` | 図形集（AWS 等）が必要。上記の 26.0.2 の Web 資材を指定する。指定済みでも出る場合は、その図形・アイコン（`resIcon`・`grIcon` 等）が 26.0.2 に無い。資材を調べて確かめず、エラーの図形名をユーザーに伝える。図形を勝手に別の形へ置き換えない |
-| `Math and automatic layout require ...` | 数式・自動レイアウトにも `DIP_DRAWIO_WEB_PATH` が必要 |
+| `Math and automatic layout require ...` | 数式・自動レイアウトにも `DRAWIO_PNG_DRAWIO_WEB_PATH` が必要 |
 | `external resource blocked` / 外部画像・フォントの取得エラー | 既定でネットワーク取得を禁止している。外部 URL への接続が問題ないかユーザーに確認してから `--allow-network` を付ける |
-| `draw.io opened a ... dialog` | 指定した Web 資材がエラーを出している。資材の中身は調べず、`DIP_DRAWIO_WEB_PATH` の指定先と版（26.0.2 か）の確認をユーザーに依頼する |
+| `draw.io opened a ... dialog` | 指定した Web 資材がエラーを出している。資材の中身は調べず、`DRAWIO_PNG_DRAWIO_WEB_PATH` の指定先と版（26.0.2 か）の確認をユーザーに依頼する |
 | `Chromium rendering timed out` | 描画が60秒以内に終わらない。資材や図面の大きさを確認する |
 | `interrupted (signal N)` | 描画中に中断された。後片付け済みで出力は変わっていない |
 | 検証エラー（`missing essential <mxCell id="0">` など） | XML を直す。`--no-validate` はデバッグ用なので使わない |
@@ -160,11 +160,11 @@ DIP_DRAWIO_WEB_PATH="$tmp/drawio/src/main/webapp" \
 ### VS Code 拡張との見た目の差
 
 同じフォント環境なら、保存時の表示倍率が 100% の VS Code 拡張 1.9.0 と同じ見た目（寸法・配置・画素）になる。
-VS Code（Windows など）と dip（Linux など）で OS やフォントが違うと、文字の幅が変わり、
+VS Code（Windows など）と drawio-png-cli（Linux など）で OS やフォントが違うと、文字の幅が変わり、
 画素だけでなく画像の寸法や配置も変わり得る。完全な一致は保証しない。
 
 ## 仕上げ
 
-- 変更後は `dip validate diagram.drawio.png` で書き戻した結果を確認できる。
+- 変更後は `drawio-png-cli validate diagram.drawio.png` で書き戻した結果を確認できる。
 - 報告では、何を変えたか（追加・変更したセル、挿入したアイコン）と、描画の有無
-  （先頭ページのみ描画、`DIP_DRAWIO_WEB_PATH` を使った場合はその版）を伝える。
+  （先頭ページのみ描画、`DRAWIO_PNG_DRAWIO_WEB_PATH` を使った場合はその版）を伝える。

@@ -7,7 +7,7 @@ license = "MIT AND Apache-2.0 AND Zlib AND BSD-3-Clause"
 repository = "https://github.com/szk302/drawio-png-cli"
 
 [[bin]]
-name = "dip"
+name = "drawio-png-cli"
 path = "src/main.rs"
 
 [dependencies]

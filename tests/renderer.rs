@@ -12,9 +12,9 @@ use tempfile::{TempDir, tempdir};
 const MODEL: &str = include_str!("fixtures/model.xml");
 const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 
-fn dip() -> Command {
-    let mut command = cargo_bin_cmd!("dip");
-    command.env_remove("DIP_DRAWIO_ARGS");
+fn cli() -> Command {
+    let mut command = cargo_bin_cmd!("drawio-png-cli");
+    command.env_remove("DRAWIO_PNG_DRAWIO_ARGS");
     command
 }
 
@@ -42,8 +42,8 @@ cp "$(dirname "$0")/plain.png" "$7"
 "#,
     );
     let output = directory.path().join("output.png");
-    dip()
-        .env("DIP_DRAWIO_PATH", &path)
+    cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .args(["embed", "-o"])
         .arg(&output)
         .write_stdin(MIXED)
@@ -67,8 +67,8 @@ cp "$(dirname "$0")/plain.png" "$7"
 "#,
     );
     let output = directory.path().join("output.png");
-    dip()
-        .env("DIP_DRAWIO_PATH", &path)
+    cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .args([
             "embed",
             "--renderer",
@@ -110,8 +110,8 @@ fn renderer_failure_does_not_overwrite_destination() {
     let (directory, path) = script("echo failure >&2; exit 1");
     let output = directory.path().join("output.png");
     fs::write(&output, b"original").unwrap();
-    dip()
-        .env("DIP_DRAWIO_PATH", &path)
+    cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .args(["embed", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
@@ -134,8 +134,8 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
     let (directory, path) = script("exit 7");
     fs::rename(&path, directory.path().join("drawio")).unwrap();
     let output = directory.path().join("output.png");
-    let result = dip()
-        .env_remove("DIP_DRAWIO_PATH")
+    let result = cli()
+        .env_remove("DRAWIO_PNG_DRAWIO_PATH")
         .env("PATH", directory.path())
         .args(["embed", "-o"])
         .arg(&output)
@@ -146,8 +146,8 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
         .stderr
         .clone();
     assert!(String::from_utf8_lossy(&result).contains("Desktop failed"));
-    let result = dip()
-        .env("DIP_DRAWIO_PATH", "does-not-exist")
+    let result = cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", "does-not-exist")
         .env("PATH", directory.path())
         .args(["embed", "-o"])
         .arg(&output)
@@ -157,7 +157,7 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
         .get_output()
         .stderr
         .clone();
-    assert!(String::from_utf8_lossy(&result).contains("DIP_DRAWIO_PATH"));
+    assert!(String::from_utf8_lossy(&result).contains("DRAWIO_PNG_DRAWIO_PATH"));
 }
 
 #[test]
@@ -188,8 +188,8 @@ cp "$(dirname "$0")/plain.png" "$7"
 "#,
     );
     let output = directory.path().join("output.png");
-    dip().current_dir(directory.path()).env("DIP_DRAWIO_PATH", &path)
-        .env("DIP_DRAWIO_ARGS", r#"--disable-gpu --user-data-dir="/tmp/日本語 profile" '$HOME' '$(touch injected)' '`touch injected`'"#)
+    cli().current_dir(directory.path()).env("DRAWIO_PNG_DRAWIO_PATH", &path)
+        .env("DRAWIO_PNG_DRAWIO_ARGS", r#"--disable-gpu --user-data-dir="/tmp/日本語 profile" '$HOME' '$(touch injected)' '`touch injected`'"#)
         .args(["embed", "-o"]).arg(&output).write_stdin(MODEL).assert().success();
     assert_eq!(
         png_data::extract(&fs::read(output).unwrap()).unwrap(),
@@ -203,9 +203,9 @@ fn invalid_environment_options_do_not_start_renderer_or_change_output() {
     let (directory, path) = script("touch \"$(dirname \"$0\")/started\"; exit 1");
     let output = directory.path().join("output.png");
     fs::write(&output, b"original").unwrap();
-    let result = dip()
-        .env("DIP_DRAWIO_PATH", &path)
-        .env("DIP_DRAWIO_ARGS", "--user-data-dir='unfinished")
+    let result = cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
+        .env("DRAWIO_PNG_DRAWIO_ARGS", "--user-data-dir='unfinished")
         .args(["embed", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
@@ -214,7 +214,7 @@ fn invalid_environment_options_do_not_start_renderer_or_change_output() {
         .get_output()
         .stderr
         .clone();
-    assert!(String::from_utf8_lossy(&result).contains("invalid DIP_DRAWIO_ARGS"));
+    assert!(String::from_utf8_lossy(&result).contains("invalid DRAWIO_PNG_DRAWIO_ARGS"));
     assert!(!directory.path().join("started").exists());
     assert_eq!(fs::read(output).unwrap(), b"original");
 }

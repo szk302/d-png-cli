@@ -1,4 +1,4 @@
-# The skill guides are embedded into dip and the stub is parsed by agents;
+# The skill guides are embedded into drawio-png-cli and the stub is parsed by agents;
 # keep them byte-identical on every platform, including Windows checkouts.
 assets/skill/*.md text eol=lf
 skills/**/SKILL.md text eol=lf

@@ -189,7 +189,7 @@ pub fn open(path: &Path) -> Result<Library> {
     })
 }
 
-/// Reads the libraries on a search path such as `DIP_LIBRARY_PATH`: files,
+/// Reads the libraries on a search path such as `DRAWIO_PNG_LIBRARY_PATH`: files,
 /// and the `*.xml` files directly in directories, in name order. Unreadable
 /// files found in directories are skipped and reported as warnings.
 pub fn search(path: &OsStr) -> Result<(Vec<Library>, Vec<String>)> {
@@ -243,7 +243,7 @@ pub fn find<'a>(libraries: &'a [Library], name: &str) -> Result<(&'a Library, &'
     names.dedup();
     match (matches.as_slice(), names.as_slice()) {
         ([found], _) => Ok(*found),
-        ([], _) => bail!("no library entry named {name:?}; see `dip library search`"),
+        ([], _) => bail!("no library entry named {name:?}; see `drawio-png-cli library search`"),
         (_, [library]) => bail!(
             "{} entries in library {library:?} are named {name:?}; use --index",
             matches.len()
