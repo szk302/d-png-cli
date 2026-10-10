@@ -7,8 +7,8 @@ use tempfile::tempdir;
 const MODEL: &str = include_str!("fixtures/model.xml");
 const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 
-fn dip() -> Command {
-    cargo_bin_cmd!("dip")
+fn cli() -> Command {
+    cargo_bin_cmd!("drawio-png-cli")
 }
 
 /// Compresses a model the way draw.io stores library entries.
@@ -108,8 +108,8 @@ fn library_commands_print_libraries_details_and_entries() {
     let path = dir.path().join("lib.xml");
     fs::write(&path, library_xml()).unwrap();
     let run = |args: &[&str]| {
-        let output = dip()
-            .env_remove("DIP_LIBRARY_PATH")
+        let output = cli()
+            .env_remove("DRAWIO_PNG_LIBRARY_PATH")
             .args(args)
             .arg("--library-file")
             .arg(&path)
@@ -306,7 +306,7 @@ fn cli_insert_prints_ids_and_keeps_output_on_errors() {
     let lib = dir.path().join("lib.xml");
     fs::write(&lib, library_xml()).unwrap();
     let output = dir.path().join("out.xml");
-    let result = dip()
+    let result = cli()
         .arg("insert")
         .arg("--library-file")
         .arg(&lib)
@@ -327,7 +327,7 @@ fn cli_insert_prints_ids_and_keeps_output_on_errors() {
         vec!["--index", "9"],
         vec!["--index", "1", "--width", "0"],
     ] {
-        dip()
+        cli()
             .arg("insert")
             .arg("--library-file")
             .arg(&lib)
@@ -340,7 +340,7 @@ fn cli_insert_prints_ids_and_keeps_output_on_errors() {
             .code(1);
         assert_eq!(fs::read(&output).unwrap(), saved, "{args:?}");
     }
-    dip()
+    cli()
         .arg("insert")
         .arg("--library-file")
         .arg(&lib)
@@ -349,7 +349,7 @@ fn cli_insert_prints_ids_and_keeps_output_on_errors() {
         .assert()
         .code(2);
     // The entry content never reaches stdout.
-    let list = dip()
+    let list = cli()
         .arg("insert")
         .arg("--library-file")
         .arg(&lib)
@@ -400,8 +400,8 @@ fn search_path_finds_libraries_and_selects_by_library_name() {
     .unwrap();
     let search = std::env::join_paths([&icons, &extra.join("other.xml")]).unwrap();
     let run = |args: &[&str]| {
-        let output = dip()
-            .env("DIP_LIBRARY_PATH", &search)
+        let output = cli()
+            .env("DRAWIO_PNG_LIBRARY_PATH", &search)
             .args(args)
             .output()
             .unwrap();
@@ -415,7 +415,7 @@ fn search_path_finds_libraries_and_selects_by_library_name() {
     let (code, stdout, stderr) = run(&["library", "list", "--no-builtin"]);
     assert_eq!(code, Some(0), "{stderr}");
     assert_eq!(stdout, "main\t6\ttest\nother\t1\t-\n");
-    // Built-in libraries follow those on DIP_LIBRARY_PATH.
+    // Built-in libraries follow those on DRAWIO_PNG_LIBRARY_PATH.
     let (_, all, _) = run(&["library", "list"]);
     assert!(all.starts_with(&stdout) && all.contains("\ndrawio/aws4-compute\t"));
     let (code, stdout, stderr) = run(&["library", "search", "icon", "--no-builtin"]);
@@ -427,7 +427,7 @@ fn search_path_finds_libraries_and_selects_by_library_name() {
     let (code, _, stderr) = run(&["library", "show", "missing"]);
     assert_eq!(code, Some(1));
     assert!(
-        stderr.contains("available: main, other, drawio/* (see `dip library list`)"),
+        stderr.contains("available: main, other, drawio/* (see `drawio-png-cli library list`)"),
         "{stderr}"
     );
 
@@ -478,16 +478,16 @@ fn search_path_finds_libraries_and_selects_by_library_name() {
 
 #[test]
 fn library_files_and_names_are_required() {
-    // Without a file or the built-in libraries, DIP_LIBRARY_PATH is needed;
+    // Without a file or the built-in libraries, DRAWIO_PNG_LIBRARY_PATH is needed;
     // a file excludes --library and --no-builtin.
-    let output = dip()
-        .env_remove("DIP_LIBRARY_PATH")
+    let output = cli()
+        .env_remove("DRAWIO_PNG_LIBRARY_PATH")
         .args(["library", "list", "--no-builtin"])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("set DIP_LIBRARY_PATH"));
-    dip()
+    assert!(String::from_utf8_lossy(&output.stderr).contains("set DRAWIO_PNG_LIBRARY_PATH"));
+    cli()
         .args([
             "library",
             "search",
@@ -498,7 +498,7 @@ fn library_files_and_names_are_required() {
         ])
         .assert()
         .code(2);
-    dip()
+    cli()
         .args([
             "library",
             "list",
@@ -508,8 +508,8 @@ fn library_files_and_names_are_required() {
         ])
         .assert()
         .code(2);
-    dip()
-        .env("DIP_LIBRARY_PATH", "/nonexistent/library.xml")
+    cli()
+        .env("DRAWIO_PNG_LIBRARY_PATH", "/nonexistent/library.xml")
         .args(["library", "list"])
         .assert()
         .code(1);
@@ -618,7 +618,7 @@ fn library_names_come_from_unicode_file_names_and_positions_can_be_negative() {
     ] {
         let path = dir.path().join(file);
         fs::write(&path, &text).unwrap();
-        let output = dip()
+        let output = cli()
             .args(["library", "list", "--library-file"])
             .arg(&path)
             .assert()
@@ -634,7 +634,7 @@ fn library_names_come_from_unicode_file_names_and_positions_can_be_negative() {
     }
     // Negative coordinates work as separate values.
     let output = dir.path().join("out.xml");
-    dip()
+    cli()
         .arg("insert")
         .arg("--library-file")
         .arg(dir.path().join("図形集.xml"))

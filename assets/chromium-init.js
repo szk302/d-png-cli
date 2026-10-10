@@ -11,26 +11,26 @@ window.mxImageBasePath = 'mxgraph/images';
 window.mxBasePath = 'mxgraph/';
 window.mxLoadStylesheets = false;
 window.isLocalStorage = false;
-window.dipErrors = [];
+window.drawioPngErrors = [];
 window.addEventListener('error', event => {
-    if (event.message) window.dipErrors.push(event.message);
+    if (event.message) window.drawioPngErrors.push(event.message);
     else if (event.target?.tagName && event.target.tagName !== 'LINK') {
-        window.dipErrors.push('Unable to load ' + event.target.tagName + ' resource');
+        window.drawioPngErrors.push('Unable to load ' + event.target.tagName + ' resource');
     }
 }, true);
 window.addEventListener('unhandledrejection', event => {
-    window.dipErrors.push(String(event.reason));
+    window.drawioPngErrors.push(String(event.reason));
 });
 // Export preloads detached Image objects; their decode errors do not reach window.
 window.Image = new Proxy(window.Image, {
     construct(target, args) {
         const image = Reflect.construct(target, args);
-        image.addEventListener('error', () => window.dipErrors.push('Image could not be decoded or loaded'));
+        image.addEventListener('error', () => window.drawioPngErrors.push('Image could not be decoded or loaded'));
         return image;
     }
 });
 document.fonts.addEventListener('loadingerror', () => {
-    window.dipErrors.push('Font could not be decoded or loaded');
+    window.drawioPngErrors.push('Font could not be decoded or loaded');
 });
 // The exporter is a document renderer, not an interactive navigation surface.
 window.open = () => null;

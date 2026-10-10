@@ -33,21 +33,22 @@ pub(crate) fn executable(path: &Path) -> bool {
 }
 
 pub fn discover() -> Result<PathBuf> {
-    discover_optional()?.context("draw.io Desktop not found; install it or set DIP_DRAWIO_PATH")
+    discover_optional()?
+        .context("draw.io Desktop not found; install it or set DRAWIO_PNG_DRAWIO_PATH")
 }
 
 pub(crate) fn discover_optional() -> Result<Option<PathBuf>> {
-    if let Some(path) = env::var_os("DIP_DRAWIO_PATH") {
+    if let Some(path) = env::var_os("DRAWIO_PNG_DRAWIO_PATH") {
         let path = PathBuf::from(path);
         ensure!(
             executable(&path),
-            "DIP_DRAWIO_PATH is not an executable file: {}",
+            "DRAWIO_PNG_DRAWIO_PATH is not an executable file: {}",
             path.display()
         );
         return path
             .canonicalize()
             .map(Some)
-            .context("cannot resolve DIP_DRAWIO_PATH");
+            .context("cannot resolve DRAWIO_PNG_DRAWIO_PATH");
     }
     let names: &[&str] = if cfg!(windows) {
         &["drawio.exe", "draw.io.exe"]
@@ -124,12 +125,12 @@ fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
     };
     let text = value
         .to_str()
-        .context("DIP_DRAWIO_ARGS must be valid Unicode")?;
-    shell_words::split(text).context("invalid DIP_DRAWIO_ARGS: check quotes and escapes")
+        .context("DRAWIO_PNG_DRAWIO_ARGS must be valid Unicode")?;
+    shell_words::split(text).context("invalid DRAWIO_PNG_DRAWIO_ARGS: check quotes and escapes")
 }
 
 pub fn render(xml: &str) -> Result<Vec<u8>> {
-    let args = parse_extra_args(env::var_os("DIP_DRAWIO_ARGS").as_deref())?;
+    let args = parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
     render_with_args(&discover()?, xml, TIMEOUT, &args)
 }
 
@@ -174,7 +175,7 @@ pub fn render_selected_with_mode(
                     !allow_network,
                     "Desktop was selected; use --renderer chromium with --allow-network"
                 );
-                let args = parse_extra_args(env::var_os("DIP_DRAWIO_ARGS").as_deref())?;
+                let args = parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
                 render_with_args(&program, xml, TIMEOUT, &args)
             } else {
                 crate::chromium::render_configured(xml, allow_network, chromium_mode)
@@ -196,7 +197,9 @@ fn render_with_args(
 ) -> Result<Vec<u8>> {
     // Declared first so it is dropped after Desktop and its temporary directory.
     let _interrupt = crate::interrupt::Guard::new();
-    let directory = tempfile::Builder::new().prefix("dip-render-").tempdir()?;
+    let directory = tempfile::Builder::new()
+        .prefix("drawio-png-cli-render-")
+        .tempdir()?;
     let input = directory.path().join("input.drawio");
     let output = directory.path().join("output.png");
     fs::write(&input, xml)?;
@@ -319,7 +322,7 @@ mod tests {
     fn unmatched_quotes_are_errors() {
         for value in ["'unfinished", "\"unfinished"] {
             let error = parse_extra_args(Some(OsStr::new(value))).unwrap_err();
-            assert!(error.to_string().contains("DIP_DRAWIO_ARGS"));
+            assert!(error.to_string().contains("DRAWIO_PNG_DRAWIO_ARGS"));
         }
     }
 
@@ -331,7 +334,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("DIP_DRAWIO_ARGS must be valid Unicode")
+                .contains("DRAWIO_PNG_DRAWIO_ARGS must be valid Unicode")
         );
     }
 }

@@ -2,15 +2,16 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use drawio_png_cli::{document, png_data};
 use std::{env, fs, time::Duration};
 
-/// Run explicitly with DIP_TEST_DRAWIO_PATH set to Desktop or an xvfb-run wrapper.
+/// Run explicitly with DRAWIO_PNG_TEST_DRAWIO_PATH set to Desktop or an xvfb-run wrapper.
 #[test]
 #[ignore = "requires an installed draw.io Desktop and graphical environment"]
 fn real_desktop_renders_first_page_and_preserves_all_pages() {
-    let renderer = env::var_os("DIP_TEST_DRAWIO_PATH").expect("set DIP_TEST_DRAWIO_PATH");
+    let renderer =
+        env::var_os("DRAWIO_PNG_TEST_DRAWIO_PATH").expect("set DRAWIO_PNG_TEST_DRAWIO_PATH");
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("diagram.drawio.png");
-    cargo_bin_cmd!("dip")
-        .env("DIP_DRAWIO_PATH", &renderer)
+    cargo_bin_cmd!("drawio-png-cli")
+        .env("DRAWIO_PNG_DRAWIO_PATH", &renderer)
         .args(["embed", "-o"])
         .arg(&output)
         .write_stdin(
@@ -32,8 +33,8 @@ fn real_desktop_renders_first_page_and_preserves_all_pages() {
         (info.width, info.height, buffer)
     }
     let first_page = directory.path().join("first.png");
-    cargo_bin_cmd!("dip")
-        .env("DIP_DRAWIO_PATH", &renderer)
+    cargo_bin_cmd!("drawio-png-cli")
+        .env("DRAWIO_PNG_DRAWIO_PATH", &renderer)
         .args(["embed", "-o"])
         .arg(&first_page)
         .write_stdin(include_str!("fixtures/model.xml"))
@@ -45,7 +46,8 @@ fn real_desktop_renders_first_page_and_preserves_all_pages() {
 
     // Desktop must itself reopen the generated PNG and recover both pages.
     let reopened = directory.path().join("reopened.xml");
-    let extra_args = shell_words::split(&env::var("DIP_DRAWIO_ARGS").unwrap_or_default()).unwrap();
+    let extra_args =
+        shell_words::split(&env::var("DRAWIO_PNG_DRAWIO_ARGS").unwrap_or_default()).unwrap();
     assert_cmd::Command::new(renderer)
         .args(extra_args)
         .timeout(Duration::from_secs(60))

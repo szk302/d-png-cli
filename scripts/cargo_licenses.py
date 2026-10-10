@@ -16,7 +16,7 @@ def render(report):
         "# Cargo dependency licenses\n\n"
         f"Generated from Cargo.lock with cargo-about {ABOUT_VERSION} and about.toml.\n"
         "Regenerate with scripts/cargo_licenses.py; do not edit by hand.\n"
-        "This inventory includes dip and dependencies across all targets, including\n"
+        "This inventory includes drawio-png-cli and dependencies across all targets, including\n"
         "build and development dependencies. Not every crate is linked into every\n"
         "binary. License choices apply to the named crates only. See\n"
         "THIRD_PARTY_NOTICES.md for attribution of bundled non-Cargo works."

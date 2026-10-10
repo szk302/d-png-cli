@@ -10,7 +10,7 @@ use std::{
 
 #[derive(Parser)]
 #[command(
-    name = "dip",
+    name = "drawio-png-cli",
     version,
     about = "Edit draw.io diagrams embedded in PNG images"
 )]
@@ -21,9 +21,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Print licenses and notices for dip, dependencies, and bundled assets
+    /// Print licenses and notices for drawio-png-cli, dependencies, and bundled assets
     Licenses,
-    /// Print the agent skill guide for this version of dip (vscode mode)
+    /// Print the agent skill guide for this version of drawio-png-cli (vscode mode)
     Skill {
         /// Print the full reference instead (Desktop, raw and desktop modes, fonts, --no-render)
         #[arg(long)]
@@ -37,7 +37,7 @@ enum Command {
     },
     /// Embed XML into a PNG, rendering its first page unless --no-render is set
     #[command(
-        after_help = "Renderer environment:\n  DIP_DRAWIO_PATH / DIP_DRAWIO_ARGS  Desktop executable and options\n  DIP_CHROME_PATH / CHROME_PATH     Chromium or Chrome executable\n  DIP_CHROMIUM_MODE                 raw, desktop, or vscode (default: vscode)\n  DIP_CHROME_ARGS                   Additional POSIX-quoted options (no shell expansion)\n  DIP_DRAWIO_WEB_PATH               Local draw.io webapp directory (default: bundled assets)"
+        after_help = "Renderer environment:\n  DRAWIO_PNG_DRAWIO_PATH      Desktop executable\n  DRAWIO_PNG_DRAWIO_ARGS      Additional Desktop options\n  DRAWIO_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  DRAWIO_PNG_CHROMIUM_MODE    raw, desktop, or vscode (default: vscode)\n  DRAWIO_PNG_CHROME_ARGS      Additional POSIX-quoted options (no shell expansion)\n  DRAWIO_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
     )]
     Embed {
         /// XML file (omit to read stdin)
@@ -54,7 +54,7 @@ enum Command {
         /// Rendering backend (auto prefers Desktop, then Chromium)
         #[arg(long, value_enum, conflicts_with = "no_render")]
         renderer: Option<render::Renderer>,
-        /// Chromium output mode (overrides DIP_CHROMIUM_MODE; default: vscode)
+        /// Chromium output mode (overrides DRAWIO_PNG_CHROMIUM_MODE; default: vscode)
         #[arg(long, value_enum, conflicts_with = "no_render")]
         chromium_mode: Option<ChromiumMode>,
         /// Allow external HTTP(S) images and fonts in Chromium
@@ -117,7 +117,7 @@ enum Command {
     },
 }
 
-const LIBRARY_ENV: &str = "Libraries:\n  DIP_LIBRARY_PATH  Library files or directories of *.xml files, separated like PATH;\n                    used unless --library-file is given\n  drawio/*          Built-in libraries of draw.io 26.0.2's sidebar shapes (AWS, Azure,\n                    Google Cloud, Kubernetes, UML, ...), listed after DIP_LIBRARY_PATH;\n                    rendering most of them needs DIP_DRAWIO_WEB_PATH";
+const LIBRARY_ENV: &str = "Libraries:\n  DRAWIO_PNG_LIBRARY_PATH  Library files or directories of *.xml files, separated\n                           like PATH; used unless --library-file is given\n  drawio/*                 Built-in libraries of draw.io 26.0.2's sidebar shapes\n                           (AWS, Azure, Google Cloud, Kubernetes, UML, ...), listed after\n                           DRAWIO_PNG_LIBRARY_PATH; rendering most of them needs\n                           DRAWIO_PNG_DRAWIO_WEB_PATH";
 
 /// Which libraries to use.
 #[derive(clap::Args)]
@@ -125,7 +125,7 @@ struct LibrarySource {
     /// Library name: its file name without .xml, or drawio/<name> for a built-in one
     #[arg(long)]
     library: Option<String>,
-    /// Library file to use instead of DIP_LIBRARY_PATH and the built-in libraries
+    /// Library file to use instead of DRAWIO_PNG_LIBRARY_PATH and the built-in libraries
     #[arg(long, value_name = "PATH", conflicts_with = "library")]
     library_file: Option<PathBuf>,
     /// Leave out the built-in libraries (drawio/*)
@@ -138,7 +138,7 @@ enum LibraryCommand {
     /// List libraries as name, entry count and title
     #[command(visible_alias = "ls", after_help = LIBRARY_ENV)]
     List {
-        /// Library file to use instead of DIP_LIBRARY_PATH and the built-in libraries
+        /// Library file to use instead of DRAWIO_PNG_LIBRARY_PATH and the built-in libraries
         #[arg(long, value_name = "PATH")]
         library_file: Option<PathBuf>,
         /// Leave out the built-in libraries (drawio/*)
@@ -150,7 +150,7 @@ enum LibraryCommand {
     Show {
         /// Library name: its file name without .xml, or drawio/<name> for a built-in one
         name: String,
-        /// Library file to use instead of DIP_LIBRARY_PATH and the built-in libraries
+        /// Library file to use instead of DRAWIO_PNG_LIBRARY_PATH and the built-in libraries
         #[arg(long, value_name = "PATH")]
         library_file: Option<PathBuf>,
     },
@@ -172,7 +172,7 @@ enum LibraryCommand {
     },
     /// Render matching entries, labelled with library, index and title, into a PNG
     #[command(
-        after_help = "Renders with Chromium in vscode mode, at most 60 entries. Built-in shapes (drawio/*)\nmostly need draw.io 26.0.2 web assets in DIP_DRAWIO_WEB_PATH.\n\nLibraries:\n  DIP_LIBRARY_PATH  Library files or directories of *.xml files, separated like PATH;\n                    used unless --library-file is given"
+        after_help = "Renders with Chromium in vscode mode, at most 60 entries. Built-in shapes (drawio/*)\nmostly need draw.io 26.0.2 web assets in DRAWIO_PNG_DRAWIO_WEB_PATH.\n\nLibraries:\n  DRAWIO_PNG_LIBRARY_PATH  Library files or directories of *.xml files, separated\n                           like PATH; used unless --library-file is given"
     )]
     Preview {
         /// Text the title must contain (case-insensitive)
@@ -300,7 +300,7 @@ fn run(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-/// The libraries to use: the given file, or those on DIP_LIBRARY_PATH followed
+/// The libraries to use: the given file, or those on DRAWIO_PNG_LIBRARY_PATH followed
 /// by the built-in ones unless `builtin` is false, optionally only the one with
 /// the given name. File-based names never contain '/', so an exact name is
 /// unambiguous; a built-in library may be named without its drawio/ prefix
@@ -313,10 +313,10 @@ fn libraries(
     let libraries = if let Some(file) = file {
         vec![library::open(&file)?]
     } else {
-        let path = std::env::var_os("DIP_LIBRARY_PATH").filter(|p| !p.is_empty());
+        let path = std::env::var_os("DRAWIO_PNG_LIBRARY_PATH").filter(|p| !p.is_empty());
         anyhow::ensure!(
             path.is_some() || builtin,
-            "set DIP_LIBRARY_PATH or pass --library-file"
+            "set DRAWIO_PNG_LIBRARY_PATH or pass --library-file"
         );
         let mut libraries = Vec::new();
         if let Some(path) = path {
@@ -334,7 +334,7 @@ fn libraries(
     let Some(name) = name else {
         anyhow::ensure!(
             !libraries.is_empty(),
-            "no libraries found in DIP_LIBRARY_PATH"
+            "no libraries found in DRAWIO_PNG_LIBRARY_PATH"
         );
         return Ok(libraries);
     };
@@ -350,7 +350,10 @@ fn libraries(
                 .map(|l| l.name.clone())
                 .collect();
             if libraries.iter().any(shapes::is_builtin) {
-                available.push(format!("{}* (see `dip library list`)", shapes::PREFIX));
+                available.push(format!(
+                    "{}* (see `drawio-png-cli library list`)",
+                    shapes::PREFIX
+                ));
             }
             anyhow::bail!(
                 "no library named {name:?}; available: {}",
@@ -441,7 +444,7 @@ fn library_command(command: LibraryCommand) -> Result<()> {
             let style = entry.style()?.ok_or_else(|| {
                 anyhow::anyhow!(
                     "{} #{index} is not a single cell with a plain style (several cells or image data); \
-                     add it with `dip insert --library {} --index {index}`",
+                     add it with `drawio-png-cli insert --library {} --index {index}`",
                     library.name,
                     library.name
                 )
@@ -457,7 +460,7 @@ fn library_command(command: LibraryCommand) -> Result<()> {
             let found = matches(&libraries, query.as_deref());
             anyhow::ensure!(
                 !found.is_empty(),
-                "no entries match; see `dip library search`"
+                "no entries match; see `drawio-png-cli library search`"
             );
             let xml = shapes::preview(&found)?;
             let png = render::render_selected_with_mode(
@@ -530,7 +533,7 @@ fn insert(
     placement: library::Placement<'_>,
 ) -> Result<()> {
     let libraries = source.libraries()?;
-    // A title on DIP_LIBRARY_PATH wins over the built-in libraries, as before they existed.
+    // A title on DRAWIO_PNG_LIBRARY_PATH wins over the built-in libraries, as before they existed.
     let (custom, builtin): (Vec<_>, Vec<_>) =
         libraries.into_iter().partition(|l| !shapes::is_builtin(l));
     let libraries: Vec<_> = custom.iter().chain(&builtin).collect();

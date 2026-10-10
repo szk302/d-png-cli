@@ -23,7 +23,7 @@ use std::{
 use tungstenite::{Message, WebSocket, protocol::WebSocketConfig};
 
 pub fn discover() -> Result<PathBuf> {
-    for key in ["DIP_CHROME_PATH", "CHROME_PATH"] {
+    for key in ["DRAWIO_PNG_CHROME_PATH", "CHROME_PATH"] {
         if let Some(path) = env::var_os(key) {
             let path = PathBuf::from(path);
             ensure!(
@@ -62,7 +62,7 @@ pub fn discover() -> Result<PathBuf> {
     paths
         .into_iter()
         .find(|p| executable(p))
-        .context("Chromium/Chrome not found; set DIP_CHROME_PATH or use --no-render")
+        .context("Chromium/Chrome not found; set DRAWIO_PNG_CHROME_PATH or use --no-render")
 }
 
 /// Standard install locations, with every Chrome candidate before any Chromium.
@@ -143,21 +143,21 @@ fn host_resolver_rules(allow_network: bool) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     } else {
-        // IP literals also match MAP *, so keep loopback for dip's own origins.
+        // IP literals also match MAP *, so keep loopback for drawio-png-cli's own origins.
         "MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1".into()
     };
     format!("--host-resolver-rules={rules}")
 }
 
 fn extra_args() -> Result<Vec<String>> {
-    let Some(value) = env::var_os("DIP_CHROME_ARGS") else {
+    let Some(value) = env::var_os("DRAWIO_PNG_CHROME_ARGS") else {
         return Ok(Vec::new());
     };
     let value = value
         .to_str()
-        .context("DIP_CHROME_ARGS must be valid Unicode")?;
-    let args =
-        shell_words::split(value).context("invalid DIP_CHROME_ARGS: check quotes and escapes")?;
+        .context("DRAWIO_PNG_CHROME_ARGS must be valid Unicode")?;
+    let args = shell_words::split(value)
+        .context("invalid DRAWIO_PNG_CHROME_ARGS: check quotes and escapes")?;
     for arg in &args {
         // These options bypass process ownership, the local transport or network policy.
         let key = arg.split('=').next().unwrap_or(arg);
@@ -181,7 +181,7 @@ fn extra_args() -> Result<Vec<String>> {
                         | "--host-resolver-rules"
                         | "--no-startup-window"
                 ),
-            "unsupported DIP_CHROME_ARGS option: {arg}; dip manages the profile, transport and network policy"
+            "unsupported DRAWIO_PNG_CHROME_ARGS option: {arg}; drawio-png-cli manages the profile, transport and network policy"
         );
     }
     Ok(args)
@@ -220,12 +220,12 @@ pub(crate) fn render_configured(
 ) -> Result<Vec<u8>> {
     let mode = if let Some(mode) = explicit_mode {
         mode
-    } else if let Some(value) = env::var_os("DIP_CHROMIUM_MODE") {
+    } else if let Some(value) = env::var_os("DRAWIO_PNG_CHROMIUM_MODE") {
         let value = value
             .to_str()
-            .context("DIP_CHROMIUM_MODE must be valid Unicode")?;
+            .context("DRAWIO_PNG_CHROMIUM_MODE must be valid Unicode")?;
         <ChromiumMode as clap::ValueEnum>::from_str(value, false).map_err(|_| {
-            anyhow::anyhow!("invalid DIP_CHROMIUM_MODE: expected raw, desktop, or vscode")
+            anyhow::anyhow!("invalid DRAWIO_PNG_CHROMIUM_MODE: expected raw, desktop, or vscode")
         })?
     } else {
         ChromiumMode::default()
@@ -241,7 +241,7 @@ pub fn render_mode(xml: &str, allow_network: bool, mode: ChromiumMode) -> Result
         xml,
         TIMEOUT,
         &args,
-        env::var_os("DIP_DRAWIO_WEB_PATH").map(PathBuf::from),
+        env::var_os("DRAWIO_PNG_DRAWIO_WEB_PATH").map(PathBuf::from),
         allow_network,
         mode,
     )
@@ -280,7 +280,9 @@ pub fn render_with_mode(
     let _interrupt = crate::interrupt::Guard::new();
     ensure!(xml.len() <= MAX_BYTES, "XML exceeds 64 MiB limit");
     let deadline = Instant::now() + timeout;
-    let profile = tempfile::Builder::new().prefix("dip-chromium-").tempdir()?;
+    let profile = tempfile::Builder::new()
+        .prefix("drawio-png-cli-chromium-")
+        .tempdir()?;
     let server = AssetServer::start(web_root, allow_network, mode == ChromiumMode::Vscode)?;
     let mut log = tempfile::tempfile()?;
     let mut command = Command::new(program);
@@ -414,7 +416,7 @@ pub fn render_with_mode(
         let window = cdp.call("Runtime.evaluate", json!({"expression":"window"}))?;
         let rendered = cdp.call("Runtime.callFunctionOn", json!({
             "objectId":window["result"]["objectId"],
-            "functionDeclaration":format!("function(xml, bundled, mode, preload) {{ {} return dipRender(xml, bundled, mode, preload); }}", include_str!("../assets/chromium-render.js")),
+            "functionDeclaration":format!("function(xml, bundled, mode, preload) {{ {} return drawioPngRender(xml, bundled, mode, preload); }}", include_str!("../assets/chromium-render.js")),
             "arguments":[{"value":xml},{"value":cdp.assets.bundled},{"value":mode.name()},{"value":cdp.assets.preload}],
             "returnByValue":true, "awaitPromise":true
         }))?;
@@ -631,7 +633,7 @@ impl Cdp {
                 ensure!(
                     response["status"].as_f64().unwrap_or(200.0) < 400.0
                         || url.ends_with("/favicon.ico"),
-                    "draw.io resource failed ({}): {}; check DIP_DRAWIO_WEB_PATH or --allow-network",
+                    "draw.io resource failed ({}): {}; check DRAWIO_PNG_DRAWIO_WEB_PATH or --allow-network",
                     response["status"],
                     short(url)
                 );
@@ -664,7 +666,7 @@ impl Cdp {
         Ok(())
     }
     fn eval(&mut self, expression: &str) -> Result<Value> {
-        let result = self.call("Runtime.evaluate", json!({"expression":format!("(() => {{ if (window.dipErrors?.length) throw Error(window.dipErrors.join('; ')); return ({expression}); }})()"),"returnByValue":true}))?;
+        let result = self.call("Runtime.evaluate", json!({"expression":format!("(() => {{ if (window.drawioPngErrors?.length) throw Error(window.drawioPngErrors.join('; ')); return ({expression}); }})()"),"returnByValue":true}))?;
         ensure!(
             result.get("exceptionDetails").is_none(),
             "draw.io JavaScript error: {}",

@@ -64,7 +64,7 @@ pub fn libraries() -> Result<Vec<Library>> {
 }
 
 /// One page laying out the given entries, each below a label naming its
-/// library, index (1-based) and title, for `dip library preview`. The label
+/// library, index (1-based) and title, for `drawio-png-cli library preview`. The label
 /// goes above the entry because sidebar shapes often show their own label below.
 pub fn preview(entries: &[(&Library, usize)]) -> Result<String> {
     const ICON: f64 = 96.0;

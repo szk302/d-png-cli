@@ -48,9 +48,9 @@ HTMLラベル内の `<font face>`、`style="font-family: ..."`、`font` 短縮�
 両レンダラーを使う実機テストは通常実行から除外する。共通フォントをインストールした環境で、次を明示実行する。
 
 ```sh
-DIP_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
-  DIP_TEST_CHROME_PATH=/path/to/chromium \
-  DIP_TEST_FONT='Noto Sans CJK JP' \
+DRAWIO_PNG_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
+  DRAWIO_PNG_TEST_CHROME_PATH=/path/to/chromium \
+  DRAWIO_PNG_TEST_FONT='Noto Sans CJK JP' \
   mise exec -- cargo test --locked --test fonts -- --ignored --nocapture
 ```
 

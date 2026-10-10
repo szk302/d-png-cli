@@ -124,7 +124,7 @@ fn quoted_names_are_escaped_and_invalid_lists_are_rejected() {
 fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("diagram.png");
-    cargo_bin_cmd!("dip")
+    cargo_bin_cmd!("drawio-png-cli")
         .args([
             "embed",
             "--no-render",
@@ -147,7 +147,7 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         vec!["--default-font", "A;B"],
         vec!["--default-font", "Noto Sans CJK JP", "--no-validate"],
     ] {
-        cargo_bin_cmd!("dip")
+        cargo_bin_cmd!("drawio-png-cli")
             .args(["embed", "--no-render", "-o"])
             .arg(&output)
             .args(args)
@@ -160,7 +160,7 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         "vertex=\"1\"",
         "vertex=\"1\" style=\"fontFamily='unfinished;\"",
     );
-    cargo_bin_cmd!("dip")
+    cargo_bin_cmd!("drawio-png-cli")
         .args([
             "embed",
             "--default-font",
@@ -193,11 +193,14 @@ fn adding_fonts_cannot_expand_xml_past_the_size_limit() {
 }
 
 #[test]
-#[ignore = "requires Desktop, Chromium and a common font; set DIP_TEST_DRAWIO_PATH, DIP_TEST_CHROME_PATH and DIP_TEST_FONT"]
+#[ignore = "requires Desktop, Chromium and a common font; set DRAWIO_PNG_TEST_DRAWIO_PATH, DRAWIO_PNG_TEST_CHROME_PATH and DRAWIO_PNG_TEST_FONT"]
 fn real_renderers_use_the_default_and_explicit_fallback() {
-    let desktop = std::env::var_os("DIP_TEST_DRAWIO_PATH").expect("set DIP_TEST_DRAWIO_PATH");
-    let chrome = std::env::var_os("DIP_TEST_CHROME_PATH").expect("set DIP_TEST_CHROME_PATH");
-    let family = std::env::var("DIP_TEST_FONT").expect("set DIP_TEST_FONT to an installed font");
+    let desktop =
+        std::env::var_os("DRAWIO_PNG_TEST_DRAWIO_PATH").expect("set DRAWIO_PNG_TEST_DRAWIO_PATH");
+    let chrome =
+        std::env::var_os("DRAWIO_PNG_TEST_CHROME_PATH").expect("set DRAWIO_PNG_TEST_CHROME_PATH");
+    let family = std::env::var("DRAWIO_PNG_TEST_FONT")
+        .expect("set DRAWIO_PNG_TEST_FONT to an installed font");
     let escaped = family
         .replace('&', "&amp;")
         .replace('"', "&quot;")
@@ -208,7 +211,7 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
     );
     let missing = MODEL.replace(
         "vertex=\"1\"",
-        "vertex=\"1\" style=\"fontFamily=DIP Nonexistent Test Font;\"",
+        "vertex=\"1\" style=\"fontFamily=Drawio PNG Nonexistent Test Font;\"",
     );
     let dir = tempfile::tempdir().unwrap();
     let mut saved_xml = Vec::new();
@@ -230,19 +233,19 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
             (
                 "explicit",
                 reference.as_str(),
-                vec!["--default-font", "DIP Unused Default Font"],
+                vec!["--default-font", "Drawio PNG Unused Default Font"],
             ),
         ] {
             let output = dir.path().join(format!("{renderer}-{name}.png"));
-            cargo_bin_cmd!("dip")
-                .env("DIP_DRAWIO_PATH", &desktop)
-                .env("DIP_CHROME_PATH", &chrome)
+            cargo_bin_cmd!("drawio-png-cli")
+                .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
+                .env("DRAWIO_PNG_CHROME_PATH", &chrome)
                 .env(
-                    "DIP_CHROME_ARGS",
-                    std::env::var("DIP_TEST_CHROME_ARGS").unwrap_or_default(),
+                    "DRAWIO_PNG_CHROME_ARGS",
+                    std::env::var("DRAWIO_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
                 )
-                .env_remove("DIP_DRAWIO_WEB_PATH")
-                .env_remove("DIP_CHROMIUM_MODE")
+                .env_remove("DRAWIO_PNG_DRAWIO_WEB_PATH")
+                .env_remove("DRAWIO_PNG_CHROMIUM_MODE")
                 .args(["embed", "--renderer", renderer, "-o"])
                 .arg(&output)
                 .args(options)

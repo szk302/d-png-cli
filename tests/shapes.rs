@@ -6,17 +6,17 @@ use tempfile::tempdir;
 
 const MODEL: &str = include_str!("fixtures/model.xml");
 
-fn dip() -> Command {
-    let mut command = cargo_bin_cmd!("dip");
+fn cli() -> Command {
+    let mut command = cargo_bin_cmd!("drawio-png-cli");
     for name in [
-        "DIP_DRAWIO_PATH",
-        "DIP_DRAWIO_ARGS",
-        "DIP_CHROME_PATH",
+        "DRAWIO_PNG_DRAWIO_PATH",
+        "DRAWIO_PNG_DRAWIO_ARGS",
+        "DRAWIO_PNG_CHROME_PATH",
         "CHROME_PATH",
-        "DIP_CHROME_ARGS",
-        "DIP_CHROMIUM_MODE",
-        "DIP_DRAWIO_WEB_PATH",
-        "DIP_LIBRARY_PATH",
+        "DRAWIO_PNG_CHROME_ARGS",
+        "DRAWIO_PNG_CHROMIUM_MODE",
+        "DRAWIO_PNG_DRAWIO_WEB_PATH",
+        "DRAWIO_PNG_LIBRARY_PATH",
     ] {
         command.env_remove(name);
     }
@@ -97,19 +97,19 @@ fn catalog_holds_cells_and_styles_but_no_images() {
 
 #[test]
 fn built_in_libraries_are_listed_and_searched_without_styles() {
-    let list = stdout(dip().args(["library", "list"]));
+    let list = stdout(cli().args(["library", "list"]));
     assert!(
         list.contains("drawio/aws4-compute\t139\tAWS / Compute\n"),
         "{list}"
     );
-    let show = stdout(dip().args(["library", "show", "aws4-compute"]));
+    let show = stdout(cli().args(["library", "show", "aws4-compute"]));
     assert_eq!(
         show,
         "name: drawio/aws4-compute\ntitle: AWS / Compute\nfile: (built in: draw.io 26.0.2 sidebar)\nentries: 139\n"
     );
 
     // Every library is searched, legacy palettes included.
-    let found = stdout(dip().args(["library", "search", "LAMBDA"]));
+    let found = stdout(cli().args(["library", "search", "LAMBDA"]));
     assert!(
         found.contains("drawio/aws4-compute\t16\tLambda\t78x78\n"),
         "{found}"
@@ -117,33 +117,35 @@ fn built_in_libraries_are_listed_and_searched_without_styles() {
     assert!(found.contains("drawio/aws3-compute\t"), "{found}");
     assert!(!found.contains("style") && !found.contains("mxgraph"));
     // Entries without a sidebar title take their label, like the AWS groups.
-    let vpc = stdout(dip().args(["library", "search", "vpc", "--library", "aws4-groups"]));
+    let vpc = stdout(cli().args(["library", "search", "vpc", "--library", "aws4-groups"]));
     assert_eq!(vpc, "drawio/aws4-groups\t7\tVPC\t130x130\n");
     assert_eq!(
-        stdout(dip().args(["library", "search", "biohazard"])),
+        stdout(cli().args(["library", "search", "biohazard"])),
         "drawio/signs-safety\t1\tBiohazard\t106x97\n"
     );
     // The drawio/ prefix may be left out.
     for library in ["drawio/aws4-compute", "aws4-compute"] {
         assert_eq!(
-            stdout(dip().args(["library", "search", "lambda", "--library", library])),
+            stdout(cli().args(["library", "search", "lambda", "--library", library])),
             "drawio/aws4-compute\t16\tLambda\t78x78\ndrawio/aws4-compute\t88\tLambda Function\t48x48\n"
         );
     }
-    let missing = stderr(dip().args(["library", "search", "--library", "nope"]), 1);
+    let missing = stderr(cli().args(["library", "search", "--library", "nope"]), 1);
     assert!(
-        missing.contains("no library named \"nope\"; available: drawio/* (see `dip library list`)"),
+        missing.contains(
+            "no library named \"nope\"; available: drawio/* (see `drawio-png-cli library list`)"
+        ),
         "{missing}"
     );
-    // --no-builtin leaves nothing without DIP_LIBRARY_PATH.
-    let none = stderr(dip().args(["library", "search", "--no-builtin"]), 1);
-    assert!(none.contains("set DIP_LIBRARY_PATH"), "{none}");
+    // --no-builtin leaves nothing without DRAWIO_PNG_LIBRARY_PATH.
+    let none = stderr(cli().args(["library", "search", "--no-builtin"]), 1);
+    assert!(none.contains("set DRAWIO_PNG_LIBRARY_PATH"), "{none}");
 }
 
 #[test]
 fn style_prints_one_line_for_single_cells_only() {
     // Styles with JSON values come escaped, ready for a style="..." attribute.
-    let quoted = stdout(dip().args(["library", "style", "drawio/advanced", "39"]));
+    let quoted = stdout(cli().args(["library", "style", "drawio/advanced", "39"]));
     assert!(
         quoted.contains("newEdgeStyle={&quot;edgeStyle&quot;:"),
         "{quoted}"
@@ -153,23 +155,23 @@ fn style_prints_one_line_for_single_cells_only() {
         &format!("vertex=\"1\" style=\"{}\"", quoted.trim_end()),
     );
     document::validate(&pasted).unwrap();
-    let style = stdout(dip().args(["library", "style", "drawio/aws4-compute", "16"]));
+    let style = stdout(cli().args(["library", "style", "drawio/aws4-compute", "16"]));
     assert!(style.ends_with("shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;\n"));
     assert_eq!(style.lines().count(), 1);
     assert_eq!(
-        stdout(dip().args(["library", "style", "aws4-compute", "16"])),
+        stdout(cli().args(["library", "style", "aws4-compute", "16"])),
         style
     );
     let cards = stderr(
-        dip().args(["library", "style", "drawio/gcp2-product-cards", "1"]),
+        cli().args(["library", "style", "drawio/gcp2-product-cards", "1"]),
         1,
     );
     assert!(
-        cards.contains("`dip insert --library drawio/gcp2-product-cards --index 1`"),
+        cards.contains("`drawio-png-cli insert --library drawio/gcp2-product-cards --index 1`"),
         "{cards}"
     );
     for index in ["0", "79"] {
-        let range = stderr(dip().args(["library", "style", "kubernetes", index]), 1);
+        let range = stderr(cli().args(["library", "style", "kubernetes", index]), 1);
         assert!(
             range.contains("library \"drawio/kubernetes\" has 78 entries"),
             "{range}"
@@ -185,13 +187,13 @@ fn style_prints_one_line_for_single_cells_only() {
     )
     .unwrap();
     let image = stderr(
-        dip()
-            .env("DIP_LIBRARY_PATH", &file)
+        cli()
+            .env("DRAWIO_PNG_LIBRARY_PATH", &file)
             .args(["library", "style", "icons", "1"]),
         1,
     );
     assert!(
-        image.contains("`dip insert --library icons --index 1`"),
+        image.contains("`drawio-png-cli insert --library icons --index 1`"),
         "{image}"
     );
     assert!(!image.contains("data:"));
@@ -204,7 +206,7 @@ fn insert_adds_built_in_shapes_by_title_or_index() {
     let output = directory.path().join("out.xml");
     fs::write(&input, MODEL).unwrap();
     let insert = |args: &[&str]| {
-        let mut command = dip();
+        let mut command = cli();
         command
             .arg("insert")
             .args(args)
@@ -277,7 +279,7 @@ fn insert_adds_built_in_shapes_by_title_or_index() {
         ]),
         1,
     );
-    assert!(hidden.contains("set DIP_LIBRARY_PATH"), "{hidden}");
+    assert!(hidden.contains("set DRAWIO_PNG_LIBRARY_PATH"), "{hidden}");
 }
 
 #[test]
@@ -291,8 +293,8 @@ fn custom_libraries_keep_their_names_and_titles_next_to_built_in_ones() {
     )
     .unwrap();
     let run = |args: &[&str]| {
-        let mut command = dip();
-        command.env("DIP_LIBRARY_PATH", &file).args(args);
+        let mut command = cli();
+        command.env("DRAWIO_PNG_LIBRARY_PATH", &file).args(args);
         command
     };
     // An exact name is the custom library; drawio/ selects the built-in one.
@@ -323,7 +325,7 @@ fn custom_libraries_keep_their_names_and_titles_next_to_built_in_ones() {
     );
     let image = stderr(&mut run(&["library", "style", "kubernetes", "1"]), 1);
     assert!(
-        image.contains("`dip insert --library kubernetes --index 1`"),
+        image.contains("`drawio-png-cli insert --library kubernetes --index 1`"),
         "{image}"
     );
     assert_eq!(
@@ -333,7 +335,7 @@ fn custom_libraries_keep_their_names_and_titles_next_to_built_in_ones() {
         1
     );
 
-    // Without --library, a title on DIP_LIBRARY_PATH wins over the built-in ones.
+    // Without --library, a title on DRAWIO_PNG_LIBRARY_PATH wins over the built-in ones.
     let output = directory.path().join("out.xml");
     fs::write(&output, MODEL).unwrap();
     let insert = |args: &[&str]| {
@@ -484,7 +486,7 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
     let directory = tempdir().unwrap();
     let output = directory.path().join("preview.png");
     let preview = |args: &[&str]| {
-        let mut command = dip();
+        let mut command = cli();
         command
             .args(["library", "preview"])
             .args(args)
@@ -501,19 +503,21 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
 }
 
 #[test]
-#[ignore = "requires Chromium and draw.io 26.0.2 web assets; set DIP_TEST_CHROME_PATH and DIP_TEST_DRAWIO_WEB_PATH"]
+#[ignore = "requires Chromium and draw.io 26.0.2 web assets; set DRAWIO_PNG_TEST_CHROME_PATH and DRAWIO_PNG_TEST_DRAWIO_WEB_PATH"]
 fn preview_renders_built_in_shapes_with_web_assets() {
-    let chrome = std::env::var_os("DIP_TEST_CHROME_PATH").expect("set DIP_TEST_CHROME_PATH");
-    let web = std::env::var_os("DIP_TEST_DRAWIO_WEB_PATH").expect("set DIP_TEST_DRAWIO_WEB_PATH");
+    let chrome =
+        std::env::var_os("DRAWIO_PNG_TEST_CHROME_PATH").expect("set DRAWIO_PNG_TEST_CHROME_PATH");
+    let web = std::env::var_os("DRAWIO_PNG_TEST_DRAWIO_WEB_PATH")
+        .expect("set DRAWIO_PNG_TEST_DRAWIO_WEB_PATH");
     let directory = tempdir().unwrap();
     let output = directory.path().join("preview.png");
-    dip()
-        .env("DIP_CHROME_PATH", chrome)
+    cli()
+        .env("DRAWIO_PNG_CHROME_PATH", chrome)
         .env(
-            "DIP_CHROME_ARGS",
-            std::env::var("DIP_TEST_CHROME_ARGS").unwrap_or_default(),
+            "DRAWIO_PNG_CHROME_ARGS",
+            std::env::var("DRAWIO_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
         )
-        .env("DIP_DRAWIO_WEB_PATH", web)
+        .env("DRAWIO_PNG_DRAWIO_WEB_PATH", web)
         .args(["library", "preview", "lambda", "-o"])
         .arg(&output)
         .assert()

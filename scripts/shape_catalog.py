@@ -4,9 +4,9 @@
 Usage: shape_catalog.py /path/to/drawio-checkout
 
 Runs the sidebar of the pinned vscode-mode draw.io (26.0.2) in headless Chrome
-(DIP_CHROME_PATH, CHROME_PATH, or google-chrome/chromium on PATH) and writes
-assets/shapes/catalog.json.gz, which dip embeds as the built-in `drawio/*`
-libraries of `dip library` and `dip insert`.
+(DRAWIO_PNG_CHROME_PATH, CHROME_PATH, or google-chrome/chromium on PATH) and writes
+assets/shapes/catalog.json.gz, which drawio-png-cli embeds as the built-in `drawio/*`
+libraries of `drawio-png-cli library` and `drawio-png-cli insert`.
 
 Entries whose cells embed image data (`data:image/...`) are left out, so the
 catalog carries only cells, styles and references, never icon artwork.
@@ -32,13 +32,13 @@ UPSTREAM_MISSING = ('mxgraph.aws4.piop',)
 
 
 def chrome():
-    for name in ('DIP_CHROME_PATH', 'CHROME_PATH'):
+    for name in ('DRAWIO_PNG_CHROME_PATH', 'CHROME_PATH'):
         if os.environ.get(name):
             return os.environ[name]
     for name in ('google-chrome', 'chromium', 'chromium-browser'):
         if shutil.which(name):
             return shutil.which(name)
-    sys.exit('Chrome not found; set DIP_CHROME_PATH')
+    sys.exit('Chrome not found; set DRAWIO_PNG_CHROME_PATH')
 
 
 def palettes(checkout):

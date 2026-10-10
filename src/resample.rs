@@ -1,5 +1,5 @@
 // Copyright 2011, 2012 The Chromium Authors
-// Chromium-compatible resampling adaptations: Copyright 2026 dip contributors.
+// Chromium-compatible resampling adaptations: Copyright 2026 drawio-png-cli contributors.
 // SPDX-License-Identifier: BSD-3-Clause
 //! Half-size Hamming1 resampling matching Desktop capture on a 1x display.
 //! Chromium's filter quantization and channel rounding are retained here;
