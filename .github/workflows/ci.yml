@@ -2,10 +2,20 @@ name: CI
 
 on:
   push:
-    # Only branches: release tags run these checks from release.yml instead.
-    branches: ["**"]
+    # Only main: branches with a pull request are checked by pull_request, so
+    # running on every branch push would run CI twice. Release tags run these
+    # checks from release.yml instead.
+    branches: [main]
   pull_request:
+  # Run manually for branches without a pull request.
+  workflow_dispatch:
   workflow_call:
+
+# Cancel superseded runs for the same pull request. Every other run gets a
+# group of its own, so main runs are never queued or cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
