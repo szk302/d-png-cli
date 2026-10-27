@@ -42,23 +42,23 @@ impl Workspace {
     }
 
     fn config(&self) -> PathBuf {
-        self.project().join(".drawio-png/config.toml")
+        self.project().join(".d-png/config.toml")
     }
 
     fn lock(&self) -> String {
-        fs::read_to_string(self.project().join(".drawio-png/lock.json")).unwrap()
+        fs::read_to_string(self.project().join(".d-png/lock.json")).unwrap()
     }
 
     fn installed(&self) -> PathBuf {
-        self.project().join(".drawio-png/libraries/@acme/brand.xml")
+        self.project().join(".d-png/libraries/@acme/brand.xml")
     }
 
     fn command(&self, args: &[&str]) -> assert_cmd::Command {
         let mut command = cli();
         command
             .current_dir(self.project())
-            .env("DRAWIO_PNG_CACHE", self.root().join("cache"))
-            .env("DRAWIO_PNG_HOME", self.root().join("home"))
+            .env("D_PNG_CACHE", self.root().join("cache"))
+            .env("D_PNG_HOME", self.root().join("home"))
             .args(args);
         command
     }
@@ -124,7 +124,7 @@ fn packed_and_installed_files_are_the_examples() {
     );
     assert_eq!(
         w.lock(),
-        fs::read_to_string(examples().join("project/.drawio-png/lock.json")).unwrap()
+        fs::read_to_string(examples().join("project/.d-png/lock.json")).unwrap()
     );
     // The dependency is recorded, keeping what was there.
     assert_eq!(
@@ -313,10 +313,7 @@ fn install_problems_change_nothing() {
         let error = w.fail(&args, code);
         assert!(error.contains(expected), "{args:?}: {error}");
         assert_eq!(fs::read_to_string(w.config()).unwrap(), config, "{args:?}");
-        assert!(
-            !w.project().join(".drawio-png/lock.json").exists(),
-            "{args:?}"
-        );
+        assert!(!w.project().join(".d-png/lock.json").exists(), "{args:?}");
     }
     // A source file that does not match versions.json is refused.
     let file = w.root().join("acme-drawio-libraries/@acme/brand/1.0.0.xml");

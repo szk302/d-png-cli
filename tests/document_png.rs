@@ -1,4 +1,4 @@
-use drawio_png_cli::{
+use d_png_cli::{
     adapters::fs as storage,
     domain::{codec, diagram as document, drawio_png as png_data},
 };

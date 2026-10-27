@@ -37,7 +37,7 @@ return JSON.parse(parsedXml.root.children[0].content); // 最初の子のテキ�
 | --- | --- | --- |
 | `examples/sources/components.xml` | CDATA で JSON を包む（v0.1.0 の文書の例と同じ形） | 失敗（`children[0]` がない） |
 | `examples/sources/simple-icons.xml` | `<mxlibrary>` 直下に JSON、`xml` は圧縮 | 成功 |
-| `examples/project/.drawio-png/libraries/*.xml` | [spec.md 9.3](spec.md#93-登録ファイルの書式) の書式（非圧縮の `xml` を含む） | 成功（非圧縮の `xml` も先頭が `<` の文字列として得られる）。`@acme/brand` の版のファイルは、このとき確かめた `brand-images.xml` と表示名だけが違う |
+| `examples/project/.d-png/libraries/*.xml` | [spec.md 9.3](spec.md#93-登録ファイルの書式) の書式（非圧縮の `xml` を含む） | 成功（非圧縮の `xml` も先頭が `<` の文字列として得られる）。`@acme/brand` の版のファイルは、このとき確かめた `brand-images.xml` と表示名だけが違う |
 | 実際の Simple Icons for draw.io 16.35.0（3,466 エントリー） | `<mxlibrary>` 直下に JSON、`xml` は圧縮 | 成功 |
 
 実体参照を使ったファイルは、パーサーのソースから次のように読まれると判断した（実行はしていない）: JSON の外側に `&quot;` があれば `JSON.parse` が失敗し、文字列の中の `&lt;` はそのまま残るため、非圧縮の `xml` が `&lt;mxGraphModel…` となって図形を作れない。draw.io 31.4.6 のソースでは、既定設定でライブラリを保存すると `xml` を非圧縮にし、DOM の直列化で `<` を `&lt;` にする（`EditorUi.createLibraryDataFromImages`）。draw.io Desktop でライブラリを編集・保存した後は、`library sync` で書式を戻す。
@@ -47,11 +47,11 @@ CLI の書式（spec.md 9.3）は、JSON の `\u003c` などで `<`・`>`・`&` 
 ## 4. 拡張の設定を作る
 
 ```sh
-drawio-png-cli init
-drawio-png-cli library add ./vendor/simple-icons.xml --title "Simple Icons"
-drawio-png-cli library add ./design/components.xml --title "Components"
-drawio-png-cli library install @acme/brand        # config.toml の [scopes] に acme の取得元を書いておく
-drawio-png-cli library vscode --write
+d-png-cli init
+d-png-cli library add ./vendor/simple-icons.xml --title "Simple Icons"
+d-png-cli library add ./design/components.xml --title "Components"
+d-png-cli library install @acme/brand        # config.toml の [scopes] に acme の取得元を書いておく
+d-png-cli library vscode --write
 ```
 
 `.vscode/settings.json` に次の項目が書かれる（[例のファイル](examples/project/.vscode/settings.json)）。
@@ -60,27 +60,27 @@ drawio-png-cli library vscode --write
 {
   "hediet.vscode-drawio.customLibraries": [
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Components",
-      "file": "${workspaceFolder}/.drawio-png/libraries/components.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/components.xml"
     },
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Simple Icons",
-      "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/simple-icons.xml"
     },
     {
-      "entryId": "drawio-png-cli @acme",
+      "entryId": "d-png-cli @acme",
       "libName": "ACME Brand",
-      "file": "${workspaceFolder}/.drawio-png/libraries/@acme/brand.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/@acme/brand.xml"
     }
   ]
 }
 ```
 
 - 拡張の `file` は絶対パスで、`${workspaceFolder}` を使える。CLI はプロジェクト領域の親ディレクトリをワークスペースのフォルダーとみなして相対パスを作る。
-- 拡張は同じ `entryId` のライブラリを 1 つの見出しにまとめ、見出しごとに表示・非表示を切り替えられる（`src/DrawioClient/simpleDrawioLibrary.ts`）。CLI はプロジェクト専用のライブラリを `drawio-png-cli`、取り込んだライブラリをスコープごとに `drawio-png-cli @acme` の見出しにする。名前空間がそのまま拡張の見出しになる。
-- `--entry-id` で `drawio-png-cli` の部分を変えられる。`--write` はこの見出しの項目だけを置き換え、利用者が手で追加した他の項目は残す。
+- 拡張は同じ `entryId` のライブラリを 1 つの見出しにまとめ、見出しごとに表示・非表示を切り替えられる（`src/DrawioClient/simpleDrawioLibrary.ts`）。CLI はプロジェクト専用のライブラリを `d-png-cli`、取り込んだライブラリをスコープごとに `d-png-cli @acme` の見出しにする。名前空間がそのまま拡張の見出しになる。
+- `--entry-id` で `d-png-cli` の部分を変えられる。`--write` はこの見出しの項目だけを置き換え、利用者が手で追加した他の項目は残す。
 - 取り込んだライブラリのファイルは `.gitignore` で除外される。clone した直後は、`library install` を実行するまで拡張は `@acme` の見出しのライブラリを読めない（[7 章](#7-注意と未検証の事項)）。
 
 ### プロジェクト専用と取り込みの選び方
@@ -115,7 +115,7 @@ flowchart LR
 
 CLI は draw.io のサイドバーの図形を同梱しない。エージェントに AWS・Azure・Kubernetes などの図形を使わせる場合は、利用者が使う図形を draw.io でライブラリにして `library add` で登録する（[usecase.md の I](usecase.md#drawio-の図形をライブラリにする)）。登録したライブラリは `customLibraries` に出るので、人も拡張のライブラリ欄から同じ図形を置ける。人は拡張の「+ その他の図形」で図形集を有効にして使ってもよいが、エージェントが参照できるのは登録した図形だけである。
 
-AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0 と同じく `DRAWIO_PNG_DRAWIO_WEB_PATH` の資材が必要である。拡張は自身の資材で描画するため、人の側の準備は不要。
+AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0（`DIP_DRAWIO_WEB_PATH`）と同じく `D_PNG_DRAWIO_WEB_PATH` の資材が必要である。拡張は自身の資材で描画するため、人の側の準備は不要。
 
 ## 7. 注意と未検証の事項
 
@@ -124,4 +124,4 @@ AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0 と同
 - **リモート環境**: 拡張の `extensionKind` は `["ui", "workspace"]` で、リモート（devcontainer・WSL・SSH）では既定でローカル側で動く。拡張は `${workspaceFolder}` を `workspaceFolder.uri.fsPath` に置き換え、`Uri.file()` で読むため、ローカル側で動く場合はリモートのパスを読めない可能性がある。`"remote.extensionKind": {"hediet.vscode-drawio": ["workspace"]}` でリモート側で動かせば読める見込みだが、どちらも未検証である。
 - **大きなライブラリ**: 拡張は設定したライブラリをすべて読み込んで webview に渡す。数 MB のライブラリを多数登録すると図面を開く時間が延びる。使うライブラリだけを登録する。
 - **CI**: `library install --frozen` で取り込んだライブラリを復元し、`library sync --check` で、人が draw.io Desktop で保存して拡張で読めなくなったライブラリと、取り込みの漏れ・完全性の不一致を検出できる。
-- **clone 直後**: 取り込んだライブラリ（`.drawio-png/libraries/@*/`）は Git に入っていないため、設定にあるファイルが存在せず、拡張はそのライブラリを読めない。`library install` を実行してから図面を開き直す。
+- **clone 直後**: 取り込んだライブラリ（`.d-png/libraries/@*/`）は Git に入っていないため、設定にあるファイルが存在せず、拡張はそのライブラリを読めない。`library install` を実行してから図面を開き直す。

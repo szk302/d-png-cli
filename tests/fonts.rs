@@ -1,5 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use drawio_png_cli::domain::{diagram as document, drawio_png as png_data, fonts::FontPolicy};
+use d_png_cli::domain::{diagram as document, drawio_png as png_data, fonts::FontPolicy};
 use std::fs;
 
 const MODEL: &str = include_str!("fixtures/model.xml");
@@ -124,13 +124,13 @@ fn quoted_names_are_escaped_and_invalid_lists_are_rejected() {
 fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("diagram.png");
-    cargo_bin_cmd!("drawio-png-cli")
+    cargo_bin_cmd!("d-png-cli")
         .env(
-            "DRAWIO_PNG_HOME",
+            "D_PNG_HOME",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
         )
         .env(
-            "DRAWIO_PNG_CACHE",
+            "D_PNG_CACHE",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
         )
         .args([
@@ -161,13 +161,13 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
             "unknown",
         ],
     ] {
-        cargo_bin_cmd!("drawio-png-cli")
+        cargo_bin_cmd!("d-png-cli")
             .env(
-                "DRAWIO_PNG_HOME",
+                "D_PNG_HOME",
                 std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
             )
             .env(
-                "DRAWIO_PNG_CACHE",
+                "D_PNG_CACHE",
                 std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
             )
             .args(["write", "--metadata-only", "-o"])
@@ -182,13 +182,13 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         "vertex=\"1\"",
         "vertex=\"1\" style=\"fontFamily='unfinished;\"",
     );
-    cargo_bin_cmd!("drawio-png-cli")
+    cargo_bin_cmd!("d-png-cli")
         .env(
-            "DRAWIO_PNG_HOME",
+            "D_PNG_HOME",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
         )
         .env(
-            "DRAWIO_PNG_CACHE",
+            "D_PNG_CACHE",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
         )
         .args([
@@ -210,7 +210,7 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
 fn adding_fonts_cannot_expand_xml_past_the_size_limit() {
     let xml = format!(
         "<mxGraphModel><root>{}</root></mxGraphModel>",
-        "<mxCell vertex=\"1\"/>".repeat(drawio_png_cli::MAX_BYTES / 1024)
+        "<mxCell vertex=\"1\"/>".repeat(d_png_cli::MAX_BYTES / 1024)
     );
     let policy = FontPolicy::new(&"A".repeat(1024), &[]).unwrap();
     assert!(
@@ -223,14 +223,12 @@ fn adding_fonts_cannot_expand_xml_past_the_size_limit() {
 }
 
 #[test]
-#[ignore = "requires Desktop, Chromium and a common font; set DRAWIO_PNG_TEST_DRAWIO_PATH, DRAWIO_PNG_TEST_CHROME_PATH and DRAWIO_PNG_TEST_FONT"]
+#[ignore = "requires Desktop, Chromium and a common font; set D_PNG_TEST_DRAWIO_PATH, D_PNG_TEST_CHROME_PATH and D_PNG_TEST_FONT"]
 fn real_renderers_use_the_default_and_explicit_fallback() {
-    let desktop =
-        std::env::var_os("DRAWIO_PNG_TEST_DRAWIO_PATH").expect("set DRAWIO_PNG_TEST_DRAWIO_PATH");
-    let chrome =
-        std::env::var_os("DRAWIO_PNG_TEST_CHROME_PATH").expect("set DRAWIO_PNG_TEST_CHROME_PATH");
-    let family = std::env::var("DRAWIO_PNG_TEST_FONT")
-        .expect("set DRAWIO_PNG_TEST_FONT to an installed font");
+    let desktop = std::env::var_os("D_PNG_TEST_DRAWIO_PATH").expect("set D_PNG_TEST_DRAWIO_PATH");
+    let chrome = std::env::var_os("D_PNG_TEST_CHROME_PATH").expect("set D_PNG_TEST_CHROME_PATH");
+    let family =
+        std::env::var("D_PNG_TEST_FONT").expect("set D_PNG_TEST_FONT to an installed font");
     let escaped = family
         .replace('&', "&amp;")
         .replace('"', "&quot;")
@@ -267,23 +265,23 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
             ),
         ] {
             let output = dir.path().join(format!("{renderer}-{name}.png"));
-            cargo_bin_cmd!("drawio-png-cli")
+            cargo_bin_cmd!("d-png-cli")
                 .env(
-                    "DRAWIO_PNG_HOME",
+                    "D_PNG_HOME",
                     std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
                 )
                 .env(
-                    "DRAWIO_PNG_CACHE",
+                    "D_PNG_CACHE",
                     std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
                 )
-                .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
-                .env("DRAWIO_PNG_CHROME_PATH", &chrome)
+                .env("D_PNG_DRAWIO_PATH", &desktop)
+                .env("D_PNG_CHROME_PATH", &chrome)
                 .env(
-                    "DRAWIO_PNG_CHROME_ARGS",
-                    std::env::var("DRAWIO_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
+                    "D_PNG_CHROME_ARGS",
+                    std::env::var("D_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
                 )
-                .env_remove("DRAWIO_PNG_DRAWIO_WEB_PATH")
-                .env_remove("DRAWIO_PNG_RENDERER")
+                .env_remove("D_PNG_DRAWIO_WEB_PATH")
+                .env_remove("D_PNG_RENDERER")
                 .args(["write", "--renderer", renderer, "-o"])
                 .arg(&output)
                 .args(options)

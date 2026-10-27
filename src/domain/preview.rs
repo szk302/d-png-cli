@@ -12,7 +12,7 @@ use crate::domain::{
 pub const PREVIEW_LIMIT: usize = 60;
 
 /// One page laying out the given entries, each below a label naming its
-/// reference and title, for `drawio-png-cli library preview`. The label goes
+/// reference and title, for `d-png-cli library preview`. The label goes
 /// above the entry because sidebar shapes often show their own label below.
 /// Entries are placed with the same expansion as references in diagrams.
 pub fn preview(entries: &[(Ref, &Entry)]) -> Result<String> {

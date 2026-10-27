@@ -1,5 +1,5 @@
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{adapters::fs as storage, domain::drawio_png as png_data};
+use d_png_cli::{adapters::fs as storage, domain::drawio_png as png_data};
 use std::fs;
 use tempfile::tempdir;
 
@@ -8,18 +8,18 @@ const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 const PLAIN: &[u8] = include_bytes!("fixtures/plain.png");
 
 fn cli() -> Command {
-    let mut command = cargo_bin_cmd!("drawio-png-cli");
+    let mut command = cargo_bin_cmd!("d-png-cli");
     command
-        .env_remove("DRAWIO_PNG_DRAWIO_PATH")
-        .env_remove("DRAWIO_PNG_DRAWIO_ARGS")
-        .env_remove("DRAWIO_PNG_RENDERER")
-        .env_remove("DRAWIO_PNG_PROJECT")
+        .env_remove("D_PNG_DRAWIO_PATH")
+        .env_remove("D_PNG_DRAWIO_ARGS")
+        .env_remove("D_PNG_RENDERER")
+        .env_remove("D_PNG_PROJECT")
         .env(
-            "DRAWIO_PNG_HOME",
+            "D_PNG_HOME",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
         )
         .env(
-            "DRAWIO_PNG_CACHE",
+            "D_PNG_CACHE",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
         );
     command
@@ -125,7 +125,7 @@ fn invalid_renderer_is_an_error_without_touching_output() {
     fs::write(&output, PLAIN).unwrap();
     cli()
         .env(
-            "DRAWIO_PNG_DRAWIO_PATH",
+            "D_PNG_DRAWIO_PATH",
             directory.path().join("missing-renderer"),
         )
         .args(["write", "--renderer", "desktop-app", "-o"])
@@ -143,8 +143,8 @@ fn metadata_only_does_not_discover_a_renderer_or_reuse_output_pixels() {
     let output = directory.path().join("output.png");
     fs::write(&output, "not a PNG").unwrap();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", "missing-renderer")
-        .env("DRAWIO_PNG_CHROME_PATH", "missing-renderer")
+        .env("D_PNG_DRAWIO_PATH", "missing-renderer")
+        .env("D_PNG_CHROME_PATH", "missing-renderer")
         .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
@@ -231,20 +231,20 @@ fn commands_without_rendering_ignore_invalid_desktop_options() {
     let directory = tempdir().unwrap();
     let output = directory.path().join("output.png");
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
         .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
         .success();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
         .arg("validate")
         .arg(&output)
         .assert()
         .success();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
         .arg("read")
         .arg(&output)
         .assert()
@@ -305,9 +305,9 @@ fn base_images_with_broken_zlib_trailers_never_replace_output() {
 
 #[test]
 fn skill_guides_match_this_version() {
-    let core = include_str!("../assets/skill/drawio-png.md");
+    let core = include_str!("../assets/skill/d-png.md");
     // Normalize in case a checkout converted line endings.
-    let stub = &include_str!("../skills/drawio-png/SKILL.md").replace("\r\n", "\n");
+    let stub = &include_str!("../skills/d-png/SKILL.md").replace("\r\n", "\n");
     let output = cli()
         .arg("skill")
         .assert()
@@ -318,9 +318,9 @@ fn skill_guides_match_this_version() {
     assert_eq!(String::from_utf8(output).unwrap(), core);
     cli().args(["skill", "--full"]).assert().code(2);
     // The installed stub only points at the guide shipped with the binary.
-    assert!(stub.starts_with("---\nname: drawio-png\n"));
-    assert!(stub.contains("drawio-png-cli skill ") && !stub.contains("skill --full"));
-    // Every `drawio-png-cli <command>` the guides mention must exist in this version.
+    assert!(stub.starts_with("---\nname: d-png\n"));
+    assert!(stub.contains("d-png-cli skill ") && !stub.contains("skill --full"));
+    // Every `d-png-cli <command>` the guides mention must exist in this version.
     let help = |args: &[&str]| {
         let output = cli()
             .args(args)
@@ -344,7 +344,7 @@ fn skill_guides_match_this_version() {
     };
     let (top, library) = (commands(help(&[])), commands(help(&["library"])));
     for text in [core, stub.as_str()] {
-        for mention in text.split("drawio-png-cli ").skip(1) {
+        for mention in text.split("d-png-cli ").skip(1) {
             let mut words = mention.split(|c: char| !c.is_ascii_alphanumeric() && c != '-');
             let command = words.next().unwrap_or("");
             if command.is_empty() || !command.chars().all(|c| c.is_ascii_lowercase()) {
@@ -352,13 +352,13 @@ fn skill_guides_match_this_version() {
             }
             assert!(
                 top.contains(&command.to_owned()),
-                "unknown command: drawio-png-cli {command}"
+                "unknown command: d-png-cli {command}"
             );
             if command == "library" {
                 let sub = words.find(|w| !w.is_empty()).unwrap_or("");
                 assert!(
                     library.contains(&sub.to_owned()),
-                    "unknown command: drawio-png-cli library {sub}"
+                    "unknown command: d-png-cli library {sub}"
                 );
             }
         }

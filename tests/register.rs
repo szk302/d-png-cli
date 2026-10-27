@@ -16,7 +16,7 @@ fn project() -> tempfile::TempDir {
 }
 
 fn libraries(dir: &Path) -> PathBuf {
-    dir.join(".drawio-png/libraries")
+    dir.join(".d-png/libraries")
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn added_libraries_are_written_in_the_normalized_form() {
     );
     assert_eq!(
         out,
-        "added components (project, 3 entries) -> .drawio-png/libraries/components.xml\n  components/service\tshape\t120x60\tService\n  components/card\tgroup\t240x120\tCard\n  components/branch\tset\t260x60\tBranch\n"
+        "added components (project, 3 entries) -> .d-png/libraries/components.xml\n  components/service\tshape\t120x60\tService\n  components/card\tgroup\t240x120\tCard\n  components/branch\tset\t260x60\tBranch\n"
     );
     // The CDATA source and the compressed sources, one of them saved by
     // draw.io, become the files of the example project, which the VS Code
@@ -52,8 +52,7 @@ fn added_libraries_are_written_in_the_normalized_form() {
     for name in ["components.xml", "shapes.xml", "simple-icons.xml"] {
         assert_eq!(
             fs::read_to_string(libraries(dir.path()).join(name)).unwrap(),
-            fs::read_to_string(examples().join("project/.drawio-png/libraries").join(name))
-                .unwrap(),
+            fs::read_to_string(examples().join("project/.d-png/libraries").join(name)).unwrap(),
             "{name}"
         );
     }

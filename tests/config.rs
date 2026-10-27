@@ -2,7 +2,7 @@
 //! user area, with options and the environment taking precedence.
 mod support;
 
-use drawio_png_cli::domain::drawio_png;
+use d_png_cli::domain::drawio_png;
 use std::{fs, path::Path};
 use support::{cli, stderr};
 use tempfile::tempdir;
@@ -12,7 +12,7 @@ const MODEL: &str = include_str!("fixtures/model.xml");
 fn project(config: &str) -> tempfile::TempDir {
     let dir = tempdir().unwrap();
     cli().arg("init").arg(dir.path()).assert().success();
-    fs::write(dir.path().join(".drawio-png/config.toml"), config).unwrap();
+    fs::write(dir.path().join(".d-png/config.toml"), config).unwrap();
     dir
 }
 
@@ -21,7 +21,7 @@ fn saved(dir: &Path, args: &[&str]) -> String {
     let output = dir.join("out.png");
     cli()
         .current_dir(dir)
-        .env("DRAWIO_PNG_HOME", dir.join("no-user-area"))
+        .env("D_PNG_HOME", dir.join("no-user-area"))
         .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .args(args)
@@ -75,7 +75,7 @@ fn fonts_come_from_options_then_the_project_then_the_user() {
     let output = plain.path().join("out.png");
     cli()
         .current_dir(plain.path())
-        .env("DRAWIO_PNG_HOME", user.path())
+        .env("D_PNG_HOME", user.path())
         .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
@@ -85,7 +85,7 @@ fn fonts_come_from_options_then_the_project_then_the_user() {
     assert_eq!(font(&xml), "fontFamily=\"User Sans\";");
     cli()
         .current_dir(dir.path())
-        .env("DRAWIO_PNG_HOME", user.path())
+        .env("D_PNG_HOME", user.path())
         .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
@@ -139,7 +139,7 @@ fn invalid_settings_are_reported_where_they_are_used() {
     let error = stderr(
         cli()
             .current_dir(dir.path())
-            .env("DRAWIO_PNG_HOME", user.path())
+            .env("D_PNG_HOME", user.path())
             .arg("expand")
             .write_stdin(MODEL),
         1,
@@ -170,14 +170,14 @@ fn the_renderer_comes_from_options_the_environment_then_settings() {
         let mut command = cli();
         command
             .current_dir(dir.path())
-            .env("DRAWIO_PNG_HOME", dir.path().join("no-user-area"))
-            .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
-            .env("DRAWIO_PNG_CHROME_PATH", &chrome)
+            .env("D_PNG_HOME", dir.path().join("no-user-area"))
+            .env("D_PNG_DRAWIO_PATH", &desktop)
+            .env("D_PNG_CHROME_PATH", &chrome)
             .args(["write", "-o", "out.png"])
             .args(args)
             .write_stdin(MODEL);
         if let Some(value) = renderer_env {
-            command.env("DRAWIO_PNG_RENDERER", value);
+            command.env("D_PNG_RENDERER", value);
         }
         // desktop-app with allow-network from the settings is refused before rendering.
         let output = command.assert().failure().get_output().clone();
@@ -196,7 +196,7 @@ fn the_renderer_comes_from_options_the_environment_then_settings() {
     let error = run(&["--renderer", "raw"], Some("desktop-app"));
     assert!(error.contains("browser-selected"), "{error}");
     fs::write(
-        dir.path().join(".drawio-png/config.toml"),
+        dir.path().join(".d-png/config.toml"),
         "[render]\nrenderer = \"desktop-app\"\n",
     )
     .unwrap();

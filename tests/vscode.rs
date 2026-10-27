@@ -31,8 +31,8 @@ fn example_project() -> tempfile::TempDir {
     fs::create_dir(&project).unwrap();
     run(dir.path(), &["init"]);
     fs::copy(
-        examples().join("project/.drawio-png/config.toml"),
-        project.join(".drawio-png/config.toml"),
+        examples().join("project/.d-png/config.toml"),
+        project.join(".d-png/config.toml"),
     )
     .unwrap();
     let mut add = command(dir.path(), &["library", "add"]);
@@ -52,8 +52,8 @@ fn command(root: &Path, args: &[&str]) -> assert_cmd::Command {
     let mut command = cli();
     command
         .current_dir(root.join("project"))
-        .env("DRAWIO_PNG_CACHE", root.join("cache"))
-        .env("DRAWIO_PNG_HOME", root.join("home"))
+        .env("D_PNG_CACHE", root.join("cache"))
+        .env("D_PNG_HOME", root.join("home"))
         .args(args);
     command
 }
@@ -92,7 +92,7 @@ fn the_users_settings_and_items_stay() {
     fs::create_dir_all(settings(dir.path()).parent().unwrap()).unwrap();
     fs::write(
         settings(dir.path()),
-        "{\n  // mine\n  \"editor.tabSize\": 2,\n  \"hediet.vscode-drawio.customLibraries\": [\n    {\"entryId\": \"team\", \"libName\": \"Team\", \"file\": \"/team.xml\"},\n    {\"entryId\": \"drawio-png-cli\", \"libName\": \"Stale\", \"file\": \"stale.xml\"},\n  ],\n}\n",
+        "{\n  // mine\n  \"editor.tabSize\": 2,\n  \"hediet.vscode-drawio.customLibraries\": [\n    {\"entryId\": \"team\", \"libName\": \"Team\", \"file\": \"/team.xml\"},\n    {\"entryId\": \"d-png-cli\", \"libName\": \"Stale\", \"file\": \"stale.xml\"},\n  ],\n}\n",
     )
     .unwrap();
     run(dir.path(), &["library", "vscode", "--write"]);

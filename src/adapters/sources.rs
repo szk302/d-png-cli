@@ -27,10 +27,10 @@ use crate::{
     },
 };
 
-/// The cache of fetched files (spec 2.2): `DRAWIO_PNG_CACHE`, or the OS's
+/// The cache of fetched files (spec 2.2): `D_PNG_CACHE`, or the OS's
 /// cache directory.
 pub fn cache_dir() -> Option<PathBuf> {
-    if let Some(dir) = env::var_os("DRAWIO_PNG_CACHE").filter(|v| !v.is_empty()) {
+    if let Some(dir) = env::var_os("D_PNG_CACHE").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(dir));
     }
     let var = |key: &str| {
@@ -43,7 +43,7 @@ pub fn cache_dir() -> Option<PathBuf> {
         "macos" => var("HOME")?.join("Library/Caches"),
         _ => var("XDG_CACHE_HOME").or_else(|| Some(var("HOME")?.join(".cache")))?,
     };
-    Some(base.join("drawio-png-cli"))
+    Some(base.join("d-png-cli"))
 }
 
 /// Files by integrity.
@@ -182,7 +182,7 @@ fn git(args: &[&str], dir: Option<&Path>) -> Result<String> {
 /// A shallow checkout of a branch or tag (or the default branch), and its commit.
 fn clone(url: &str, reference: Option<&str>) -> Result<(tempfile::TempDir, String)> {
     let dir = tempfile::Builder::new()
-        .prefix("drawio-png-cli-git-")
+        .prefix("d-png-cli-git-")
         .tempdir()?;
     let target = dir.path().to_string_lossy().into_owned();
     let mut args = vec!["clone", "--quiet", "--depth", "1"];
@@ -202,7 +202,7 @@ fn checkout(url: &str, commit: &str) -> Result<tempfile::TempDir> {
         "invalid commit {commit:?} in lock.json"
     );
     let dir = tempfile::Builder::new()
-        .prefix("drawio-png-cli-git-")
+        .prefix("d-png-cli-git-")
         .tempdir()?;
     git(&["init", "--quiet"], Some(dir.path()))?;
     let fetched = git(
@@ -546,7 +546,7 @@ mod tests {
         let scope = Scope {
             source: Source::Https {
                 url: "https://libraries.invalid/drawio/".into(),
-                token_env: Some("DRAWIO_PNG_TEST_UNSET_TOKEN".into()),
+                token_env: Some("D_PNG_TEST_UNSET_TOKEN".into()),
             },
             layer: Layer::Project,
         };
@@ -557,7 +557,7 @@ mod tests {
         assert!(
             error
                 .message
-                .contains("token variable DRAWIO_PNG_TEST_UNSET_TOKEN"),
+                .contains("token variable D_PNG_TEST_UNSET_TOKEN"),
             "{}",
             error.message
         );

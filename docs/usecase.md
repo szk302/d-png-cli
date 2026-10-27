@@ -2,8 +2,8 @@
 
 この文書は、[v0.2.0 の仕様](spec.md)を使ってエージェントが図面を作る・直す流れを、ユースケースごとに示す。各ケースで **CLI に渡す XML** と、**CLI がない場合に書く必要がある XML** を並べ、比較できるようにした。
 
-- **CLI に渡す XML**: エージェントが書いて `drawio-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `libref="…"` と `image=lib:…` で参照する。
-- **CLI がない場合の XML**: 同じ図面を、ライブラリの参照なしで draw.io の普通の XML として書いたもの。エージェントがライブラリのファイルを読み、style・画像・ID・座標を自分で写して組み立てる必要がある。`drawio-png-cli expand` の出力、つまり `write` が PNG に埋め込む XML と同じ内容である。
+- **CLI に渡す XML**: エージェントが書いて `d-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `libref="…"` と `image=lib:…` で参照する。
+- **CLI がない場合の XML**: 同じ図面を、ライブラリの参照なしで draw.io の普通の XML として書いたもの。エージェントがライブラリのファイルを読み、style・画像・ID・座標を自分で写して組み立てる必要がある。`d-png-cli expand` の出力、つまり `write` が PNG に埋め込む XML と同じ内容である。
 
 B〜G は、v0.1.0 で `insert` を使わずに XML を編集する手順・v0.2.0 の前に計画した参照機能の手順と比較したときと同じ依頼・同じ比較用ライブラリを使う（どちらの比較資料もこのリポジトリには含めていない）。A は draw.io の図形を、利用者が登録したライブラリから置くケースである（F の曲線も同じライブラリから使う）。H は新しい図面を 1 回の標準入力で作るケース、I はライブラリの登録・取り込みと VS Code の設定のケース、J は名前空間（スコープ）付きの共有ライブラリを公開・更新するケースである。
 
@@ -42,7 +42,7 @@ flowchart TD
 ### 部品を探す
 
 ```sh
-drawio-png-cli library search postgres
+d-png-cli library search postgres
 # simple-icons/postgresql	image	48x48	PostgreSQL
 ```
 
@@ -53,8 +53,8 @@ drawio-png-cli library search postgres
 ファイルに保存しても、標準入力に直接渡してもよい。
 
 ```sh
-drawio-png-cli write -o diagram.drawio.png < diagram.xml
-drawio-png-cli write -o diagram.drawio.png <<'EOF'
+d-png-cli write -o diagram.drawio.png < diagram.xml
+d-png-cli write -o diagram.drawio.png <<'EOF'
 <mxfile>…</mxfile>
 EOF
 ```
@@ -73,7 +73,7 @@ EOF
 draw.io のサイドバーの図形は CLI に同梱していない。使う図形は、利用者が draw.io でライブラリにまとめて `library add` で登録しておく（[I](#drawio-の図形をライブラリにする)）。この例の `shapes` は、draw.io の「General」の円柱・人型・曲線を入れたライブラリである。
 
 ```sh
-drawio-png-cli library search cylinder
+d-png-cli library search cylinder
 # shapes/cylinder	shape	60x80	Cylinder
 ```
 
@@ -122,9 +122,9 @@ drawio-png-cli library search cylinder
 **依頼例:**「社内ライブラリの Service を使い、担当を payments にしてください」
 
 ```sh
-drawio-png-cli library search service --library components
+d-png-cli library search service --library components
 # components/service	shape	120x60	Service
-drawio-png-cli library show components/service --json
+d-png-cli library show components/service --json
 # … "style":"rounded=1;", "data":{"owner":"library","note":"keep"} …
 ```
 
@@ -177,7 +177,7 @@ drawio-png-cli library show components/service --json
 **依頼例:**「PostgreSQL のアイコンを 64px で追加してください」
 
 ```sh
-drawio-png-cli library search postgres
+d-png-cli library search postgres
 # simple-icons/postgresql	image	48x48	PostgreSQL
 ```
 
@@ -226,7 +226,7 @@ drawio-png-cli library search postgres
 **依頼例:**「社内の共有ライブラリから会社ロゴを入れてください」
 
 ```sh
-drawio-png-cli library search logo --kind image
+d-png-cli library search logo --kind image
 # @acme/brand/logo	image	240x120	Logo
 ```
 
@@ -277,8 +277,8 @@ drawio-png-cli library search logo --kind image
 **依頼例:**「タイトルと本文を持つカードと、分岐のセットを追加し、カードから分岐へ線を引いてください」
 
 ```sh
-drawio-png-cli library show components/card --json     # kind: group
-drawio-png-cli library show components/branch --json   # kind: set
+d-png-cli library show components/card --json     # kind: group
+d-png-cli library show components/branch --json   # kind: set
 ```
 
 `components/branch` の `cells` は次のとおりで、展開後の ID が事前に分かる。
@@ -360,7 +360,7 @@ drawio-png-cli library show components/branch --json   # kind: set
 **依頼例:**「既存の a と b を曲線でつないでください」
 
 ```sh
-drawio-png-cli library search curve --kind edge
+d-png-cli library search curve --kind edge
 # shapes/curve	edge	50x50	Curve
 ```
 
@@ -429,10 +429,10 @@ drawio-png-cli library search curve --kind edge
 **依頼例:**「アイコンはそのままで、DB を右へ移動してください」
 
 ```sh
-drawio-png-cli read diagram.drawio.png -o edit.xml
+d-png-cli read diagram.drawio.png -o edit.xml
 # 1 個の画像を lib: 参照にしました（画像を残すには expand を使います）
 # edit.xml の db の x を 240 → 400 に変更
-drawio-png-cli write edit.xml -o diagram.drawio.png
+d-png-cli write edit.xml -o diagram.drawio.png
 ```
 
 PNG に保存されている XML は [before.xml](examples/g-keep-images/before.xml)、`read` の出力は [read-output.xml](examples/g-keep-images/read-output.xml) で、画像の値が `lib:simple-icons/postgresql@224afa6bb926` に縮まっている。`@` の後は画像の指紋で、`write` は同じ指紋の画像を登録ライブラリから戻す。
@@ -492,16 +492,16 @@ PNG に保存されている XML は [before.xml](examples/g-keep-images/before.
 **依頼例:**「決済 API の構成図を新しく作ってください。利用者 → 決済 API（社内の Service 部品、担当 payments）→ PostgreSQL の流れで、左上に会社ロゴを入れてください」
 
 ```sh
-drawio-png-cli library search actor
-drawio-png-cli library search service --library components
-drawio-png-cli library search postgres
-drawio-png-cli library search logo --kind image
+d-png-cli library search actor
+d-png-cli library search service --library components
+d-png-cli library search postgres
+d-png-cli library search logo --kind image
 ```
 
 部品は参照で、タイトルの文字と接続線は普通の XML で書き、そのまま標準入力に渡す。
 
 ```sh
-drawio-png-cli write -o payments.drawio.png --json < payments.xml
+d-png-cli write -o payments.drawio.png --json < payments.xml
 ```
 
 **CLI に渡す XML**（[examples/h-new-diagram/cli.xml](examples/h-new-diagram/cli.xml)）
@@ -604,14 +604,14 @@ drawio-png-cli write -o payments.drawio.png --json < payments.xml
 **依頼例:**「Simple Icons・このリポジトリの部品集・draw.io で作った図形のライブラリを登録し、社内の共有ロゴも取り込んで、エージェントと VS Code の両方で使えるようにしてください」
 
 ```sh
-drawio-png-cli init
-drawio-png-cli library add ./sources/simple-icons.xml
-drawio-png-cli library add ./sources/components.xml --title Components
-drawio-png-cli library add ./sources/shapes.xml --title Shapes
-# .drawio-png/config.toml の [scopes] に acme の取得元を書く（下記）
-drawio-png-cli library install @acme/brand
-drawio-png-cli library vscode --write
-git add .drawio-png .vscode/settings.json   # 取り込んだ libraries/@acme/ は .gitignore で除外される
+d-png-cli init
+d-png-cli library add ./sources/simple-icons.xml
+d-png-cli library add ./sources/components.xml --title Components
+d-png-cli library add ./sources/shapes.xml --title Shapes
+# .d-png/config.toml の [scopes] に acme の取得元を書く（下記）
+d-png-cli library install @acme/brand
+d-png-cli library vscode --write
+git add .d-png .vscode/settings.json   # 取り込んだ libraries/@acme/ は .gitignore で除外される
 ```
 
 ライブラリは名前空間で 2 種類に分ける（[spec.md 9.1](spec.md#91-種類と探索順)）。
@@ -624,11 +624,11 @@ git add .drawio-png .vscode/settings.json   # 取り込んだ libraries/@acme/ �
 `library add` の出力例:
 
 ```
-added components (project, 3 entries) -> .drawio-png/libraries/components.xml
+added components (project, 3 entries) -> .d-png/libraries/components.xml
   components/service	shape	120x60	Service
   components/card	group	240x120	Card
   components/branch	set	260x60	Branch
-hint: run `drawio-png-cli library vscode --write` to use it in VS Code
+hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 
 `library install` の出力例:
@@ -636,7 +636,7 @@ hint: run `drawio-png-cli library vscode --write` to use it in VS Code
 ```
 installed @acme/brand@1.0.0 (1 entry) from file:../acme-drawio-libraries
   @acme/brand/logo	image	240x120	Logo
-hint: run `drawio-png-cli library vscode --write` to use it in VS Code
+hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 
 このケースで CLI に渡すのは、配布・共有されたライブラリのファイルと、取得元の設定である。CLI がない場合は、VS Code 拡張が読める書式のファイル、共有ライブラリの複製と版の管理、拡張の設定を手で行う必要がある。
@@ -670,7 +670,7 @@ hint: run `drawio-png-cli library vscode --write` to use it in VS Code
 ]]></mxlibrary>
 ```
 
-**CLI がない場合に手で作るライブラリ**（[examples/project/.drawio-png/libraries/components.xml](examples/project/.drawio-png/libraries/components.xml)。`library add` が書くものと同じ）
+**CLI がない場合に手で作るライブラリ**（[examples/project/.d-png/libraries/components.xml](examples/project/.d-png/libraries/components.xml)。`library add` が書くものと同じ）
 
 ```xml
 <mxlibrary title="Components">[
@@ -691,22 +691,22 @@ CLI は draw.io のサイドバーの図形を同梱していない。AWS・Azur
 [examples/sources/shapes.xml](examples/sources/shapes.xml) は、この手順で General の円柱・人型・曲線を入れたファイルの例（`xml` は draw.io の圧縮形式）である。
 
 ```
-added shapes (project, 3 entries) -> .drawio-png/libraries/shapes.xml
+added shapes (project, 3 entries) -> .d-png/libraries/shapes.xml
   shapes/cylinder	shape	60x80	Cylinder
   shapes/actor	shape	30x60	Actor
   shapes/curve	edge	50x50	Curve
 ```
 
 - 登録したファイルは VS Code 拡張にも出るので、人も同じ図形をライブラリ欄から置ける。
-- `shape=mxgraph.*` の図形（AWS など）の描画には、draw.io の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要である。この例の基本図形は同梱の資材で描ける。
+- `shape=mxgraph.*` の図形（AWS など）の描画には、draw.io の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要である。この例の基本図形は同梱の資材で描ける。
 - 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認する。
 
 ### 共有ライブラリを取り込む
 
-**CLI に渡す設定**（[examples/project/.drawio-png/config.toml](examples/project/.drawio-png/config.toml)）。実際のチームでは `acme` に Git の取得元（`git+https://github.com/acme/drawio-libraries.git`）を書く。この例では、同じ構成のディレクトリ [examples/acme-drawio-libraries/](examples/acme-drawio-libraries/) を `file:` で指している。
+**CLI に渡す設定**（[examples/project/.d-png/config.toml](examples/project/.d-png/config.toml)）。実際のチームでは `acme` に Git の取得元（`git+https://github.com/acme/drawio-libraries.git`）を書く。この例では、同じ構成のディレクトリ [examples/acme-drawio-libraries/](examples/acme-drawio-libraries/) を `file:` で指している。
 
 ```toml
-# drawio-png-cli の設定（spec.md 2.4）
+# d-png-cli の設定（spec.md 2.4）
 
 [scopes]
 # 実際のチームでは "git+https://github.com/acme/drawio-libraries.git" のような Git の取得元を書く。
@@ -717,9 +717,9 @@ acme = "file:../acme-drawio-libraries"
 "@acme/brand" = "^1.0.0"
 ```
 
-`library install` は取得元の `@acme/brand/versions.json` から範囲 `^1.0.0` に合う最新の版を選び、完全性と書式を確かめてから `.drawio-png/libraries/@acme/brand.xml` に置き、版を `lock.json` に記録する。
+`library install` は取得元の `@acme/brand/versions.json` から範囲 `^1.0.0` に合う最新の版を選び、完全性と書式を確かめてから `.d-png/libraries/@acme/brand.xml` に置き、版を `lock.json` に記録する。
 
-**CLI が書くロックファイル**（[examples/project/.drawio-png/lock.json](examples/project/.drawio-png/lock.json)）
+**CLI が書くロックファイル**（[examples/project/.d-png/lock.json](examples/project/.d-png/lock.json)）
 
 ```json
 {
@@ -745,7 +745,7 @@ acme = "file:../acme-drawio-libraries"
 clone した他の開発者や CI は、コミットされた `config.toml`・`lock.json` から同じ版を復元する。
 
 ```sh
-drawio-png-cli library install --frozen   # lock.json と違う版を選ばない。合わなければ LOCK_OUTDATED
+d-png-cli library install --frozen   # lock.json と違う版を選ばない。合わなければ LOCK_OUTDATED
 ```
 
 エージェントの XML では、スコープ付きの参照もプロジェクト専用のものと同じように書く（[D](#6-d-data-エントリーの-pngjpegsvg-を追加する) の `image=lib:@acme/brand/logo`）。版は XML に書かず、`lock.json` で決まる。
@@ -758,30 +758,30 @@ drawio-png-cli library install --frozen   # lock.json と違う版を選ばな�
 {
   "hediet.vscode-drawio.customLibraries": [
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Components",
-      "file": "${workspaceFolder}/.drawio-png/libraries/components.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/components.xml"
     },
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Shapes",
-      "file": "${workspaceFolder}/.drawio-png/libraries/shapes.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/shapes.xml"
     },
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Simple Icons",
-      "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/simple-icons.xml"
     },
     {
-      "entryId": "drawio-png-cli @acme",
+      "entryId": "d-png-cli @acme",
       "libName": "ACME Brand",
-      "file": "${workspaceFolder}/.drawio-png/libraries/@acme/brand.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/@acme/brand.xml"
     }
   ]
 }
 ```
 
-拡張はライブラリ欄で `entryId` ごとに見出しを作るため、プロジェクト専用のライブラリは「drawio-png-cli」、取り込んだライブラリは「drawio-png-cli @acme」の見出しに並ぶ（[vscode.md 4 章](vscode.md#4-拡張の設定を作る)）。
+拡張はライブラリ欄で `entryId` ごとに見出しを作るため、プロジェクト専用のライブラリは「d-png-cli」、取り込んだライブラリは「d-png-cli @acme」の見出しに並ぶ（[vscode.md 4 章](vscode.md#4-拡張の設定を作る)）。
 
 **比較:** 配布された CDATA 形式のライブラリは、draw.io では読めても VS Code 拡張 1.9.0 では読めない（拡張と同じパーサーで確認。[vscode.md](vscode.md#3-ライブラリファイルの書式の制約)）。CLI がない場合は、JSON を CDATA から出し、XML の特殊文字を JSON 側のエスケープに書き換え、エントリーの ID を決めて管理し、設定のパスを書く必要がある。共有ライブラリは、社内のリポジトリから必要な版のファイルを各プロジェクトに複製し、どの版を使っているかを自分で記録することになる。CLI では `library add`・`library install`・`library vscode --write` がこれを行い、`library install --frozen` と `library sync --check` で崩れを検出できる。
 
@@ -793,7 +793,7 @@ drawio-png-cli library install --frozen   # lock.json と違う版を選ばな�
 
 ```sh
 cd ~/src/acme-drawio-libraries
-drawio-png-cli library pack ../assets/Logo.svg --name @acme/brand --title "ACME Brand" --version 1.0.0 --to .
+d-png-cli library pack ../assets/Logo.svg --name @acme/brand --title "ACME Brand" --version 1.0.0 --to .
 git add @acme/brand && git commit -m "@acme/brand 1.0.0" && git push
 ```
 
@@ -829,13 +829,13 @@ packed @acme/brand@1.0.0 (1 entry) -> ./@acme/brand/1.0.0.xml
 
 ```sh
 # 取得元のリポジトリで
-drawio-png-cli library pack ./brand.xml --name @acme/brand --version 1.1.0 --to .
+d-png-cli library pack ./brand.xml --name @acme/brand --version 1.1.0 --to .
 git add @acme/brand && git commit -m "@acme/brand 1.1.0" && git push
 
 # 各プロジェクトで
-drawio-png-cli library update @acme/brand --dry-run   # 変化を確かめる
-drawio-png-cli library update @acme/brand
-git add .drawio-png/lock.json
+d-png-cli library update @acme/brand --dry-run   # 変化を確かめる
+d-png-cli library update @acme/brand
+git add .d-png/lock.json
 ```
 
 `library update` の出力例:
@@ -857,13 +857,13 @@ updated @acme/brand 1.0.0 -> 1.1.0 (range ^1.0.0)
 各ケースで XML を渡した後、次を確認する。
 
 ```sh
-drawio-png-cli write diagram.xml -o diagram.drawio.png --json   # 展開された ID を確認
-drawio-png-cli validate diagram.drawio.png                        # 保存された図面の検査
+d-png-cli write diagram.xml -o diagram.drawio.png --json   # 展開された ID を確認
+d-png-cli validate diagram.drawio.png                        # 保存された図面の検査
 ```
 
 - `write` の終了コードが `0` で、`expanded` の ID が意図どおりである。
 - PNG を画像として開き、図形・アイコンの種類、欠け・変形、ラベルの重なり、線の接続と矢印を確認する。2 ページ目以降を変えた場合は `--page N` で別の PNG に描いて確認する（保存先とは別のファイルにする）。
-- 保存された XML を確認する場合は `drawio-png-cli expand diagram.drawio.png` を使う。参照は残っておらず、普通の draw.io XML である。
+- 保存された XML を確認する場合は `d-png-cli expand diagram.drawio.png` を使う。参照は残っておらず、普通の draw.io XML である。
 - 依頼者には、出力ファイル、追加・変更した内容、確認したページと見た目の確認結果を伝える。検索や XML の作成だけでは完了としない。
 
 `--metadata-only` は画像と XML が一致しないため、見た目まで完成させる作業には使わない。

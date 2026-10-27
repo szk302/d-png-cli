@@ -26,7 +26,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let mut file = tempfile::Builder::new()
-        .prefix(".drawio-png-cli-")
+        .prefix(".d-png-cli-")
         .suffix(".tmp")
         .tempfile_in(parent)
         .with_context(|| format!("cannot stage output in {}", parent.display()))?;

@@ -1,7 +1,7 @@
 //! Expanding `libref` placeholders and `image=lib:` values (spec 4.3, 4.4).
 mod support;
 
-use drawio_png_cli::{
+use d_png_cli::{
     app::{diagram, libraries::Libraries},
     domain::{
         diagnostic::{Code, Diagnostics},
@@ -119,7 +119,7 @@ fn a_set_gets_numbered_ids_with_parents_and_edges_remapped() {
     .unwrap();
     // Top-level cells first: the group, the object and the edge.
     match &expanded.expanded[0].result {
-        drawio_png_cli::domain::expand::Expanded::Cells(ids) => {
+        d_png_cli::domain::expand::Expanded::Cells(ids) => {
             assert_eq!(ids, &["grp-1", "grp-3", "grp-4", "grp-2"])
         }
         other => panic!("{other:?}"),

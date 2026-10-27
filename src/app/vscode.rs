@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// The default first part of the `entryId`s this command writes.
-pub const ENTRY_ID: &str = "drawio-png-cli";
+pub const ENTRY_ID: &str = "d-png-cli";
 
 /// One item of `customLibraries`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,9 +91,9 @@ mod tests {
     #[test]
     fn entry_ids_of_this_command_are_recognized() {
         let ids = EntryIds::new(None).unwrap();
-        assert!(ids.manages("drawio-png-cli"));
-        assert!(ids.manages("drawio-png-cli @acme"));
-        assert!(!ids.manages("drawio-png-cli-old"));
+        assert!(ids.manages("d-png-cli"));
+        assert!(ids.manages("d-png-cli @acme"));
+        assert!(!ids.manages("d-png-cli-old"));
         assert!(!ids.manages("my icons"));
         assert!(EntryIds::new(Some("@x")).is_err());
         assert!(EntryIds::new(Some(" ")).is_err());

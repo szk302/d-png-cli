@@ -1,7 +1,7 @@
 //! Library commands (spec 9.7-9.10) over a project area.
 mod support;
 
-use drawio_png_cli::domain::{
+use d_png_cli::domain::{
     diagram, library, preview,
     reference::{LibraryName, Ref},
 };
@@ -17,7 +17,7 @@ fn project() -> tempfile::TempDir {
     let dir = tempdir().unwrap();
     cli().arg("init").arg(dir.path()).assert().success();
     fs::write(
-        dir.path().join(".drawio-png/libraries/icons.xml"),
+        dir.path().join(".d-png/libraries/icons.xml"),
         library_file(serde_json::json!([
             {"xml": compress(ICON), "w": 144, "h": 72, "title": "Icon A"},
             {"xml": CARD, "w": 100, "h": 40, "title": "Card"},
@@ -29,8 +29,8 @@ fn project() -> tempfile::TempDir {
     )
     .unwrap();
     // Not library files: other extensions and invalid names.
-    fs::write(dir.path().join(".drawio-png/libraries/notes.txt"), "x").unwrap();
-    fs::write(dir.path().join(".drawio-png/libraries/Bad Name.xml"), "x").unwrap();
+    fs::write(dir.path().join(".d-png/libraries/notes.txt"), "x").unwrap();
+    fs::write(dir.path().join(".d-png/libraries/Bad Name.xml"), "x").unwrap();
     dir
 }
 
@@ -43,7 +43,7 @@ fn init_creates_the_project_area_once() {
     let dir = tempdir().unwrap();
     let out = stdout(cli().arg("init").arg(dir.path()));
     assert!(out.starts_with("created "), "{out}");
-    let area = dir.path().join(".drawio-png");
+    let area = dir.path().join(".d-png");
     assert!(area.join("libraries").is_dir());
     assert!(area.join("config.toml").is_file());
     assert_eq!(
@@ -68,7 +68,7 @@ fn list_shows_the_project_libraries() {
         serde_json::from_str(&run(dir.path(), &["library", "list", "--json"])).unwrap();
     assert_eq!(json[0]["name"], "icons");
     assert_eq!(json[0]["origin"], "project");
-    assert_eq!(json[0]["file"], ".drawio-png/libraries/icons.xml");
+    assert_eq!(json[0]["file"], ".d-png/libraries/icons.xml");
     assert_eq!(run(dir.path(), &["library", "list", "--scope", "acme"]), "");
     // A subdirectory finds the project above it; --project names it.
     let sub = dir.path().join("docs/deep");
@@ -89,7 +89,7 @@ fn list_shows_the_project_libraries() {
     let missing = stderr(
         cli()
             .current_dir(elsewhere.path())
-            .env("DRAWIO_PNG_PROJECT", elsewhere.path())
+            .env("D_PNG_PROJECT", elsewhere.path())
             .args(["library", "list"]),
         1,
     );
@@ -107,7 +107,7 @@ fn search_prints_references_without_content() {
     assert!(!all.contains("data:"));
     // Exact matches first, then prefixes, then the rest; every word must match.
     fs::write(
-        dir.path().join(".drawio-png/libraries/more.xml"),
+        dir.path().join(".d-png/libraries/more.xml"),
         library_file(serde_json::json!([
             {"xml": CARD, "w": 100, "h": 40, "title": "Scorecard"},
             {"xml": CARD, "w": 100, "h": 40, "title": "Cards"},
@@ -233,7 +233,7 @@ fn diagrams_use_project_libraries() {
             .write_stdin(xml),
         1,
     );
-    assert!(error.contains("no project (.drawio-png/) here"), "{error}");
+    assert!(error.contains("no project (.d-png/) here"), "{error}");
 }
 
 /// Fails when an entry of a preview overlaps a label or another entry.
@@ -442,7 +442,7 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
         .map(|i| serde_json::json!({"xml": CARD, "w": 100, "h": 40, "title": format!("Card {i}")}))
         .collect();
     fs::write(
-        directory.path().join(".drawio-png/libraries/many.xml"),
+        directory.path().join(".d-png/libraries/many.xml"),
         library_file(serde_json::Value::Array(many)),
     )
     .unwrap();
@@ -466,18 +466,17 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
 }
 
 #[test]
-#[ignore = "requires Chromium and draw.io 26.0.2 web assets; set DRAWIO_PNG_TEST_CHROME_PATH and DRAWIO_PNG_TEST_DRAWIO_WEB_PATH"]
+#[ignore = "requires Chromium and draw.io 26.0.2 web assets; set D_PNG_TEST_CHROME_PATH and D_PNG_TEST_DRAWIO_WEB_PATH"]
 fn preview_and_write_render_stencil_shapes_with_web_assets() {
-    let chrome =
-        std::env::var_os("DRAWIO_PNG_TEST_CHROME_PATH").expect("set DRAWIO_PNG_TEST_CHROME_PATH");
-    let web = std::env::var_os("DRAWIO_PNG_TEST_DRAWIO_WEB_PATH")
-        .expect("set DRAWIO_PNG_TEST_DRAWIO_WEB_PATH");
+    let chrome = std::env::var_os("D_PNG_TEST_CHROME_PATH").expect("set D_PNG_TEST_CHROME_PATH");
+    let web =
+        std::env::var_os("D_PNG_TEST_DRAWIO_WEB_PATH").expect("set D_PNG_TEST_DRAWIO_WEB_PATH");
     // A library of draw.io shapes that need the web assets' stencils.
     let directory = tempdir().unwrap();
     cli().arg("init").arg(directory.path()).assert().success();
     let database = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="" style="shape=mxgraph.flowchart.database;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry width="60" height="60" as="geometry"/></mxCell></root></mxGraphModel>"#;
     fs::write(
-        directory.path().join(".drawio-png/libraries/flowchart.xml"),
+        directory.path().join(".d-png/libraries/flowchart.xml"),
         library_file(serde_json::json!([
             {"xml": compress(database), "w": 60, "h": 60, "title": "Database"},
         ])),
@@ -487,12 +486,12 @@ fn preview_and_write_render_stencil_shapes_with_web_assets() {
         let mut command = cli();
         command
             .current_dir(directory.path())
-            .env("DRAWIO_PNG_CHROME_PATH", &chrome)
+            .env("D_PNG_CHROME_PATH", &chrome)
             .env(
-                "DRAWIO_PNG_CHROME_ARGS",
-                std::env::var("DRAWIO_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
+                "D_PNG_CHROME_ARGS",
+                std::env::var("D_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
             )
-            .env("DRAWIO_PNG_DRAWIO_WEB_PATH", &web)
+            .env("D_PNG_DRAWIO_WEB_PATH", &web)
             .args(args)
             .arg("-o")
             .arg(output);
@@ -507,7 +506,7 @@ fn preview_and_write_render_stencil_shapes_with_web_assets() {
         &directory.path().join("preview.png"),
         None,
     );
-    assert!(preview.starts_with(drawio_png_cli::domain::drawio_png::SIGNATURE));
+    assert!(preview.starts_with(d_png_cli::domain::drawio_png::SIGNATURE));
     // A stencil shape written by reference, on the second page.
     let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" libref="flowchart/database"/></root></mxGraphModel></diagram></mxfile>"#;
     let png = render(
@@ -515,8 +514,8 @@ fn preview_and_write_render_stencil_shapes_with_web_assets() {
         &directory.path().join("database.png"),
         Some(two),
     );
-    let (width, height) = drawio_png_cli::domain::drawio_png::dimensions(&png).unwrap();
+    let (width, height) = d_png_cli::domain::drawio_png::dimensions(&png).unwrap();
     assert_eq!((width, height), (61, 61));
-    let xml = drawio_png_cli::domain::drawio_png::extract(&png).unwrap();
+    let xml = d_png_cli::domain::drawio_png::extract(&png).unwrap();
     assert!(xml.contains("shape=mxgraph.flowchart.database") && !xml.contains("libref"));
 }

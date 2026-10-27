@@ -34,7 +34,7 @@ async function drawioPngRender(xml, bundled, mode, preload, pageIndex) {
     if (!model) throw Error('Expected an uncompressed mxGraphModel on page ' + (pageIndex + 1));
     if (bundled && (model.getAttribute('math') === '1' ||
         model.querySelector('[layout]') || model.hasAttribute('layout'))) {
-        throw Error('Math and automatic layout require local draw.io assets (DRAWIO_PNG_DRAWIO_WEB_PATH)');
+        throw Error('Math and automatic layout require local draw.io assets (D_PNG_DRAWIO_WEB_PATH)');
     }
     const original = mxCellRenderer.prototype.createShape;
     // shape=stencil(...) embeds the stencil itself, so it is never a registry key.
@@ -83,14 +83,14 @@ async function drawioPngRender(xml, bundled, mode, preload, pageIndex) {
         if (node.nodeName === 'include-shape') {
             const name = node.getAttribute('name');
             if (!mxStencilRegistry.getStencil(name)) {
-                throw Error('Unsupported shape: ' + name + ' (include-shape); provide assets with DRAWIO_PNG_DRAWIO_WEB_PATH');
+                throw Error('Unsupported shape: ' + name + ' (include-shape); provide assets with D_PNG_DRAWIO_WEB_PATH');
             }
         }
         return drawNode.apply(this, arguments);
     };
     // draw.io 26.0.2's own sidebar writes these cell shape names, which no draw.io
     // version registers; upstream's createShape draws them as the default
-    // rectangle, so drawio-png-cli does too. Only that lookup is exempt: an icon lookup
+    // rectangle, so d-png-cli does too. Only that lookup is exempt: an icon lookup
     // (resIcon, grIcon) with the same name draws nothing upstream and still fails.
     const sidebarFallbacks = new Set([
         'rect',
@@ -106,13 +106,13 @@ async function drawioPngRender(xml, bundled, mode, preload, pageIndex) {
     let cellFallback = null;
     // Shapes such as mxgraph.aws4.resourceIcon look up their icon (resIcon, grIcon)
     // while painting and silently omit it when it is missing. Record every named
-    // lookup that finds neither a stencil nor a shape class; drawio-png-cli fails on these.
+    // lookup that finds neither a stencil nor a shape class; d-png-cli fails on these.
     const getStencil = mxStencilRegistry.getStencil;
     mxStencilRegistry.getStencil = function(name) {
         const stencil = getStencil.apply(this, arguments);
         if (stencil == null && typeof name === 'string' && name.trim() !== '' &&
             !mxCellRenderer.defaultShapes[name] && name !== cellFallback) {
-            window.drawioPngErrors.push('Unsupported shape: ' + name + '; provide assets with DRAWIO_PNG_DRAWIO_WEB_PATH');
+            window.drawioPngErrors.push('Unsupported shape: ' + name + '; provide assets with D_PNG_DRAWIO_WEB_PATH');
         }
         return stencil;
     };
@@ -133,7 +133,7 @@ async function drawioPngRender(xml, bundled, mode, preload, pageIndex) {
         // a shape class rather than a stencil, so check the registry again after it.
         if (name && !mxCellRenderer.defaultShapes[name] && !mxStencilRegistry.getStencil(name) &&
             !mxCellRenderer.defaultShapes[name]) {
-            throw Error('Unsupported shape: ' + name + '; provide assets with DRAWIO_PNG_DRAWIO_WEB_PATH');
+            throw Error('Unsupported shape: ' + name + '; provide assets with D_PNG_DRAWIO_WEB_PATH');
         }
         return original.apply(this, arguments);
     };

@@ -362,7 +362,7 @@ mod tests {
         CustomLibrary {
             entry_id: entry_id.into(),
             lib_name: name.into(),
-            file: format!("${{workspaceFolder}}/.drawio-png/libraries/{name}.xml"),
+            file: format!("${{workspaceFolder}}/.d-png/libraries/{name}.xml"),
         }
     }
 
@@ -372,10 +372,10 @@ mod tests {
 
     #[test]
     fn a_new_file_gets_the_setting() {
-        let out = update("", &ids(), &[library("drawio-png-cli", "icons")]).unwrap();
+        let out = update("", &ids(), &[library("d-png-cli", "icons")]).unwrap();
         assert_eq!(
             out,
-            "{\n  \"hediet.vscode-drawio.customLibraries\": [\n    {\n      \"entryId\": \"drawio-png-cli\",\n      \"libName\": \"icons\",\n      \"file\": \"${workspaceFolder}/.drawio-png/libraries/icons.xml\"\n    }\n  ]\n}\n"
+            "{\n  \"hediet.vscode-drawio.customLibraries\": [\n    {\n      \"entryId\": \"d-png-cli\",\n      \"libName\": \"icons\",\n      \"file\": \"${workspaceFolder}/.d-png/libraries/icons.xml\"\n    }\n  ]\n}\n"
         );
     }
 
@@ -386,13 +386,13 @@ mod tests {
     "editor.tabSize": 4, /* keep */
     "hediet.vscode-drawio.customLibraries": [
         { "entryId": "mine", "libName": "Mine", "file": "/x.xml" }, // my own
-        { "entryId": "drawio-png-cli", "libName": "old", "file": "old.xml" },
-        { "entryId": "drawio-png-cli @acme", "libName": "gone", "file": "gone.xml" },
+        { "entryId": "d-png-cli", "libName": "old", "file": "old.xml" },
+        { "entryId": "d-png-cli @acme", "libName": "gone", "file": "gone.xml" },
     ],
     "files.eol": "\n",
 }
 "#;
-        let out = update(text, &ids(), &[library("drawio-png-cli", "new")]).unwrap();
+        let out = update(text, &ids(), &[library("d-png-cli", "new")]).unwrap();
         assert!(
             out.starts_with("{\n    // Editor settings\n    \"editor.tabSize\": 4, /* keep */\n"),
             "{out}"
@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(value[KEY].as_array().unwrap().len(), 2);
         // Writing again changes nothing.
         assert_eq!(
-            update(&out, &ids(), &[library("drawio-png-cli", "new")]).unwrap(),
+            update(&out, &ids(), &[library("d-png-cli", "new")]).unwrap(),
             out
         );
     }
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn the_setting_is_added_to_existing_settings() {
         for text in ["{\"a\": 1}", "{\n  \"a\": 1,\n}\n", "{}"] {
-            let out = update(text, &ids(), &[library("drawio-png-cli", "icons")]).unwrap();
+            let out = update(text, &ids(), &[library("d-png-cli", "icons")]).unwrap();
             let value = plain(&out).unwrap();
             assert_eq!(value[KEY][0]["libName"], "icons", "{text}");
             if text != "{}" {

@@ -185,7 +185,7 @@ pub fn install(stores: &Stores<'_>, request: &InstallRequest) -> Result<Vec<Chan
         if !problems.is_empty() {
             problems.push(Diagnostic::new(
                 Code::LockOutdated,
-                "run `drawio-png-cli library install` and commit lock.json",
+                "run `d-png-cli library install` and commit lock.json",
             ));
             return Err(problems);
         }
@@ -658,7 +658,7 @@ pub fn verify(stores: &Stores<'_>) -> Result<(), Diagnostics> {
     let lock = stores.lock.load()?;
     let present = stores.installed.installed()?;
     let mut problems = Diagnostics::default();
-    let install = "run `drawio-png-cli library install`";
+    let install = "run `d-png-cli library install`";
     for name in settings.dependencies.keys() {
         if !lock.libraries.contains_key(name) {
             problems.push(Diagnostic::new(

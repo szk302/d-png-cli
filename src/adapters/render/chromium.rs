@@ -22,7 +22,7 @@ use std::{
 use tungstenite::{Message, WebSocket, protocol::WebSocketConfig};
 
 pub fn discover() -> Result<PathBuf> {
-    for key in ["DRAWIO_PNG_CHROME_PATH", "CHROME_PATH"] {
+    for key in ["D_PNG_CHROME_PATH", "CHROME_PATH"] {
         if let Some(path) = env::var_os(key) {
             let path = PathBuf::from(path);
             ensure!(
@@ -61,7 +61,7 @@ pub fn discover() -> Result<PathBuf> {
     paths
         .into_iter()
         .find(|p| executable(p))
-        .context("Chromium/Chrome not found; set DRAWIO_PNG_CHROME_PATH or use --metadata-only")
+        .context("Chromium/Chrome not found; set D_PNG_CHROME_PATH or use --metadata-only")
 }
 
 /// Standard install locations, with every Chrome candidate before any Chromium.
@@ -142,21 +142,21 @@ fn host_resolver_rules(allow_network: bool) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     } else {
-        // IP literals also match MAP *, so keep loopback for drawio-png-cli's own origins.
+        // IP literals also match MAP *, so keep loopback for d-png-cli's own origins.
         "MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1".into()
     };
     format!("--host-resolver-rules={rules}")
 }
 
 fn extra_args() -> Result<Vec<String>> {
-    let Some(value) = env::var_os("DRAWIO_PNG_CHROME_ARGS") else {
+    let Some(value) = env::var_os("D_PNG_CHROME_ARGS") else {
         return Ok(Vec::new());
     };
     let value = value
         .to_str()
-        .context("DRAWIO_PNG_CHROME_ARGS must be valid Unicode")?;
-    let args = shell_words::split(value)
-        .context("invalid DRAWIO_PNG_CHROME_ARGS: check quotes and escapes")?;
+        .context("D_PNG_CHROME_ARGS must be valid Unicode")?;
+    let args =
+        shell_words::split(value).context("invalid D_PNG_CHROME_ARGS: check quotes and escapes")?;
     for arg in &args {
         // These options bypass process ownership, the local transport or network policy.
         let key = arg.split('=').next().unwrap_or(arg);
@@ -180,7 +180,7 @@ fn extra_args() -> Result<Vec<String>> {
                         | "--host-resolver-rules"
                         | "--no-startup-window"
                 ),
-            "unsupported DRAWIO_PNG_CHROME_ARGS option: {arg}; drawio-png-cli manages the profile, transport and network policy"
+            "unsupported D_PNG_CHROME_ARGS option: {arg}; d-png-cli manages the profile, transport and network policy"
         );
     }
     Ok(args)
@@ -224,7 +224,7 @@ pub fn render_page(
         page,
         TIMEOUT,
         &args,
-        env::var_os("DRAWIO_PNG_DRAWIO_WEB_PATH").map(PathBuf::from),
+        env::var_os("D_PNG_DRAWIO_WEB_PATH").map(PathBuf::from),
         allow_network,
         mode,
     )
@@ -288,7 +288,7 @@ pub fn render_with_page(
     ensure!(xml.len() <= MAX_BYTES, "XML exceeds 64 MiB limit");
     let deadline = Instant::now() + timeout;
     let profile = tempfile::Builder::new()
-        .prefix("drawio-png-cli-chromium-")
+        .prefix("d-png-cli-chromium-")
         .tempdir()?;
     let server = AssetServer::start(web_root, allow_network, mode == ChromiumMode::Vscode)?;
     let mut log = tempfile::tempfile()?;
@@ -640,7 +640,7 @@ impl Cdp {
                 ensure!(
                     response["status"].as_f64().unwrap_or(200.0) < 400.0
                         || url.ends_with("/favicon.ico"),
-                    "draw.io resource failed ({}): {}; check DRAWIO_PNG_DRAWIO_WEB_PATH or --allow-network",
+                    "draw.io resource failed ({}): {}; check D_PNG_DRAWIO_WEB_PATH or --allow-network",
                     response["status"],
                     short(url)
                 );

@@ -76,7 +76,7 @@ adapters ──▶ app ──▶ domain
 | --- | --- |
 | `cli` | `clap` の定義、ユースケースの呼び出し、テキスト・JSON の出力、診断の表示、終了コード |
 | `fs` | 上限付きの読み込み、アトミックな書き込み |
-| `project` | プロジェクト領域（`.drawio-png/`）の探索と `init`、`ProjectLibraries`（`libraries/<名前>.xml`）、`InstalledLibraries`（`libraries/@<スコープ>/<名前>.xml`）、`ProjectLock`（`lock.json`） |
+| `project` | プロジェクト領域（`.d-png/`）の探索と `init`、`ProjectLibraries`（`libraries/<名前>.xml`）、`InstalledLibraries`（`libraries/@<スコープ>/<名前>.xml`）、`ProjectLock`（`lock.json`） |
 | `config` | `config.toml`（プロジェクト・ユーザー）の読み込みと、コメントを保った `[dependencies]` の書き換え |
 | `sources` | 取得元（`file:`・`git` コマンド・`curl` コマンド）、取得したファイルのキャッシュ、`library pack` の書き込み先 |
 | `vscode` | `.vscode/settings.json`（コメント・末尾のカンマを含む JSON）の `customLibraries` の書き換え |

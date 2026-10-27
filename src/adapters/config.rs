@@ -22,10 +22,10 @@ use crate::{
 
 pub const FILE: &str = "config.toml";
 
-/// The user area (spec 2.2): `DRAWIO_PNG_HOME`, or the OS's configuration
+/// The user area (spec 2.2): `D_PNG_HOME`, or the OS's configuration
 /// directory.
 pub fn user_area() -> Option<PathBuf> {
-    if let Some(home) = env::var_os("DRAWIO_PNG_HOME").filter(|v| !v.is_empty()) {
+    if let Some(home) = env::var_os("D_PNG_HOME").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(home));
     }
     let var = |key: &str| {
@@ -38,7 +38,7 @@ pub fn user_area() -> Option<PathBuf> {
         "macos" => var("HOME")?.join("Library/Application Support"),
         _ => var("XDG_CONFIG_HOME").or_else(|| Some(var("HOME")?.join(".config")))?,
     };
-    Some(base.join("drawio-png-cli"))
+    Some(base.join("d-png-cli"))
 }
 
 /// One `config.toml`; a missing file reads as empty.
@@ -114,7 +114,7 @@ impl ConfigFile {
                 "dependencies" => {
                     if self.layer == Layer::User {
                         return Err(self.invalid(
-                            "[dependencies] belongs in the project's .drawio-png/config.toml",
+                            "[dependencies] belongs in the project's .d-png/config.toml",
                         ));
                     }
                     for (name, value) in table.iter() {
@@ -268,7 +268,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    /// The files of a project area (`.drawio-png/`) and the user area.
+    /// The files of a project area (`.d-png/`) and the user area.
     pub fn new(area: Option<&Path>) -> Self {
         Self {
             project: area.map(|a| a.join(FILE)),
@@ -295,7 +295,7 @@ impl DependencyStore for Configuration {
         let path = self.project.as_ref().ok_or_else(|| {
             Diagnostic::new(
                 Code::ProjectNotFound,
-                "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+                "no project (.d-png/) here or above; run `d-png-cli init`",
             )
         })?;
         let mut file = ConfigFile::load(path, Layer::Project)?;

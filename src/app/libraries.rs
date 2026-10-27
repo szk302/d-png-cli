@@ -214,11 +214,11 @@ impl<'a> Libraries<'a> {
     /// REF_NOT_FOUND with close references that exist.
     fn not_found(&self, reference: &Ref, text: &str) -> Diagnostic {
         let message = match reference.library.origin() {
-            origin if self.repository(origin).is_none() => format!(
-                "{reference} is not found: no project (.drawio-png/) here; run `drawio-png-cli init`"
-            ),
+            origin if self.repository(origin).is_none() => {
+                format!("{reference} is not found: no project (.d-png/) here; run `d-png-cli init`")
+            }
             Origin::Installed if matches!(self.load(&reference.library), Ok(None)) => format!(
-                "{reference} is not found: {} is not installed; add it with `drawio-png-cli library install {}`",
+                "{reference} is not found: {} is not installed; add it with `d-png-cli library install {}`",
                 reference.library, reference.library
             ),
             _ => format!("{reference} is not found"),

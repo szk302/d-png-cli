@@ -111,15 +111,12 @@ impl AssetStore {
         origin: String,
     ) -> Result<Self> {
         let root = root
-            .map(|p| {
-                p.canonicalize()
-                    .context("invalid DRAWIO_PNG_DRAWIO_WEB_PATH")
-            })
+            .map(|p| p.canonicalize().context("invalid D_PNG_DRAWIO_WEB_PATH"))
             .transpose()?;
         if let Some(root) = &root {
             ensure!(
                 root.is_dir() && root.join("export3.html").is_file(),
-                "DRAWIO_PNG_DRAWIO_WEB_PATH must contain export3.html"
+                "D_PNG_DRAWIO_WEB_PATH must contain export3.html"
             );
         }
         let bundled = root.is_none();

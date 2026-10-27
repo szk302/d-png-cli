@@ -53,9 +53,9 @@ impl RendererKind {
         })
     }
 
-    /// `DRAWIO_PNG_RENDERER`, if set.
+    /// `D_PNG_RENDERER`, if set.
     pub fn from_env() -> Result<Option<Self>, Diagnostic> {
-        let Some(value) = env::var_os("DRAWIO_PNG_RENDERER") else {
+        let Some(value) = env::var_os("D_PNG_RENDERER") else {
             return Ok(None);
         };
         let text = value.to_str().unwrap_or("");
@@ -63,7 +63,7 @@ impl RendererKind {
             Diagnostic::new(
                 Code::Usage,
                 format!(
-                    "invalid DRAWIO_PNG_RENDERER {text:?}: expected {}",
+                    "invalid D_PNG_RENDERER {text:?}: expected {}",
                     Self::NAMES.join(", ")
                 ),
             )
@@ -111,7 +111,7 @@ fn coded(error: &anyhow::Error) -> Diagnostic {
     let message = format!("{error:#}");
     let has = |text: &str| message.contains(text);
     let code = if has("not found; install")
-        || has("not found; set DRAWIO_PNG_CHROME_PATH")
+        || has("not found; set D_PNG_CHROME_PATH")
         || has("is not an executable file")
         || has("cannot start Chromium")
         || has("cannot start draw.io Desktop")
@@ -125,7 +125,7 @@ fn coded(error: &anyhow::Error) -> Diagnostic {
         || has("require local draw.io assets")
         || has("draw.io resource failed")
         || has("cannot load draw.io assets")
-        || has("DRAWIO_PNG_DRAWIO_WEB_PATH")
+        || has("D_PNG_DRAWIO_WEB_PATH")
     {
         Code::AssetMissing
     } else if has("exceeds 64 MiB") {

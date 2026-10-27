@@ -1,4 +1,4 @@
-# drawio-png-cli の設定（spec.md 2.4）
+# d-png-cli の設定（spec.md 2.4）
 
 [scopes]
 # 実際のチームでは "git+https://github.com/acme/drawio-libraries.git" のような Git の取得元を書く。

@@ -69,14 +69,14 @@ jobs:
         id: package
         shell: bash
         run: |
-          binary="target/${{ matrix.target }}/release/drawio-png-cli"
+          binary="target/${{ matrix.target }}/release/d-png-cli"
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           if [ "${{ matrix.cross }}" != true ]; then
             "$binary" --version
             "$binary" validate tests/fixtures/text.drawio.png
           fi
           mkdir -p dist
-          archive="dist/drawio-png-cli-${GITHUB_REF_NAME#v}-${{ matrix.target }}.${{ matrix.archive }}"
+          archive="dist/d-png-cli-${GITHUB_REF_NAME#v}-${{ matrix.target }}.${{ matrix.archive }}"
           python scripts/package_binary.py "$binary" "$archive"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
       - name: Attest build provenance
@@ -102,7 +102,7 @@ jobs:
           merge-multiple: true
       - name: Write checksums
         working-directory: dist
-        run: sha256sum drawio-png-cli-* > SHA256SUMS && cat SHA256SUMS
+        run: sha256sum d-png-cli-* > SHA256SUMS && cat SHA256SUMS
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

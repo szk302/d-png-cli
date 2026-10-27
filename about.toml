@@ -15,7 +15,7 @@ ignore-dev-dependencies = false
 
 # Limit the root package to explicit license sources. Crawling it would also
 # discover vendored notices and the generated inventory itself.
-[drawio-png-cli.clarify]
+[d-png-cli.clarify]
 license = "MIT AND Apache-2.0 AND Zlib AND BSD-3-Clause"
 files = [
     { path = "LICENSE", license = "MIT", checksum = "8b2f2ae4a714df373191c9a9ba12361315039460b876ecb28130f60897fd278a" },

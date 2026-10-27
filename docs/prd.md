@@ -1,12 +1,12 @@
-# プロダクト要件定義書 (PRD): `drawio-png-cli` v0.2.0
+# プロダクト要件定義書 (PRD): `d-png-cli` v0.2.0
 
 この文書は v0.2.0 の要件をまとめる。コマンド・XML・ライブラリの詳細な仕様は [v0.2.0 の仕様](spec.md)、VS Code 拡張との連携は [vscode.md](vscode.md)、作業例は [ユースケース](usecase.md) を正とする。v0.1.0 との互換性は持たない（変更点は [仕様の 12 章](spec.md#12-v010-からの変更)）。
 
 ## 1. 概要 (Overview)
 
-`drawio-png-cli` は、VS Code の draw.io 拡張機能などで扱われる `.drawio.png` 形式のファイルを、AI エージェントと人間が相互に編集できるようにするための軽量かつ高速な CLI ツールである。
+`d-png-cli` は、VS Code の draw.io 拡張機能などで扱われる `.drawio.png` 形式のファイルを、AI エージェントと人間が相互に編集できるようにするための軽量かつ高速な CLI ツールである。
 
-AI エージェントは図面全体を draw.io の XML で書き、標準入力で `drawio-png-cli write` に渡すと、検証・描画済みで XML を埋め込んだ `.drawio.png` が得られる。図形・アイコンは登録したライブラリの参照文字列で指定でき、長い style や Base64 の画像を書き写す必要がない。既存の `.drawio.png` からは編集用の XML を取り出し、編集後に書き戻せる。
+AI エージェントは図面全体を draw.io の XML で書き、標準入力で `d-png-cli write` に渡すと、検証・描画済みで XML を埋め込んだ `.drawio.png` が得られる。図形・アイコンは登録したライブラリの参照文字列で指定でき、長い style や Base64 の画像を書き写す必要がない。既存の `.drawio.png` からは編集用の XML を取り出し、編集後に書き戻せる。
 
 ---
 
@@ -38,7 +38,7 @@ AI エージェントは図面全体を draw.io の XML で書き、標準入力
         └──(GUIで微調整)──────────────────────┴── write（展開・検証・描画・埋め込み） ◀┘
 ```
 
-1. **AI による新規図面の生成**: エージェントが部品を `library search` で探し、参照文字列を含む XML を書いて `drawio-png-cli write` に標準入力で渡す。1 回の呼び出しで、VS Code で人が微調整できる `.drawio.png` ができる。
+1. **AI による新規図面の生成**: エージェントが部品を `library search` で探し、参照文字列を含む XML を書いて `d-png-cli write` に標準入力で渡す。1 回の呼び出しで、VS Code で人が微調整できる `.drawio.png` ができる。
 2. **AI による既存図面の更新**: 人が VS Code で作成・保存した `.drawio.png` を `read` で取り出す。登録済みの画像は指紋付きの参照に縮まるため、Base64 をコンテキストに入れずに編集でき、`write` で書き戻す。
 3. **ライブラリの共有**: プロジェクト専用のライブラリを `library add` で登録し、社内で共有するライブラリをスコープ付き（`@acme/brand`）で `library install` する。`library vscode --write` で VS Code 拡張にも同じライブラリを設定する。
 4. **共有ライブラリの配布と更新**: ライブラリを配布する側が `library pack` で取得元に版を作り、利用する各プロジェクトが `library update` で取り込む。
@@ -50,8 +50,8 @@ AI エージェントは図面全体を draw.io の XML で書き、標準入力
 
 ## 4. CLI インターフェース仕様 (CLI Specification)
 
-* **コマンド名**: `drawio-png-cli`
-* **リポジトリ名**: `drawio-png-cli`
+* **コマンド名**: `d-png-cli`
+* **リポジトリ名**: `d-png-cli`
 
 ### 4.1. サブコマンド一覧
 
@@ -155,16 +155,16 @@ AI エージェントは図面全体を draw.io の XML で書き、標準入力
 | `raw` | Chromium。DPR 1 の取得結果を画素加工せず使う |
 | `desktop-app` | draw.io Desktop 27.0.2 以降のアプリ |
 
-* 優先順位は、CLI 指定 → `DRAWIO_PNG_RENDERER` → プロジェクトの `config.toml` → ユーザーの `config.toml` → `vscode`。指定したレンダラーが見つからない場合や描画に失敗した場合はエラーにし、既存出力を維持する。
+* 優先順位は、CLI 指定 → `D_PNG_RENDERER` → プロジェクトの `config.toml` → ユーザーの `config.toml` → `vscode`。指定したレンダラーが見つからない場合や描画に失敗した場合はエラーにし、既存出力を維持する。
 * 指定ページ（既定は先頭）を描画し、全ページの XML を埋め込む。
-* Chromium の検索順は `DRAWIO_PNG_CHROME_PATH` → `CHROME_PATH` → PATH → OS標準パス。PATH・OS標準パスでは Chrome を Chromium より優先する。`DRAWIO_PNG_CHROME_ARGS` は POSIX 形式で分割し、シェルを起動しない。
-* Chromium は基本描画資材をバイナリに同梱し、`DRAWIO_PNG_DRAWIO_WEB_PATH` で `export3.html` を含むローカル Web 資材を指定できる。不正指定ではエラーとし、資材の自動取得はしない。同梱対象は基本図形・接続線・日本語・HTMLラベル・埋め込み画像。必要資材が欠ける図面や未知の図形ではエラーにする。
+* Chromium の検索順は `D_PNG_CHROME_PATH` → `CHROME_PATH` → PATH → OS標準パス。PATH・OS標準パスでは Chrome を Chromium より優先する。`D_PNG_CHROME_ARGS` は POSIX 形式で分割し、シェルを起動しない。
+* Chromium は基本描画資材をバイナリに同梱し、`D_PNG_DRAWIO_WEB_PATH` で `export3.html` を含むローカル Web 資材を指定できる。不正指定ではエラーとし、資材の自動取得はしない。同梱対象は基本図形・接続線・日本語・HTMLラベル・埋め込み画像。必要資材が欠ける図面や未知の図形ではエラーにする。
 * 外部HTTP(S)画像・フォント等の取得は既定で禁止し、`--allow-network`（`desktop-app` 以外）で許可できる。
 * Rust から CDP で専用プロファイルの Chromium を制御し、ループバックの資材サーバーを使用する。起動から PNG 取得まで60秒。タイムアウト・失敗時もブラウザーとサーバーを片付け、既存出力を維持する。取得画像・中間SVG／Canvas は RGBA で 64 MiB 以下に制限する。詳細は [描画互換性](rendering.md) に記載する。
-* Desktop の検索順は `DRAWIO_PNG_DRAWIO_PATH` → PATH の `drawio` / `draw.io` → OS 標準インストール先。明示指定が不正な場合はエラーとし、別の候補には切り替えない。`DRAWIO_PNG_DRAWIO_ARGS` は全 OS 共通の POSIX シェル形式で分割し、シェル実行・展開は行わない。追加引数は `drawio-png-cli` が生成する描画引数の前に渡す。Linux のディスプレイがない環境では利用者が Xvfb 等を用意する。`drawio-png-cli` は sandbox を自動無効化しない。
+* Desktop の検索順は `D_PNG_DRAWIO_PATH` → PATH の `drawio` / `draw.io` → OS 標準インストール先。明示指定が不正な場合はエラーとし、別の候補には切り替えない。`D_PNG_DRAWIO_ARGS` は全 OS 共通の POSIX シェル形式で分割し、シェル実行・展開は行わない。追加引数は `d-png-cli` が生成する描画引数の前に渡す。Linux のディスプレイがない環境では利用者が Xvfb 等を用意する。`d-png-cli` は sandbox を自動無効化しない。
 * `write --metadata-only` はレンダラーを検索・起動せず、ベース画像または新規透明 PNG に XML を保存する。画像と XML が同期されない旨を警告する。
 * `write --default-font FAMILY` と繰り返し指定可能な `--fallback-font FAMILY`（または `config.toml` の `[render]`）により、レンダラーへ渡すセルのフォント候補を統一できる。既存の明示指定を優先し、設定を全ページの埋め込み XML にも保存する。適用範囲と互換性は [フォント指定の仕様](fonts.md) に従う。
-* 資材のライセンス・出典・ハッシュを記録する。`drawio-png-cli licenses` で同梱資材の表示・全文を取得可能とする。
+* 資材のライセンス・出典・ハッシュを記録する。`d-png-cli licenses` で同梱資材の表示・全文を取得可能とする。
 
 ---
 
@@ -187,7 +187,7 @@ AI エージェントは図面全体を draw.io の XML で書き、標準入力
 * `base64`, `urlencoding`: メタデータのエンコード・デコード処理
 * `roxmltree`: XML の検証とソース範囲に基づくページ展開。全体の再シリアライズを避け、未知要素や属性を保持する
 * `tempfile`: 同一ディレクトリでのアトミック保存と描画用一時ファイル
-* `shell-words`: `DRAWIO_PNG_DRAWIO_ARGS` の引用符・エスケープを含む引数分割
+* `shell-words`: `D_PNG_DRAWIO_ARGS` の引用符・エスケープを含む引数分割
 * v0.2.0 で追加する設定ファイル（TOML）・ハッシュ・HTTPS 取得などのクレートは、実装時に選定する。
 
 ### 8.3. 入出力の制約
@@ -201,7 +201,7 @@ AI エージェントは図面全体を draw.io の XML で書き、標準入力
 ## 9. 将来の拡張性 (Future Scope)
 
 * **GitHub Actions 対応**: リポジトリ内の `.drawio.png` が常に正しい状態であることを自動チェックする CI アクションの提供。
-* **Diff サブコマンド (`drawio-png-cli diff`)**: 2つの `.drawio.png` の XML 構造差分（追加・削除された図形やテキスト）をテキストベースで出力する機能。
+* **Diff サブコマンド (`d-png-cli diff`)**: 2つの `.drawio.png` の XML 構造差分（追加・削除された図形やテキスト）をテキストベースで出力する機能。
 * **既存図面のセルの登録**: 図面のセルをライブラリのエントリーとして登録する機能（`library add diagram.drawio --cell ID`）。
 * **レジストリーサーバー**: 公開・認証・版の取り下げを CLI で扱う配布の仕組み。
 

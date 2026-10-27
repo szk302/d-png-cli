@@ -1,7 +1,7 @@
 //! Helpers shared by the integration tests.
 #![allow(dead_code)]
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{
+use d_png_cli::{
     app::ports::{LibraryInfo, LibraryRepository},
     domain::{
         diagnostic::Diagnostic,
@@ -13,27 +13,27 @@ use std::{collections::BTreeMap, io::Write};
 
 /// The command with no renderer, project or library settings from the environment.
 pub fn cli() -> Command {
-    let mut command = cargo_bin_cmd!("drawio-png-cli");
+    let mut command = cargo_bin_cmd!("d-png-cli");
     for name in [
-        "DRAWIO_PNG_DRAWIO_PATH",
-        "DRAWIO_PNG_DRAWIO_ARGS",
-        "DRAWIO_PNG_CHROME_PATH",
+        "D_PNG_DRAWIO_PATH",
+        "D_PNG_DRAWIO_ARGS",
+        "D_PNG_CHROME_PATH",
         "CHROME_PATH",
-        "DRAWIO_PNG_CHROME_ARGS",
-        "DRAWIO_PNG_RENDERER",
-        "DRAWIO_PNG_DRAWIO_WEB_PATH",
-        "DRAWIO_PNG_PROJECT",
+        "D_PNG_CHROME_ARGS",
+        "D_PNG_RENDERER",
+        "D_PNG_DRAWIO_WEB_PATH",
+        "D_PNG_PROJECT",
     ] {
         command.env_remove(name);
     }
     // Neither the developer's settings nor their cache take part.
     command
         .env(
-            "DRAWIO_PNG_HOME",
+            "D_PNG_HOME",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
         )
         .env(
-            "DRAWIO_PNG_CACHE",
+            "D_PNG_CACHE",
             std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
         );
     command

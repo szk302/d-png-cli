@@ -1,39 +1,39 @@
-# drawio-png: drawio-png-cli で .drawio.png を作る・直す
+# d-png: d-png-cli で .drawio.png を作る・直す
 
 `.drawio.png` は、見た目の PNG 画像と、編集用の draw.io XML（PNG のテキストチャンク内）を 1 ファイルに持つ。
-`drawio-png-cli` は、**draw.io の XML を標準入力で受け取って `.drawio.png` を書く**（write）CLI。
+`d-png-cli` は、**draw.io の XML を標準入力で受け取って `.drawio.png` を書く**（write）CLI。
 既存の `.drawio.png` からは編集用の XML を取り出せる（read）。
-PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず drawio-png-cli を経由する。
+PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず d-png-cli を経由する。
 
 描画は既定で **VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる（`vscode` レンダラー。Chrome / Chromium を使う）。
 ユーザーが求めない限り `--renderer` は変えない。
 
 ## 準備
 
-描画には Chrome（無ければ Chromium）が必要。見つからない場合は、導入または `DRAWIO_PNG_CHROME_PATH` の設定をユーザーに案内する。
-この手順は `drawio-png-cli --version` の drawio-png-cli に対応している。
+描画には Chrome（無ければ Chromium）が必要。見つからない場合は、導入または `D_PNG_CHROME_PATH` の設定をユーザーに案内する。
+この手順は `d-png-cli --version` の d-png-cli に対応している。
 
 ## 基本の流れ
 
 ```sh
 # 新しい図面: XML を書いて標準入力で渡す
-drawio-png-cli write -o diagram.drawio.png <<'EOF'
+d-png-cli write -o diagram.drawio.png <<'EOF'
 <mxfile>…</mxfile>
 EOF
 
 # 既存の図面: 読む → 編集 → 書く（一時ファイルはリポジトリの外に置く）
-drawio-png-cli read diagram.drawio.png -o "$tmp/diagram.xml"
+d-png-cli read diagram.drawio.png -o "$tmp/diagram.xml"
 # … XML を編集 …
-drawio-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
+d-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
 ```
 
 - **write は保存前に参照の展開と検証を行う。** 問題があれば何も書き換えず、すべての問題をコード付きで報告する。
   直してから再実行する。入力と同じパスへ書いてよい（一時ファイルから置き換える）。
-- **確認だけなら validate。** `drawio-png-cli validate diagram.xml` は write の描画前までを行い、何も書かない。
+- **確認だけなら validate。** `d-png-cli validate diagram.xml` は write の描画前までを行い、何も書かない。
 - **read は登録済みのアイコン画像を `image=lib:<参照>@<指紋>` に縮める。** Base64 を読まずに編集でき、write で元の画像に戻る。
   その値は書き換えない。ライブラリにない画像はそのまま残るので、行単位の `grep` で Base64 を読み込まないよう、
   必要な属性だけを取り出す: `grep -oE ' (id|value|label|source|target|parent|vertex|edge|libref)="[^"]*"' "$tmp/diagram.xml"`
-- **画像を含む単体の XML が必要なら expand。** `drawio-png-cli expand diagram.drawio.png` は参照を展開した、draw.io でそのまま開ける XML を出す。
+- **画像を含む単体の XML が必要なら expand。** `d-png-cli expand diagram.drawio.png` は参照を展開した、draw.io でそのまま開ける XML を出す。
 - 終了コード: `0` 成功、`1` 入力・参照・描画・保存のエラー、`2` 引数のエラー。`--json` を付けると結果を JSON で受け取れる。
 
 ## XML を書くときの注意
@@ -71,10 +71,10 @@ draw.io の図形（AWS など）、ロゴやアイコンは、style や Base64 
 CLI はライブラリを同梱していない。必要な図形が見つからなければ、ユーザーに登録（`library add`）を依頼する。
 
 ```sh
-drawio-png-cli library search cylinder             # 参照・種類・サイズ・タイトル。先頭の列が参照文字列
+d-png-cli library search cylinder             # 参照・種類・サイズ・タイトル。先頭の列が参照文字列
 #   shapes/cylinder	shape	60x80	Cylinder
-drawio-png-cli library show shapes/cylinder        # style、展開後のセルと ID、配置例
-drawio-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べた画像（目で選ぶとき）
+d-png-cli library show shapes/cylinder        # style、展開後のセルと ID、配置例
+d-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べた画像（目で選ぶとき）
 ```
 
 参照文字列は `<ライブラリ>/<エントリー>`（プロジェクトのライブラリ）か `@<スコープ>/<ライブラリ>/<エントリー>`
@@ -97,9 +97,9 @@ drawio-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を�
   最上位が複数（`set`）なら全セルが `<ID>-1`… になり、`<ID>` 自体は残らない。中のセルへ接続するときは
   `library show <参照>` の `cells` で ID を確かめる。
 - 保存される XML には参照は残らず、普通の draw.io XML になる。
-- AWS などの `mxgraph.*` の図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要。
+- AWS などの `mxgraph.*` の図形の描画には、draw.io 26.0.2 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要。
   `ASSET_MISSING` になったらユーザーに用意を依頼する。
-- 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する（ライブラリのファイルや画像を渡されたら `drawio-png-cli library add <ファイル>` で登録できる）。勝手に別の部品で代用しない。
+- 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する（ライブラリのファイルや画像を渡されたら `d-png-cli library add <ファイル>` で登録できる）。勝手に別の部品で代用しない。
 
 ## エラーへの対処
 
@@ -111,7 +111,7 @@ drawio-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を�
 | `REF_ID_CONFLICT` | プレースホルダーの ID を変える。`set` の ID を参照していれば `<ID>-n` に直す |
 | `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す（全件まとめて報告される） |
 | `IMAGE_CHANGED` | read の後でライブラリの画像が変わった。元の画像が必要ならユーザーに相談する |
-| `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 名前空間付きのライブラリが取り込まれていない・変わっている（clone 直後に多い）。`drawio-png-cli library install` を実行する |
+| `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 名前空間付きのライブラリが取り込まれていない・変わっている（clone 直後に多い）。`d-png-cli library install` を実行する |
 | `RENDERER_NOT_FOUND`・`ASSET_MISSING` | Chrome や描画資材の用意をユーザーに依頼する。別の部品に置き換えない |
 
 ## 完了の確認

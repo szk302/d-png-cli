@@ -1,4 +1,4 @@
-//! The project area (spec 2.2): the nearest `.drawio-png/` above the current
+//! The project area (spec 2.2): the nearest `.d-png/` above the current
 //! directory, its unscoped libraries in `libraries/<name>.xml`, the installed
 //! ones in `libraries/@<scope>/<name>.xml`, and `lock.json`.
 use anyhow::{Context, Result};
@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// The directory name of the project area.
-pub const AREA: &str = ".drawio-png";
+pub const AREA: &str = ".d-png";
 
 /// A directory holding a project area.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub struct Project {
 }
 
 impl Project {
-    /// The project of `explicit` (`--project` or `DRAWIO_PNG_PROJECT`), which
+    /// The project of `explicit` (`--project` or `D_PNG_PROJECT`), which
     /// must hold a project area, or the nearest one above `start`.
     pub fn discover(explicit: Option<&Path>, start: &Path) -> Result<Option<Self>, Diagnostic> {
         if let Some(root) = explicit {
@@ -44,7 +44,7 @@ impl Project {
                 Err(Diagnostic::new(
                     Code::ProjectNotFound,
                     format!(
-                        "{} has no {AREA}/; run `drawio-png-cli init {}`",
+                        "{} has no {AREA}/; run `d-png-cli init {}`",
                         root.display(),
                         root.display()
                     ),
@@ -63,7 +63,7 @@ impl Project {
         &self.root
     }
 
-    /// The project area, `.drawio-png/`.
+    /// The project area, `.d-png/`.
     pub fn area(&self) -> PathBuf {
         self.root.join(AREA)
     }
@@ -97,7 +97,7 @@ pub struct Initialized {
     pub created: bool,
 }
 
-const CONFIG: &str = "# drawio-png-cli project settings (docs/spec.md 2.4)\n\
+const CONFIG: &str = "# d-png-cli project settings (docs/spec.md 2.4)\n\
 #\n\
 # [render]\n\
 # renderer = \"vscode\"\n\
@@ -259,7 +259,7 @@ impl LibraryStore for ProjectLibraries {
     }
 }
 
-/// `.drawio-png/lock.json`.
+/// `.d-png/lock.json`.
 pub struct ProjectLock {
     path: PathBuf,
 }
@@ -275,7 +275,7 @@ impl LockStore for ProjectLock {
             Diagnostic::new(
                 Code::LockOutdated,
                 format!(
-                    "{}: {e:#}; run `drawio-png-cli library install`",
+                    "{}: {e:#}; run `d-png-cli library install`",
                     self.path.display()
                 ),
             )
@@ -324,7 +324,7 @@ impl InstalledLibraries {
     fn checked(&self, name: &LibraryName) -> Result<Option<(Library, Vec<u8>)>, Diagnostic> {
         let path = self.path(name);
         let locked = self.lock()?.libraries.get(name);
-        let install = "; run `drawio-png-cli library install`";
+        let install = "; run `d-png-cli library install`";
         let bytes = match (path.is_file(), locked) {
             (false, None) => return Ok(None),
             (false, Some(locked)) => {

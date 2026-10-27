@@ -182,7 +182,7 @@ pub fn preview(
     if chosen.is_empty() {
         return Err(Diagnostic::new(
             Code::RefNotFound,
-            "no entries match; see `drawio-png-cli library search`",
+            "no entries match; see `d-png-cli library search`",
         )
         .into());
     }

@@ -1,24 +1,24 @@
 {
   "hediet.vscode-drawio.customLibraries": [
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Components",
-      "file": "${workspaceFolder}/.drawio-png/libraries/components.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/components.xml"
     },
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Shapes",
-      "file": "${workspaceFolder}/.drawio-png/libraries/shapes.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/shapes.xml"
     },
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Simple Icons",
-      "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/simple-icons.xml"
     },
     {
-      "entryId": "drawio-png-cli @acme",
+      "entryId": "d-png-cli @acme",
       "libName": "ACME Brand",
-      "file": "${workspaceFolder}/.drawio-png/libraries/@acme/brand.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/@acme/brand.xml"
     }
   ]
 }

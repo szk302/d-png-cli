@@ -1,10 +1,10 @@
-# drawio-png-cli v0.2.0 仕様
+# d-png-cli v0.2.0 仕様
 
 この文書は v0.2.0 の CLI 仕様である。v0.1.0 との互換性は考慮しない。要件は [prd.md](prd.md)、設計判断の理由は [1.1](#11-主な設計判断)、VS Code 拡張との連携は [vscode.md](vscode.md)、作業例と XML の比較は [usecase.md](usecase.md) を参照。
 
 ## 1. 設計方針
 
-1. **XML を標準入力で渡すと PNG ができる。** エージェントは図面全体の draw.io XML を書き、`drawio-png-cli write -o out.drawio.png` に渡す。1 図形ずつ挿入する `insert` は廃止する。
+1. **XML を標準入力で渡すと PNG ができる。** エージェントは図面全体の draw.io XML を書き、`d-png-cli write -o out.drawio.png` に渡す。1 図形ずつ挿入する `insert` は廃止する。
 2. **ライブラリは登録し、参照文字列で使う。** 図形・アイコンは `<ライブラリ>/<エントリー ID>` で指定し、長い style や Base64 を書き写さない。参照できるのは登録・取り込み済みのライブラリだけとする。draw.io のサイドバーの図形も同梱せず、使う図形は利用者がライブラリにして登録する。
 3. **ライブラリ名に名前空間を持たせる。** npm のスコープと同じく、共有するライブラリは `@acme/brand` のようにスコープを付け、スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定して `library install` で取り込む。版はロックファイルで固定する。スコープのない名前はそのプロジェクト専用のライブラリとする。
 4. **登録したライブラリは VS Code 拡張でもそのまま使える。** 登録先は、VS Code 拡張と draw.io の両方が読めるライブラリファイルとし、拡張の設定も CLI が生成する。
@@ -21,7 +21,7 @@
 6. **保存する XML には参照を残さない。** PNG の中は普通の draw.io XML なので、VS Code・draw.io で開くのに CLI もライブラリも要らない。
 7. **`read` と `expand` を逆向きの対にする。** `read` は登録済みの画像を指紋付きの `image=lib:` に縮めてエージェントのコンテキストを節約し、`expand` は参照を展開した単体の XML を出す。v0.1.0 の `--keep-images` のようなオプションは要らない。
 8. **既定のレンダラーを VS Code 互換にする。** `--renderer` と `--chromium-mode` を 1 つにまとめ、既定を `vscode` にした。draw.io Desktop が入っているかどうかで結果が変わらない。
-9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** ツール名と合わせて「drawio-png を読む・書く」と読め、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
+9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** ツール名と合わせて「d-png を読む・書く」と読め、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
 10. **入出力・出力形式・エラーを全コマンドで揃える。** 入力は位置引数か標準入力、出力は `-o`、機械向けは `--json`、エラーはコード付きで全件をまとめて報告する（[2 章](#2-共通の規約)）。
 
 ## 2. 共通の規約
@@ -29,8 +29,8 @@
 ### 2.1 コマンドの形と入出力
 
 ```
-drawio-png-cli <コマンド> [INPUT] [オプション]
-drawio-png-cli library <操作> [引数] [オプション]
+d-png-cli <コマンド> [INPUT] [オプション]
+d-png-cli library <操作> [引数] [オプション]
 ```
 
 | 規約 | 内容 |
@@ -52,11 +52,11 @@ drawio-png-cli library <操作> [引数] [オプション]
 
 | 領域 | 場所 | 置くもの |
 | --- | --- | --- |
-| プロジェクト | カレントディレクトリから親へ向かって最初に見つかる `.drawio-png/`。`--project DIR` または `DRAWIO_PNG_PROJECT` で指定できる | ライブラリ、依存関係、ロックファイル、描画の設定。Git で共有する。VS Code では `${workspaceFolder}` から参照する |
-| ユーザー | `DRAWIO_PNG_HOME`。未設定なら Linux は `$XDG_CONFIG_HOME/drawio-png-cli`（未設定なら `~/.config/drawio-png-cli`）、macOS は `~/Library/Application Support/drawio-png-cli`、Windows は `%APPDATA%\drawio-png-cli` | `config.toml` だけ（描画の既定値、個人・社内のスコープの取得元） |
+| プロジェクト | カレントディレクトリから親へ向かって最初に見つかる `.d-png/`。`--project DIR` または `D_PNG_PROJECT` で指定できる | ライブラリ、依存関係、ロックファイル、描画の設定。Git で共有する。VS Code では `${workspaceFolder}` から参照する |
+| ユーザー | `D_PNG_HOME`。未設定なら Linux は `$XDG_CONFIG_HOME/d-png-cli`（未設定なら `~/.config/d-png-cli`）、macOS は `~/Library/Application Support/d-png-cli`、Windows は `%APPDATA%\d-png-cli` | `config.toml` だけ（描画の既定値、個人・社内のスコープの取得元） |
 
 ```
-.drawio-png/
+.d-png/
   config.toml                # 描画の既定値・スコープの取得元・依存ライブラリ（2.4）
   lock.json                  # 取り込んだライブラリの版と完全性（9.6）
   .gitignore                 # 取り込んだライブラリ（libraries/@*/）を Git から除外する
@@ -99,7 +99,7 @@ error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
 | `REF_ID_CONFLICT` | 展開で作る ID が既存の ID と重なる、消える ID を参照している |
 | `IMAGE_CHANGED` | 指紋付きの画像参照に一致する画像が登録ライブラリにない |
 | `LIBRARY_EXISTS`・`LIBRARY_INVALID` | 同名のライブラリがある、ライブラリ・エントリーを解析できない |
-| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（登録・取り込み・取り込んだライブラリの参照）で、`.drawio-png/` が見つからない |
+| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（登録・取り込み・取り込んだライブラリの参照）で、`.d-png/` が見つからない |
 | `SCOPE_UNKNOWN`・`SOURCE_FETCH` | スコープに取得元が設定されていない、取得元から取得できない |
 | `VERSION_NOT_FOUND`・`VERSION_EXISTS` | 範囲に合う版がない、`library pack` で同じ版が既にある |
 | `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 依存にあるライブラリが取り込まれていない、取り込んだファイルがロックファイルの完全性と合わない |
@@ -142,16 +142,16 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
 
 | 環境変数 | 内容 |
 | --- | --- |
-| `DRAWIO_PNG_PROJECT` | プロジェクト領域を含むディレクトリ |
-| `DRAWIO_PNG_HOME` | ユーザー領域（個人の `config.toml` を置くディレクトリ） |
+| `D_PNG_PROJECT` | プロジェクト領域を含むディレクトリ |
+| `D_PNG_HOME` | ユーザー領域（個人の `config.toml` を置くディレクトリ） |
 | `[scopes]` の `token-env` で指定した名前 | HTTPS の取得元に送るトークン（[9.5](#95-スコープと取得元)） |
-| `DRAWIO_PNG_CACHE` | 取得元から取得したファイルのキャッシュ。未設定なら OS のキャッシュディレクトリ（Linux は `$XDG_CACHE_HOME/drawio-png-cli`、macOS は `~/Library/Caches/drawio-png-cli`、Windows は `%LOCALAPPDATA%\drawio-png-cli`） |
-| `DRAWIO_PNG_RENDERER` | 既定のレンダラー（[5.2](#52-レンダラー)） |
-| `DRAWIO_PNG_CHROME_PATH`・`CHROME_PATH`・`DRAWIO_PNG_CHROME_ARGS` | Chrome / Chromium の実行ファイルと追加引数（v0.1.0 と同じ） |
-| `DRAWIO_PNG_DRAWIO_PATH`・`DRAWIO_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数（v0.1.0 と同じ） |
-| `DRAWIO_PNG_DRAWIO_WEB_PATH` | 追加の draw.io Web 資材（v0.1.0 と同じ） |
+| `D_PNG_CACHE` | 取得元から取得したファイルのキャッシュ。未設定なら OS のキャッシュディレクトリ（Linux は `$XDG_CACHE_HOME/d-png-cli`、macOS は `~/Library/Caches/d-png-cli`、Windows は `%LOCALAPPDATA%\d-png-cli`） |
+| `D_PNG_RENDERER` | 既定のレンダラー（[5.2](#52-レンダラー)） |
+| `D_PNG_CHROME_PATH`・`CHROME_PATH`・`D_PNG_CHROME_ARGS` | Chrome / Chromium の実行ファイルと追加引数 |
+| `D_PNG_DRAWIO_PATH`・`D_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数 |
+| `D_PNG_DRAWIO_WEB_PATH` | 追加の draw.io Web 資材 |
 
-`DRAWIO_PNG_LIBRARY_PATH`・`DRAWIO_PNG_CHROMIUM_MODE` は廃止する。
+v0.1.0 の環境変数は `DIP_` で始まる。描画の 5 つは接頭辞を変えて引き継ぐ（`DIP_CHROME_PATH` → `D_PNG_CHROME_PATH` など。`CHROME_PATH` はそのまま）。`DIP_LIBRARY_PATH`・`DIP_CHROMIUM_MODE` は廃止する。
 
 ## 3. コマンド一覧
 
@@ -187,7 +187,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
                 validate（write の描画前までを実行し、何も書かない）
 ```
 
-- `read`・`write` は、ツール名の対象である `.drawio.png`（drawio-png）を読む・書く動詞とした。`drawio-png-cli read` は PNG を読んで XML を標準出力へ、`drawio-png-cli write` は標準入力の XML から PNG を書く。
+- `read`・`write` は、ツール名の対象である `.drawio.png`（d-png）を読む・書く動詞とした。`d-png-cli read` は PNG を読んで XML を標準出力へ、`d-png-cli write` は標準入力の XML から PNG を書く。
 - `write` は名前に描画を含まないが、既定で XML を検証・描画してから書く。描画には Chrome / Chromium（`desktop-app` では draw.io Desktop）が必要で、数秒かかる。ヘルプと `skill` の手順書ではこの点を明記する。
 - `read` と `expand` は逆向きの処理で、どちらも XML と PNG の両方を受け付ける。
 
@@ -296,7 +296,7 @@ style の `image` の値に `lib:<参照>` を書くと、その値だけをエ�
 ## 5. `write`
 
 ```
-drawio-png-cli write [INPUT] -o OUTPUT [オプション]
+d-png-cli write [INPUT] -o OUTPUT [オプション]
 ```
 
 処理: 入力を読む（PNG なら埋め込まれた XML を取り出す）→ ページを展開 → 参照を展開 → 検証 → フォント指定を適用 → 指定ページを描画 → 全ページの XML を PNG に埋め込む → アトミックに保存。
@@ -349,7 +349,7 @@ v0.1.0 の `--renderer` と `--chromium-mode` を 1 つにまとめ、無効な�
 ## 6. `expand`
 
 ```
-drawio-png-cli expand [INPUT] [-o OUTPUT] [--default-font FAMILY] [--fallback-font FAMILY] [--json]
+d-png-cli expand [INPUT] [-o OUTPUT] [--default-font FAMILY] [--fallback-font FAMILY] [--json]
 ```
 
 参照を展開し、検証した XML を出力する。同じ入力・設定なら `write` が PNG に埋め込む XML と同じになる。
@@ -361,7 +361,7 @@ drawio-png-cli expand [INPUT] [-o OUTPUT] [--default-font FAMILY] [--fallback-fo
 ## 7. `read`
 
 ```
-drawio-png-cli read [INPUT] [-o OUTPUT] [--raw] [--json]
+d-png-cli read [INPUT] [-o OUTPUT] [--raw] [--json]
 ```
 
 エージェントが編集するための XML を出力する。
@@ -380,7 +380,7 @@ drawio-png-cli read [INPUT] [-o OUTPUT] [--raw] [--json]
 ## 8. `validate`
 
 ```
-drawio-png-cli validate [INPUT] [--json]
+d-png-cli validate [INPUT] [--json]
 ```
 
 `write` の描画前までの処理（PNG の検査、ページの展開、参照の展開、[4.5](#45-展開後の検証) の検証）を行い、ファイルを書かない。登録ライブラリを読むため、参照先の存在・種類・上書きの可否まで検査できる。CI では `validate` と `library sync --check` を使う。
@@ -399,8 +399,8 @@ drawio-png-cli validate [INPUT] [--json]
 
 | 種類（JSON の `origin`） | 名前 | 場所 | 追加の方法 |
 | --- | --- | --- | --- |
-| プロジェクト（`project`） | `<名前>` | `.drawio-png/libraries/<名前>.xml` | `library add`。ファイルを Git で共有する |
-| 取り込み（`installed`） | `@<スコープ>/<名前>` | `.drawio-png/libraries/@<スコープ>/<名前>.xml` | `library install`。取得元は `[scopes]`、版はロックファイルで決まる |
+| プロジェクト（`project`） | `<名前>` | `.d-png/libraries/<名前>.xml` | `library add`。ファイルを Git で共有する |
+| 取り込み（`installed`） | `@<スコープ>/<名前>` | `.d-png/libraries/@<スコープ>/<名前>.xml` | `library install`。取得元は `[scopes]`、版はロックファイルで決まる |
 
 - 名前空間が違えば別のライブラリである。`components` と `@acme/components` は共存でき、参照も別になる。
 - 参照はプロジェクト領域のライブラリだけを解決する。ユーザー領域・任意のパスのライブラリファイルを直接参照する手段は設けない（同じ XML がどこでも同じ部品になるようにし、ファイルを VS Code 拡張と共有するため）。
@@ -455,7 +455,7 @@ drawio-png-cli validate [INPUT] [--json]
 
 | 取得元 | 書き方の例 | 取得の方法 |
 | --- | --- | --- |
-| ディレクトリ | `"file:../drawio-libraries"`、`"file:~/drawio-libraries"` | ファイルを読む。相対パスはプロジェクトのルート（`.drawio-png/` の親。ユーザーの設定では `DRAWIO_PNG_HOME`）から |
+| ディレクトリ | `"file:../drawio-libraries"`、`"file:~/drawio-libraries"` | ファイルを読む。相対パスはプロジェクトのルート（`.d-png/` の親。ユーザーの設定では `D_PNG_HOME`）から |
 | Git | `"git+https://github.com/acme/drawio-libraries.git"`、`"git+ssh://git@github.com/acme/drawio-libraries.git#release"` | `git` コマンドで取得する。`#` の後はブランチまたはタグ（省略時は既定のブランチ）。認証は Git の設定（認証ヘルパー・SSH 鍵）に任せる |
 | HTTPS | `{ url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }` | `curl` コマンドで HTTPS から取得する。`token-env` があれば、その環境変数の値を `Authorization: Bearer` で送る（コマンドラインには出さない） |
 
@@ -507,7 +507,7 @@ drawio-png-cli validate [INPUT] [--json]
 | `~1.2.3` | `1.2.3` 以上 `1.3.0` 未満 |
 | `*` | すべての版 |
 
-`lock.json`（Git の取得元の場合。`file:` の取得元を使った例は [examples/project/.drawio-png/lock.json](examples/project/.drawio-png/lock.json)）:
+`lock.json`（Git の取得元の場合。`file:` の取得元を使った例は [examples/project/.d-png/lock.json](examples/project/.d-png/lock.json)）:
 
 ```json
 {
@@ -523,7 +523,7 @@ drawio-png-cli validate [INPUT] [--json]
 ```
 
 - `resolved` は取得元。Git では取得したコミットを `#` の後に書き、次回からはそのコミットから取得する。
-- `config.toml` と `lock.json` は Git にコミットする。取り込んだファイル（`.drawio-png/libraries/@*/`）は `init` が作る `.gitignore` で除外し、clone した後や CI では `library install` で復元する（npm の `node_modules` と同じ扱い）。
+- `config.toml` と `lock.json` は Git にコミットする。取り込んだファイル（`.d-png/libraries/@*/`）は `init` が作る `.gitignore` で除外し、clone した後や CI では `library install` で復元する（npm の `node_modules` と同じ扱い）。
 - 参照を解決するコマンド（`write`・`expand`・`validate`・`read`・`library search` など）は、使うライブラリのファイルを `lock.json` の完全性と照合する。合わなければ `LIBRARY_INTEGRITY`、ファイルがなければ `LIBRARY_NOT_INSTALLED` とし、どちらも `library install` を案内する。取得元には接続しない。
 - 保存済みの PNG は参照を含まないため、ライブラリの版を上げても既存の図面は変わらない。影響を受けるのは、これから `write` する XML の参照と、`read` が出した指紋付きの画像参照（画像が変わっていれば `IMAGE_CHANGED`）だけである。
 - 依存関係は 1 段だけで、ライブラリが別のライブラリに依存する仕組みはない。
@@ -531,14 +531,14 @@ drawio-png-cli validate [INPUT] [--json]
 ### 9.7 `library list`
 
 ```
-drawio-png-cli library list [--scope SCOPE] [--json]
+d-png-cli library list [--scope SCOPE] [--json]
 ```
 
 テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクト → 取り込みの順で、それぞれ名前順。`--scope acme` でそのスコープのライブラリだけを出す。
 
 ```json
-[{"name":"simple-icons","origin":"project","title":"Simple Icons","entries":3466,"file":".drawio-png/libraries/simple-icons.xml","normalized":true},
- {"name":"@acme/brand","origin":"installed","version":"1.0.0","range":"^1.0.0","title":"ACME Brand","entries":1,"file":".drawio-png/libraries/@acme/brand.xml","normalized":true}]
+[{"name":"simple-icons","origin":"project","title":"Simple Icons","entries":3466,"file":".d-png/libraries/simple-icons.xml","normalized":true},
+ {"name":"@acme/brand","origin":"installed","version":"1.0.0","range":"^1.0.0","title":"ACME Brand","entries":1,"file":".d-png/libraries/@acme/brand.xml","normalized":true}]
 ```
 
 `normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリは `"installed":false` を付けて出す。
@@ -546,7 +546,7 @@ drawio-png-cli library list [--scope SCOPE] [--json]
 ### 9.8 `library search`
 
 ```
-drawio-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIND] [--limit N] [--json]
+d-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIND] [--limit N] [--json]
 ```
 
 - 語を空白で区切り、すべての語がタイトルか ID に含まれる（大文字小文字を区別しない）エントリーを出す。語を省略すると全エントリー。
@@ -564,7 +564,7 @@ drawio-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kin
 ### 9.9 `library show`
 
 ```
-drawio-png-cli library show REF [--json]
+d-png-cli library show REF [--json]
 ```
 
 `REF` がライブラリ名ならライブラリの詳細（`library list` の 1 件分）、参照文字列ならエントリーの詳細を出す。
@@ -592,7 +592,7 @@ drawio-png-cli library show REF [--json]
 ### 9.10 `library preview`
 
 ```
-drawio-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scope SCOPE] [--kind KIND] [--allow-network]
+d-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scope SCOPE] [--kind KIND] [--allow-network]
 ```
 
 該当するエントリーを、参照文字列とタイトル付きで並べた PNG を `vscode` レンダラーで描く。`/` を含む引数と `@` で始まる引数は参照文字列（ライブラリ名ならその全エントリー）、それ以外は検索語として扱う。60 件を超える場合は絞り込みを求めるエラーにする。
@@ -600,7 +600,7 @@ drawio-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scop
 ### 9.11 `library add`
 
 ```
-drawio-png-cli library add SOURCE... [--name NAME] [--title TEXT]
+d-png-cli library add SOURCE... [--name NAME] [--title TEXT]
                                      [--replace | --merge] [--skip-invalid] [--json]
 ```
 
@@ -612,7 +612,7 @@ drawio-png-cli library add SOURCE... [--name NAME] [--title TEXT]
 | 画像ファイル（PNG・JPEG・GIF・SVG・WebP） | 1 ファイルを 1 つの `data` エントリー（`data:<type>;base64,…`、`aspect` は `fixed`）にする。タイトルはファイル名から拡張子を除いたもの。幅・高さは画像から読み、読めなければ `LIBRARY_INVALID` |
 | `-` | 標準入力の `<mxlibrary>` |
 
-- 登録先は `.drawio-png/libraries/<名前>.xml`。プロジェクト領域が見つからなければ `PROJECT_NOT_FOUND`（`init` を案内する）。
+- 登録先は `.d-png/libraries/<名前>.xml`。プロジェクト領域が見つからなければ `PROJECT_NOT_FOUND`（`init` を案内する）。
 - `--name` の既定は最初の SOURCE のファイル名（拡張子を除く）を 9.2 の規則で整えたもの。スコープ付きの名前（`@acme/brand`）は指定できない（`USAGE`。`library pack` と `library install` を案内する）。`--title` の既定はソースの `title` 属性、なければ名前。
 - 同名のライブラリがあれば `LIBRARY_EXISTS`。`--replace` で全体を置き換え、`--merge` で同じ ID のエントリーを置き換えて新しいエントリーを末尾に追加する。
 - エントリーを検査し、`xml` が `<mxGraphModel>` でない、`data` が画像の URI でないなど解析できないものがあれば `LIBRARY_INVALID` で何も書かない。`--skip-invalid` で除外して登録する。
@@ -622,7 +622,7 @@ drawio-png-cli library add SOURCE... [--name NAME] [--title TEXT]
 ### 9.12 `library install`
 
 ```
-drawio-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
+d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
 ```
 
 スコープ付きのライブラリを取得元から取り込む（npm の `npm install`）。
@@ -631,20 +631,20 @@ drawio-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json
 - 引数あり（例 `@acme/brand`、`@acme/brand@^1.2.0`）: `[dependencies]` に追加・更新して取り込む。範囲を省略すると、最新の版 `X.Y.Z` を取り込み `^X.Y.Z` と記録する。
 - `--frozen`: `config.toml`・`lock.json` を変えない。依存と `lock.json` が合わなければ `LOCK_OUTDATED` で何もしない（CI 用。npm の `npm ci`）。
 - `--offline`: 取得元に接続せず、キャッシュ（2.2）だけを使う。
-- 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.drawio-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
+- 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.d-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
 - 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）。
 - 出力: 追加・更新・削除したライブラリの名前・版・エントリー数。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
 
 ```
 installed @acme/brand@1.0.0 (1 entry) from file:../acme-drawio-libraries
   @acme/brand/logo	image	240x120	Logo
-hint: run `drawio-png-cli library vscode --write` to use it in VS Code
+hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 
 ### 9.13 `library update`
 
 ```
-drawio-png-cli library update [NAME...] [--latest] [--dry-run] [--json]
+d-png-cli library update [NAME...] [--latest] [--dry-run] [--json]
 ```
 
 - 取り込んだライブラリ（省略時はすべて）を、範囲内の最新の版にして `lock.json` を書き換える（npm の `npm update`）。
@@ -655,7 +655,7 @@ drawio-png-cli library update [NAME...] [--latest] [--dry-run] [--json]
 ### 9.14 `library pack`
 
 ```
-drawio-png-cli library pack SOURCE... --name @SCOPE/NAME --version X.Y.Z --to DIR [--title TEXT] [--skip-invalid] [--json]
+d-png-cli library pack SOURCE... --name @SCOPE/NAME --version X.Y.Z --to DIR [--title TEXT] [--skip-invalid] [--json]
 ```
 
 取得元に置くライブラリの版を作る。ライブラリを配布する側が使う。
@@ -670,7 +670,7 @@ drawio-png-cli library pack SOURCE... --name @SCOPE/NAME --version X.Y.Z --to DI
 ### 9.15 `library remove`
 
 ```
-drawio-png-cli library remove REF [--json]
+d-png-cli library remove REF [--json]
 ```
 
 | `REF` | 処理 |
@@ -685,7 +685,7 @@ drawio-png-cli library remove REF [--json]
 ### 9.16 `library sync`
 
 ```
-drawio-png-cli library sync [NAME...] [--check] [--json]
+d-png-cli library sync [NAME...] [--check] [--json]
 ```
 
 draw.io Desktop のライブラリ編集や手作業で変わったプロジェクト専用のライブラリを 9.3 の書式に戻し、`id` のないエントリーに ID を付ける。既存の `id` は変えない。取り込んだライブラリは書き換えない（`LIBRARY_MANAGED`）。
@@ -695,23 +695,23 @@ draw.io Desktop のライブラリ編集や手作業で変わったプロジェ�
 ### 9.17 `library vscode`
 
 ```
-drawio-png-cli library vscode [--entry-id TEXT] [--write] [--json]
+d-png-cli library vscode [--entry-id TEXT] [--write] [--json]
 ```
 
 VS Code 拡張の `hediet.vscode-drawio.customLibraries` の値を出力する。詳細は [vscode.md](vscode.md)。
 
 - プロジェクト専用のライブラリと取り込んだライブラリを出す。`file` は `${workspaceFolder}/<プロジェクトからの相対パス>`。ワークスペースのフォルダーはプロジェクト領域の親ディレクトリとみなす。
-- `entryId` は、プロジェクト専用のライブラリが `drawio-png-cli`、取り込んだライブラリが `drawio-png-cli @<スコープ>`。拡張はこの値を見出しにしてライブラリをまとめ、見出しごとに表示・非表示を切り替えられる。`--entry-id` で `drawio-png-cli` の部分を変えられる。
+- `entryId` は、プロジェクト専用のライブラリが `d-png-cli`、取り込んだライブラリが `d-png-cli @<スコープ>`。拡張はこの値を見出しにしてライブラリをまとめ、見出しごとに表示・非表示を切り替えられる。`--entry-id` で `d-png-cli` の部分を変えられる。
 - `libName` はライブラリの表示名。
-- `--write`: `<プロジェクト>/.vscode/settings.json` の `hediet.vscode-drawio.customLibraries` のうち、`entryId` が `drawio-png-cli` か `drawio-png-cli @` で始まる項目だけを置き換える。他の項目・設定・コメントは保持する。ファイルがなければ作る。JSONC として解析できなければ何も書かずにエラーにする。
+- `--write`: `<プロジェクト>/.vscode/settings.json` の `hediet.vscode-drawio.customLibraries` のうち、`entryId` が `d-png-cli` か `d-png-cli @` で始まる項目だけを置き換える。他の項目・設定・コメントは保持する。ファイルがなければ作る。JSONC として解析できなければ何も書かずにエラーにする。
 
 ## 10. `init`
 
 ```
-drawio-png-cli init [DIR] [--json]
+d-png-cli init [DIR] [--json]
 ```
 
-`DIR`（既定はカレントディレクトリ）に `.drawio-png/libraries/`、コメントだけの `config.toml`、取り込んだライブラリを除外する `.gitignore` を作る。既にあれば何も変えずに成功する。`lock.json` は最初の `library install` で作る。
+`DIR`（既定はカレントディレクトリ）に `.d-png/libraries/`、コメントだけの `config.toml`、取り込んだライブラリを除外する `.gitignore` を作る。既にあれば何も変えずに成功する。`lock.json` は最初の `library install` で作る。
 
 ## 11. `skill`・`licenses`
 
@@ -722,6 +722,7 @@ drawio-png-cli init [DIR] [--json]
 
 | v0.1.0 | v0.2.0 |
 | --- | --- |
+| 実行ファイル `dip`、環境変数 `DIP_*`、Release のアーカイブ `dip-<版>-<ターゲット>` | `d-png-cli`、`D_PNG_*`、`d-png-cli-<版>-<ターゲット>` |
 | `embed -i X -o Y` / 標準入力 | `write X -o Y` / `write -o Y` |
 | `embed --no-render [-b BASE]` | `write --metadata-only [--base-image BASE]` |
 | `embed --no-validate` | 廃止 |
@@ -731,9 +732,9 @@ drawio-png-cli init [DIR] [--json]
 | `insert` | 廃止。XML の `libref` で書く |
 | `library style LIB INDEX` | `library show REF` の `style` |
 | `library search` の番号 | 参照文字列 |
-| `DRAWIO_PNG_LIBRARY_PATH`・`--library-file`・`--no-builtin` | 廃止。プロジェクト専用は `library add`、共有するものはスコープを付けて `library install` で取り込む。検索は `--library`・`--scope` で絞る |
+| `DIP_LIBRARY_PATH`・`--library-file`・`--no-builtin` | 廃止。プロジェクト専用は `library add`、共有するものはスコープを付けて `library install` で取り込む。検索は `--library`・`--scope` で絞る |
 | 組み込みライブラリ（`drawio/aws4-compute` など） | 廃止。使う図形を draw.io でライブラリにして `library add` で登録する |
-| `DRAWIO_PNG_CHROMIUM_MODE` | `DRAWIO_PNG_RENDERER` |
+| `DIP_CHROMIUM_MODE` | `D_PNG_RENDERER` |
 | `skill --full` | `skill` |
 
 計画中だった PRD 4.2 の `drawioPng*` 属性・`image=drawio-png`・画像ハッシュによる参照は、`libref`・`image=lib:` に置き換える。登録により ID が安定するため、タイトル・番号・ハッシュを組み合わせた指定は不要になる。
@@ -755,5 +756,5 @@ drawio-png-cli init [DIR] [--json]
 - VS Code 拡張 1.9.0（タグ `v1.9.0`）のソースで、`customLibraries` の読み込み方法と `extensionKind` を確認した。拡張が使う `xml-parser-xo` 3.1.0 と同じ手順で、例のライブラリと実物の Simple Icons for draw.io 16.35.0 を読み、CDATA 形式が失敗し、CLI の書式が成功することを確かめた。実体参照を使った書式は、パーサーのソースから読めないと判断した（実行はしていない）。
 - draw.io 26.0.2 の `app.min.js` と 31.4.6 のソースで、`data` エントリーの画像の変換（`convertDataUri`）とライブラリの保存処理を確認した。
 - B〜E・G の「CLI がない場合の XML」は、0.1.0 系の CLI で `validate` を通し、Chrome の vscode モード（draw.io 26.0.2 の Web 資材）で描画した（`expected.drawio.png`）。利用者ライブラリの部品は 0.1.0 系の `insert` でも展開し、ID・位置・サイズ・画像の値が一致することを確かめた。A・F・H は v0.2.0 の CLI の `write`（vscode、同梱資材のみ）で描画した。全ケースの展開結果は `tests/acceptance.rs` で検査している。
-- 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.drawio-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
+- 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.d-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
 - テキストの出力例（`library search`・`add`・`install`・`pack`・`update`、エラー表示）は実行結果と照合した。`--json` の例（9.7〜9.9 など）は仕様から作ったもので、キーの順序・数値の書き方・一部の項目が実行結果と異なる。VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。

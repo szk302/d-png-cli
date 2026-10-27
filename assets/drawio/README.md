@@ -2,7 +2,7 @@
 
 Upstream: https://github.com/jgraph/drawio
 
-drawio-png-cli bundles two sets of the same four unmodified upstream files:
+d-png-cli bundles two sets of the same four unmodified upstream files:
 
 | Directory | Revision | draw.io | Used by |
 | --- | --- | --- | --- |
@@ -11,8 +11,8 @@ drawio-png-cli bundles two sets of the same four unmodified upstream files:
 
 Each directory's `manifest.json` identifies the assets and SHA-256
 hashes of their decompressed bytes. They are stored with deterministic gzip
-headers and embedded into `drawio-png-cli`. `chromium.html`, `chromium-init.js`, and
-`chromium-render.js` in the parent directory are original MIT-licensed drawio-png-cli
+headers and embedded into `d-png-cli`. `chromium.html`, `chromium-init.js`, and
+`chromium-render.js` in the parent directory are original MIT-licensed d-png-cli
 integration code; they configure local URLs, disable optional bundled math,
 check unsupported shapes, decode embedded `shape=stencil(...)` shapes with a
 size limit, and select `Editor.exportToCanvas()` for the `vscode`
@@ -47,7 +47,7 @@ It does not concatenate `shapes-14-6-5.min.js`. This package excludes `app.min.j
 libavoid. References to optional asset paths in the viewer are not bundled packs.
 The separately restricted icon/stencil packs are intentionally excluded; consult
 upstream's `shapes/LICENSE`, `stencils/LICENSE`, and `img/LICENSE` before obtaining
-those assets for use through `DRAWIO_PNG_DRAWIO_WEB_PATH`. The upstream README at
+those assets for use through `D_PNG_DRAWIO_WEB_PATH`. The upstream README at
 the 31.4.5 revision also restricts the use of draw.io's icon sets and stencil
 libraries in Atlassian products and the Atlassian marketplace; those packs are
 not part of this bundle.
@@ -67,7 +67,7 @@ Full license texts in `licenses/` come from:
   corresponding MIT copyright notices here; the minified viewer does not
   preserve the exact transitive dependency lockfile used by upstream.
 
-`drawio-png-cli licenses` prints these notices and full texts, so standalone binary users
+`d-png-cli licenses` prints these notices and full texts, so standalone binary users
 can read them. Source and binary archives must also retain `LICENSE`,
 `THIRD_PARTY_NOTICES.md`, this file, `licenses/`, and `../licenses/` (Chromium
 resampling and Cargo dependency licenses).
@@ -79,4 +79,4 @@ the pinned Git objects, then review the composition and licenses. To change
 versions, update the revision deliberately and repeat that review.
 Run `python3 scripts/vendor_drawio.py --check` to verify stored hashes without
 network access or an upstream checkout. Python is only used for maintenance
-and integrity checks, not building or running drawio-png-cli.
+and integrity checks, not building or running d-png-cli.

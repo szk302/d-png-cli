@@ -43,13 +43,13 @@ mod output;
 
 #[derive(Parser)]
 #[command(
-    name = "drawio-png-cli",
+    name = "d-png-cli",
     version,
     about = "Write draw.io diagrams, given as XML on standard input, into PNG images that VS Code's draw.io extension can edit",
-    after_help = "Environment:\n  DRAWIO_PNG_PROJECT          Directory holding the project area (.drawio-png/)\n  DRAWIO_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  DRAWIO_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  DRAWIO_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  DRAWIO_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  DRAWIO_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  DRAWIO_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
+    after_help = "Environment:\n  D_PNG_PROJECT          Directory holding the project area (.d-png/)\n  D_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  D_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  D_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  D_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  D_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  D_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
 )]
 struct Cli {
-    /// Directory holding the project area (.drawio-png/); default: the nearest above the current directory
+    /// Directory holding the project area (.d-png/); default: the nearest above the current directory
     #[arg(long, global = true, value_name = "DIR")]
     project: Option<PathBuf>,
     #[command(subcommand)]
@@ -129,7 +129,7 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Create the project area (.drawio-png/)
+    /// Create the project area (.d-png/)
     Init {
         /// Directory to create it in (default: the current directory)
         dir: Option<PathBuf>,
@@ -141,9 +141,9 @@ enum Command {
         #[command(subcommand)]
         command: LibraryCommand,
     },
-    /// Print the agent skill guide for this version of drawio-png-cli
+    /// Print the agent skill guide for this version of d-png-cli
     Skill,
-    /// Print licenses and notices for drawio-png-cli, dependencies, and bundled assets
+    /// Print licenses and notices for d-png-cli, dependencies, and bundled assets
     Licenses,
 }
 
@@ -223,7 +223,7 @@ enum LibraryCommand {
     },
     /// Print or write the VS Code extension's customLibraries setting for these libraries
     Vscode {
-        /// First part of the extension's headings (default: drawio-png-cli)
+        /// First part of the extension's headings (default: d-png-cli)
         #[arg(long, value_name = "TEXT")]
         entry_id: Option<String>,
         /// Update .vscode/settings.json, keeping other settings, comments and items
@@ -393,7 +393,7 @@ struct Context {
 
 impl Context {
     fn new(explicit: Option<PathBuf>) -> Result<Self, Diagnostic> {
-        let explicit = explicit.or_else(|| env::var_os("DRAWIO_PNG_PROJECT").map(PathBuf::from));
+        let explicit = explicit.or_else(|| env::var_os("D_PNG_PROJECT").map(PathBuf::from));
         let current = env::current_dir()
             .map_err(|e| Diagnostic::new(Code::InputRead, format!("no current directory: {e}")))?;
         Ok(Self {
@@ -414,7 +414,7 @@ impl Context {
         self.project.as_ref().ok_or_else(|| {
             Diagnostic::new(
                 Code::ProjectNotFound,
-                "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+                "no project (.d-png/) here or above; run `d-png-cli init`",
             )
         })
     }
@@ -443,7 +443,7 @@ impl Context {
         }
     }
 
-    /// The renderer: the option, `DRAWIO_PNG_RENDERER`, the settings, then `vscode`.
+    /// The renderer: the option, `D_PNG_RENDERER`, the settings, then `vscode`.
     fn renderer(&self, option: Option<RendererKind>) -> Result<RendererKind, Diagnostic> {
         if let Some(kind) = option {
             return Ok(kind);
@@ -478,7 +478,7 @@ impl Context {
             .ok_or_else(|| {
                 Diagnostic::new(
                     Code::ProjectNotFound,
-                    "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+                    "no project (.d-png/) here or above; run `d-png-cli init`",
                 )
             })
     }
@@ -508,7 +508,7 @@ impl Context {
             .iter()
             .any(|l| !settings.lists(&format!("${{workspaceFolder}}/{l}")))
         {
-            eprintln!("hint: run `drawio-png-cli library vscode --write` to use it in VS Code");
+            eprintln!("hint: run `d-png-cli library vscode --write` to use it in VS Code");
         }
     }
 
@@ -539,7 +539,7 @@ impl Context {
 
 fn run(cli: Cli) -> Outcome {
     match cli.command {
-        Command::Skill => print(include_str!("../../../assets/skill/drawio-png.md")),
+        Command::Skill => print(include_str!("../../../assets/skill/d-png.md")),
         Command::Licenses => print(crate::BUNDLED_LICENSES),
         Command::Init { dir, json } => {
             let directory = match dir {
@@ -574,7 +574,7 @@ fn run(cli: Cli) -> Outcome {
             write_text_output(output.as_deref(), &read.xml)?;
             if !raw && !json {
                 eprintln!(
-                    "{} image(s) replaced with library references, {} kept; use `drawio-png-cli expand` for the image data",
+                    "{} image(s) replaced with library references, {} kept; use `d-png-cli expand` for the image data",
                     read.compacted.len(),
                     read.kept.len()
                 );
@@ -936,7 +936,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             } else {
                 for (_, info) in listed.iter().filter(|(_, i)| !i.normalized) {
                     eprintln!(
-                        "warning: {} is not in the form the VS Code extension reads; run `drawio-png-cli library sync {}`",
+                        "warning: {} is not in the form the VS Code extension reads; run `d-png-cli library sync {}`",
                         info.location.as_deref().unwrap_or("-"),
                         info.name
                     );

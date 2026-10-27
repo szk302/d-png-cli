@@ -1,10 +1,10 @@
 # VS Code draw.io拡張とのPNG互換性（変更前の調査）
 
-以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](rendering.md) を参照。コマンド・オプション名は当時（v0.1.0）のもので、`--renderer desktop` は v0.2.0 の `desktop-app`、`--renderer chromium` の Desktop 互換処理は `desktop-compat` に当たる。
+以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](rendering.md) を参照。コマンド・オプション名は当時（v0.1.0）のもので（実行ファイル名は現在の `d-png-cli` で記す）、`--renderer desktop` は v0.2.0 の `desktop-app`、`--renderer chromium` の Desktop 互換処理は `desktop-compat` に当たる。
 
 注: ここで調査した拡張のコミット `79500e6` はプレリリース相当で、draw.io 31.4.5を固定している。安定版1.9.0（タグ `v1.9.0`）はdraw.io 26.0.2を固定しており、現在のvscodeモードはこちらに合わせている。
 
-2026-09-20に確認した範囲では、VS Code拡張のPNG保存結果と、`drawio-png-cli`のDesktop／Chromium出力は一致しない。文字なし矩形でも寸法と画素が異なる。前回のDesktop互換調整は、VS Code拡張との一致を意味しない。
+2026-09-20に確認した範囲では、VS Code拡張のPNG保存結果と、`d-png-cli`のDesktop／Chromium出力は一致しない。文字なし矩形でも寸法と画素が異なる。前回のDesktop互換調整は、VS Code拡張との一致を意味しない。
 
 ## 対象と検証方法
 
@@ -24,7 +24,7 @@ lightテーマ、`simpleLabels=false`、空のlocalStorage、カスタムスタ�
 
 「共通フォント」は `--default-font 'Noto Sans CJK JP' --fallback-font 'Noto Sans CJK JP'` で生成したXMLを、3つの経路すべてに入力した結果。
 
-| 図面 | フォント | 拡張の保存経路 | drawio-png-cli Desktop | drawio-png-cli Chromium |
+| 図面 | フォント | 拡張の保存経路 | d-png-cli Desktop | d-png-cli Chromium |
 | --- | --- | --- | --- | --- |
 | 100×40の文字なし矩形 | 指定なし／共通 | 102×42 | 104×44 | 104×44 |
 | HTMLラベル | 指定なし／共通 | 242×82 | 244×84 | 244×84 |
@@ -40,7 +40,7 @@ lightテーマ、`simpleLabels=false`、空のlocalStorage、カスタムスタ�
 
 DesktopとCLI Chromium間では、文字なし矩形のRGBA一致を再確認した。HTMLラベルには指定なしで994画素、共通フォントで761画素の差が残り、前回の結果と同じだった。
 
-CLIが生成したPNGの再読み込みも確認した。9入力×2レンダラーの18ファイルを、拡張の `loadPngWithEmbeddedXml()` と同じdata URI形式で読み込み、`xmlpng` で保存し直した。全18件で、XMLを直接読み込んだ拡張出力と寸法・RGBAが一致した。再保存したPNGからの `drawio-png-cli extract`・`drawio-png-cli validate` も成功し、複数ページ入力の2ページが保持された。画像の完全一致はないが、今回の図面では読み込み・再保存の互換性は確認できた。
+CLIが生成したPNGの再読み込みも確認した。9入力×2レンダラーの18ファイルを、拡張の `loadPngWithEmbeddedXml()` と同じdata URI形式で読み込み、`xmlpng` で保存し直した。全18件で、XMLを直接読み込んだ拡張出力と寸法・RGBAが一致した。再保存したPNGからの `d-png-cli extract`・`d-png-cli validate` も成功し、複数ページ入力の2ページが保持された。画像の完全一致はないが、今回の図面では読み込み・再保存の互換性は確認できた。
 
 ## 差が生じる処理
 
@@ -52,7 +52,7 @@ CLIが生成したPNGの再読み込みも確認した。9入力×2レンダラ�
 4. draw.ioの `EditorUi` が先頭ページを選び、`Editor.exportToCanvas()` でSVGを画像化してCanvasへ描き、`canvas.toDataURL('image/png')` でPNGを生成する。
 5. 全ページのXMLをPNGの `tEXt` に埋め込む。
 
-対して `drawio-png-cli --renderer chromium` は `export3.html` の描画結果をDPR 2でキャプチャし、Hamming1で半分に縮小する。呼び出し時に `scale:1, border:0` を指定する。`drawio-png-cli --renderer desktop` はDesktopのCLIエクスポートを使う。今回の `scale=2, border=10` の入力では、どちらのCLI経路も画像サイズにその属性を反映しなかった。
+対して `d-png-cli --renderer chromium` は `export3.html` の描画結果をDPR 2でキャプチャし、Hamming1で半分に縮小する。呼び出し時に `scale:1, border:0` を指定する。`d-png-cli --renderer desktop` はDesktopのCLIエクスポートを使う。今回の `scale=2, border=10` の入力では、どちらのCLI経路も画像サイズにその属性を反映しなかった。
 
 SVGの書き出しと画面キャプチャでは、切り出し範囲、描画位置、アンチエイリアス、文字の処理が異なる。また、拡張とCLIではdraw.io資材のコミットも異なる。共通フォントを指定しても、これらの違いはなくならない。
 

@@ -8,7 +8,7 @@ These fixtures are original test data, not copied diagram assets.
 - `legacy.drawio.png`: the single model stored as raw DEFLATE `zTXt` with the `mxGraphModel` key.
 - `plain.png`: transparent RGBA pixel plus an unrelated `Author` text chunk.
 
-The metadata PNG fixtures above were constructed independently of `drawio-png-cli`, using Python standard-library `struct`, `zlib`, `base64`, and `urllib.parse`. Chunk CRCs use `zlib.crc32`; scanlines contain one PNG filter byte followed by four zero RGBA bytes. The fixtures are committed so tests need no Python runtime.
+The metadata PNG fixtures above were constructed independently of `d-png-cli`, using Python standard-library `struct`, `zlib`, `base64`, and `urllib.parse`. Chunk CRCs use `zlib.crc32`; scanlines contain one PNG filter byte followed by four zero RGBA bytes. The fixtures are committed so tests need no Python runtime.
 
 ## VS Code PNG reference images
 
@@ -19,7 +19,7 @@ The metadata PNG fixtures above were constructed independently of `drawio-png-cl
 - `geometry-options-vscode.png`: the same rectangle in an `mxfile` with
   `scale="2" border="10"`, exported as 242x122.
 
-These images were generated independently of drawio-png-cli using the Webview HTML of the
+These images were generated independently of d-png-cli using the Webview HTML of the
 stable extension release `v1.9.0` (`132921f1c189d1b6239e2b0246ebd8190ca23ba5`),
 with its pinned draw.io 26.0.2 assets (`96a916a337d13fc8bf622c8a67d422bd284eabe5`),
 in Google Chrome 154.0.8037.97 on Linux ARM64 with the editor at 100% zoom. A test bridge supplied the VS Code message API; VS Code itself was not
@@ -40,7 +40,7 @@ embedded XML, but tests compare decoded RGBA only. See the
   `alpha = [0, 1, 31, 127, 128, 200, 255]`. This covers transparency, hidden RGB,
   partially transparent colors and filter clipping at the image edges.
 - `resize-hamming1.png`: the 8x6 result produced from `resize-input.png` by
-  Electron 44.2.0's nativeImage, independently of drawio-png-cli's Rust implementation:
+  Electron 44.2.0's nativeImage, independently of d-png-cli's Rust implementation:
   `nativeImage.createFromPath(input).resize({width:8,height:6,quality:'good'}).toPNG()`.
   Chromium 152's `good` and `better` paths use Hamming1. Its default `best` path
   uses Lanczos3 and is not the reference used by this test.

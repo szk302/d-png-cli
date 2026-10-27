@@ -14,22 +14,21 @@ use super::process::{ChildGuard, TIMEOUT, executable, log_excerpt};
 use crate::{MAX_BYTES, adapters::fs as storage, domain::drawio_png as png_data};
 
 pub fn discover() -> Result<PathBuf> {
-    discover_optional()?
-        .context("draw.io Desktop not found; install it or set DRAWIO_PNG_DRAWIO_PATH")
+    discover_optional()?.context("draw.io Desktop not found; install it or set D_PNG_DRAWIO_PATH")
 }
 
 fn discover_optional() -> Result<Option<PathBuf>> {
-    if let Some(path) = env::var_os("DRAWIO_PNG_DRAWIO_PATH") {
+    if let Some(path) = env::var_os("D_PNG_DRAWIO_PATH") {
         let path = PathBuf::from(path);
         ensure!(
             executable(&path),
-            "DRAWIO_PNG_DRAWIO_PATH is not an executable file: {}",
+            "D_PNG_DRAWIO_PATH is not an executable file: {}",
             path.display()
         );
         return path
             .canonicalize()
             .map(Some)
-            .context("cannot resolve DRAWIO_PNG_DRAWIO_PATH");
+            .context("cannot resolve D_PNG_DRAWIO_PATH");
     }
     let names: &[&str] = if cfg!(windows) {
         &["drawio.exe", "draw.io.exe"]
@@ -81,14 +80,14 @@ fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
     };
     let text = value
         .to_str()
-        .context("DRAWIO_PNG_DRAWIO_ARGS must be valid Unicode")?;
-    shell_words::split(text).context("invalid DRAWIO_PNG_DRAWIO_ARGS: check quotes and escapes")
+        .context("D_PNG_DRAWIO_ARGS must be valid Unicode")?;
+    shell_words::split(text).context("invalid D_PNG_DRAWIO_ARGS: check quotes and escapes")
 }
 
 /// Renders page `page` (1-based) with the discovered Desktop and the
 /// environment's Desktop options.
 pub fn render_page(xml: &str, page: usize) -> Result<Vec<u8>> {
-    let args = parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
+    let args = parse_extra_args(env::var_os("D_PNG_DRAWIO_ARGS").as_deref())?;
     render_with_args(&discover()?, xml, page, TIMEOUT, &args)
 }
 
@@ -107,7 +106,7 @@ fn render_with_args(
     // Declared first so it is dropped after Desktop and its temporary directory.
     let _interrupt = super::interrupt::Guard::new();
     let directory = tempfile::Builder::new()
-        .prefix("drawio-png-cli-render-")
+        .prefix("d-png-cli-render-")
         .tempdir()?;
     let input = directory.path().join("input.drawio");
     let output = directory.path().join("output.png");
@@ -231,7 +230,7 @@ mod tests {
     fn unmatched_quotes_are_errors() {
         for value in ["'unfinished", "\"unfinished"] {
             let error = parse_extra_args(Some(OsStr::new(value))).unwrap_err();
-            assert!(error.to_string().contains("DRAWIO_PNG_DRAWIO_ARGS"));
+            assert!(error.to_string().contains("D_PNG_DRAWIO_ARGS"));
         }
     }
 
@@ -243,7 +242,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("DRAWIO_PNG_DRAWIO_ARGS must be valid Unicode")
+                .contains("D_PNG_DRAWIO_ARGS must be valid Unicode")
         );
     }
 }

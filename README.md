@@ -1,31 +1,31 @@
-# drawio-png-cli
+# d-png-cli
 
-`drawio-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`libref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
+`d-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`libref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
 
-> **v0.2.0 は未リリースです。** この README は v0.2.0（[仕様](docs/spec.md)）の使い方で、このブランチをソースからビルドすると使えます。GitHub Releases の最新版は v0.1.0 で、コマンドが異なります（[v0.1.0 の README](https://github.com/szk302/drawio-png-cli/blob/v0.1.0/README.md)）。v0.1.0 からの変更は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています。
+> **v0.2.0 は未リリースです。** この README は v0.2.0（[仕様](docs/spec.md)）の使い方で、このブランチをソースからビルドすると使えます。GitHub Releases の最新版は v0.1.0（実行ファイル名は `dip`）で、コマンドが異なります（[v0.1.0 の README](https://github.com/szk302/d-png-cli/blob/v0.1.0/README.md)）。v0.1.0 からの変更は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています。
 
 ## インストール
 
-[GitHub Releases](https://github.com/szk302/drawio-png-cli/releases) から、OS に合ったアーカイブを取得して展開し、`drawio-png-cli`（Windows は `drawio-png-cli.exe`）を PATH の通った場所に置きます。アーカイブにはライセンス通知一式を同梱しています。
+[GitHub Releases](https://github.com/szk302/d-png-cli/releases) から、OS に合ったアーカイブを取得して展開し、`d-png-cli`（Windows は `d-png-cli.exe`）を PATH の通った場所に置きます。アーカイブにはライセンス通知一式を同梱しています。
 
 | OS | アーカイブ |
 | --- | --- |
-| Linux x86_64 / ARM64 | `drawio-png-cli-<version>-x86_64-unknown-linux-musl.tar.gz` / `drawio-png-cli-<version>-aarch64-unknown-linux-musl.tar.gz`（静的リンク） |
-| macOS Apple silicon / Intel | `drawio-png-cli-<version>-aarch64-apple-darwin.tar.gz` / `drawio-png-cli-<version>-x86_64-apple-darwin.tar.gz` |
-| Windows x86_64 | `drawio-png-cli-<version>-x86_64-pc-windows-msvc.zip` |
+| Linux x86_64 / ARM64 | `d-png-cli-<version>-x86_64-unknown-linux-musl.tar.gz` / `d-png-cli-<version>-aarch64-unknown-linux-musl.tar.gz`（静的リンク） |
+| macOS Apple silicon / Intel | `d-png-cli-<version>-aarch64-apple-darwin.tar.gz` / `d-png-cli-<version>-x86_64-apple-darwin.tar.gz` |
+| Windows x86_64 | `d-png-cli-<version>-x86_64-pc-windows-msvc.zip` |
 
 ```sh
 # 例: Linux x86_64。SHA256SUMS で改ざんを確認する
 version=0.2.0
-gh release download "v$version" -R szk302/drawio-png-cli \
-  -p "drawio-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" -p SHA256SUMS
+gh release download "v$version" -R szk302/d-png-cli \
+  -p "d-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" -p SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
 # GitHub Actions でビルドされたことの確認（任意）
-gh attestation verify "drawio-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" -R szk302/drawio-png-cli
-tar xzf "drawio-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" drawio-png-cli
+gh attestation verify "d-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" -R szk302/d-png-cli
+tar xzf "d-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" d-png-cli
 ```
 
-macOS のバイナリは署名・公証していません。ブラウザーで取得した場合は、初回実行時に Gatekeeper の警告が出ることがあります（`xattr -d com.apple.quarantine drawio-png-cli` で解除できます）。
+macOS のバイナリは署名・公証していません。ブラウザーで取得した場合は、初回実行時に Gatekeeper の警告が出ることがあります（`xattr -d com.apple.quarantine d-png-cli` で解除できます）。
 
 ソースからビルドする場合、開発環境の Rust は `mise.toml` で固定しています。
 
@@ -34,40 +34,40 @@ mise install
 mise exec -- cargo install --path . --locked
 ```
 
-Rust を直接管理している場合は `cargo install --path . --locked` でもインストールできます。実行ファイル名は `drawio-png-cli` です。Node.js や Python は不要です。PNG の描画には Chromium / Chrome（`--renderer desktop-app` では draw.io Desktop 27.0.2 以降）が必要です。Chromium 用の基本描画資材はバイナリに同梱しています。`library install` で Git の取得元を使う場合は `git`、HTTPS の取得元を使う場合は `curl` が必要です。
+Rust を直接管理している場合は `cargo install --path . --locked` でもインストールできます。実行ファイル名は `d-png-cli` です。Node.js や Python は不要です。PNG の描画には Chromium / Chrome（`--renderer desktop-app` では draw.io Desktop 27.0.2 以降）が必要です。Chromium 用の基本描画資材はバイナリに同梱しています。`library install` で Git の取得元を使う場合は `git`、HTTPS の取得元を使う場合は `curl` が必要です。
 
 ## 使い方
 
 ```sh
 # プロジェクトを用意し、ライブラリを登録・取り込む（初回のみ）
-drawio-png-cli init                                   # .drawio-png/ を作る
-drawio-png-cli library add ./simple-icons.xml         # プロジェクト専用のライブラリを登録する
-drawio-png-cli library add ./shapes.xml               # draw.io の図形も、ライブラリにして登録する
-drawio-png-cli library install @acme/brand            # 社内の共有ライブラリを取り込む（取得元は .drawio-png/config.toml）
-drawio-png-cli library vscode --write                 # VS Code 拡張でも同じライブラリを使う
+d-png-cli init                                   # .d-png/ を作る
+d-png-cli library add ./simple-icons.xml         # プロジェクト専用のライブラリを登録する
+d-png-cli library add ./shapes.xml               # draw.io の図形も、ライブラリにして登録する
+d-png-cli library install @acme/brand            # 社内の共有ライブラリを取り込む（取得元は .d-png/config.toml）
+d-png-cli library vscode --write                 # VS Code 拡張でも同じライブラリを使う
 
 # 部品を探す。先頭の列が XML に書く参照文字列
-drawio-png-cli library search postgres
+d-png-cli library search postgres
 #   simple-icons/postgresql	image	48x48	PostgreSQL
 
 # XML を標準入力で渡して PNG を作る
-drawio-png-cli write -o arch.drawio.png < arch.xml
+d-png-cli write -o arch.drawio.png < arch.xml
 
 # 既存の PNG を編集する（登録済みの画像は image=lib: の参照に縮めて出す）
-drawio-png-cli read diagram.drawio.png -o edit.xml
-drawio-png-cli write edit.xml -o diagram.drawio.png
+d-png-cli read diagram.drawio.png -o edit.xml
+d-png-cli write edit.xml -o diagram.drawio.png
 
 # 参照を展開した単体の XML を出す（draw.io・VS Code でそのまま開ける）
-drawio-png-cli expand diagram.drawio.png -o diagram.drawio
+d-png-cli expand diagram.drawio.png -o diagram.drawio
 
 # 検証だけ行う（何も書かない）
-drawio-png-cli validate diagram.xml
+d-png-cli validate diagram.xml
 ```
 
 XML の中では、部品を `libref` のプレースホルダーで書きます。`write` は参照を展開し、検証・描画してから、参照を含まない普通の draw.io XML を PNG に埋め込みます。
 
 ```sh
-drawio-png-cli write -o arch.drawio.png <<'EOF'
+d-png-cli write -o arch.drawio.png <<'EOF'
 <mxfile>
   <diagram id="page-1" name="構成図">
     <mxGraphModel>
@@ -94,7 +94,7 @@ EOF
 
 ## コマンド一覧
 
-各コマンドの詳細は `drawio-png-cli <コマンド> --help` と [仕様](docs/spec.md) で確認できます。
+各コマンドの詳細は `d-png-cli <コマンド> --help` と [仕様](docs/spec.md) で確認できます。
 
 | コマンド | 内容 |
 | --- | --- |
@@ -102,7 +102,7 @@ EOF
 | `write [INPUT] -o PNG` | 参照を展開し、検証・描画して、全ページの XML を `.drawio.png` に保存する |
 | `expand [INPUT] [-o XML]` | 参照を展開した XML を出す。`write` が埋め込むものと同じ |
 | `validate [INPUT]` | `write` の描画前までの処理（展開・検証）を行い、何も書かない |
-| `init [DIR]` | プロジェクト領域 `.drawio-png/` を作る |
+| `init [DIR]` | プロジェクト領域 `.d-png/` を作る |
 | `library list` | ライブラリの一覧 |
 | `library search [QUERY...]` | エントリーを検索し、参照文字列・種類・サイズ・タイトルを出す |
 | `library show REF` | ライブラリ・エントリーの詳細（style・セル構成・配置例） |
@@ -115,7 +115,7 @@ EOF
 | `library sync [NAME...]` | 人が編集したライブラリファイルを正規化する |
 | `library vscode` | VS Code 拡張の設定を出力・更新する |
 | `skill` | AI エージェント向けの手順書を出す |
-| `licenses` | drawio-png-cli・依存クレート・同梱資材のライセンスと通知を出す |
+| `licenses` | d-png-cli・依存クレート・同梱資材のライセンスと通知を出す |
 
 `read`・`write`・`expand`・`validate` は、XML（`<mxfile>`・`<mxGraphModel>`）と `.drawio.png` のどちらも受け付け、拡張子ではなく内容で判別します。
 
@@ -133,7 +133,7 @@ EOF
 
 描画中に SIGINT（Ctrl+C）・SIGTERM・SIGHUP（Windows では Ctrl+C・Ctrl+Break）を受けると、描画を中断してレンダラーのプロセスと一時ファイルを片付け、既存出力を変更せずにそのシグナルで終了します（シェルでの終了コードは `128 + シグナル番号`、SIGINT なら `130`）。描画以外の処理中は通常どおり直ちに終了し、`nohup` などで無視されているシグナルは無視したままです。SIGKILL などの強制終了では片付けられません。
 
-### `drawio-png-cli write`
+### `d-png-cli write`
 
 | オプション | 内容 |
 | --- | --- |
@@ -178,23 +178,23 @@ EOF
 
 ## ライブラリ
 
-ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリだけで、任意のパスのファイルや環境変数で指したファイルは使いません。同じ XML が、どの環境でも同じ部品に展開されるようにするためです。drawio-png-cli はライブラリを同梱しません（[draw.io の図形を使う](#drawio-の図形を使う)）。
+ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリだけで、任意のパスのファイルや環境変数で指したファイルは使いません。同じ XML が、どの環境でも同じ部品に展開されるようにするためです。d-png-cli はライブラリを同梱しません（[draw.io の図形を使う](#drawio-の図形を使う)）。
 
 ライブラリ名には npm と同じ名前空間（スコープ）があります。
 
 | 種類 | 名前 | 追加の方法 | 置き場所 |
 | --- | --- | --- | --- |
-| プロジェクト専用 | `components` | `library add` | `.drawio-png/libraries/components.xml`（Git にコミットする） |
-| 取り込み | `@acme/brand` | `library install` | `.drawio-png/libraries/@acme/brand.xml`（Git から除外し、`lock.json` から復元する） |
+| プロジェクト専用 | `components` | `library add` | `.d-png/libraries/components.xml`（Git にコミットする） |
+| 取り込み | `@acme/brand` | `library install` | `.d-png/libraries/@acme/brand.xml`（Git から除外し、`lock.json` から復元する） |
 
 ```sh
-drawio-png-cli init
-drawio-png-cli library add ./vendor/simple-icons.xml --title "Simple Icons"
-drawio-png-cli library add ./assets/Logo.svg --name logos            # 画像ファイルは data のエントリーになる
-drawio-png-cli library list
-drawio-png-cli library search postgres --kind image
-drawio-png-cli library show simple-icons/postgresql
-drawio-png-cli library preview postgres -o candidates.png
+d-png-cli init
+d-png-cli library add ./vendor/simple-icons.xml --title "Simple Icons"
+d-png-cli library add ./assets/Logo.svg --name logos            # 画像ファイルは data のエントリーになる
+d-png-cli library list
+d-png-cli library search postgres --kind image
+d-png-cli library show simple-icons/postgresql
+d-png-cli library preview postgres -o candidates.png
 ```
 
 - `library add` は CDATA・実体参照・圧縮のどの形式のライブラリも読み、VS Code 拡張と draw.io の両方が読める書式に変換して登録します。各エントリーに安定した ID を付け、タイトルが変わっても参照が変わらないようにします。
@@ -203,7 +203,7 @@ drawio-png-cli library preview postgres -o candidates.png
 
 ### スコープと取得元
 
-複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.drawio-png/config.toml`（個人の取得元はユーザーの `config.toml`）にスコープごとに書きます。
+複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.d-png/config.toml`（個人の取得元はユーザーの `config.toml`）にスコープごとに書きます。
 
 ```toml
 [scopes]
@@ -216,12 +216,12 @@ mine = "file:~/drawio-libraries"
 ```
 
 ```sh
-drawio-png-cli library install @acme/brand        # [dependencies] に追加し、lock.json に版を記録する
-drawio-png-cli library install --frozen           # clone 後・CI で lock.json の版を復元する
-drawio-png-cli library update @acme/brand         # 範囲内の新しい版にする
+d-png-cli library install @acme/brand        # [dependencies] に追加し、lock.json に版を記録する
+d-png-cli library install --frozen           # clone 後・CI で lock.json の版を復元する
+d-png-cli library update @acme/brand         # 範囲内の新しい版にする
 
 # 配布する側: 取得元のディレクトリに版を作り、git push などで公開する
-drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./drawio-libraries
+d-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./drawio-libraries
 ```
 
 - 取得元はディレクトリ（`file:`）・Git・HTTPS のいずれかで、中身は `@<スコープ>/<名前>/versions.json` と版ごとのライブラリファイルです。公開・認証は CLI では扱いません。
@@ -238,14 +238,14 @@ drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to .
 {
   "hediet.vscode-drawio.customLibraries": [
     {
-      "entryId": "drawio-png-cli",
+      "entryId": "d-png-cli",
       "libName": "Simple Icons",
-      "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/simple-icons.xml"
     },
     {
-      "entryId": "drawio-png-cli @acme",
+      "entryId": "d-png-cli @acme",
       "libName": "ACME Brand",
-      "file": "${workspaceFolder}/.drawio-png/libraries/@acme/brand.xml"
+      "file": "${workspaceFolder}/.d-png/libraries/@acme/brand.xml"
     }
   ]
 }
@@ -255,21 +255,21 @@ drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to .
 
 ## draw.io の図形を使う
 
-drawio-png-cli は draw.io のサイドバーの図形（AWS・Azure・Google Cloud・Kubernetes・UML など）を同梱していません。エージェントに使わせる図形は、利用者が draw.io でライブラリにして登録します。
+d-png-cli は draw.io のサイドバーの図形（AWS・Azure・Google Cloud・Kubernetes・UML など）を同梱していません。エージェントに使わせる図形は、利用者が draw.io でライブラリにして登録します。
 
 1. draw.io（Desktop・Web）で「File → New Library」を選び、ライブラリを作ります。
 2. 使う図形を図面に置き、選んでライブラリ欄へドラッグします。各図形にタイトルを付けて保存します。タイトルは検索語とエントリー ID の元になります。
 3. 保存したファイルを `library add` で登録します。
 
 ```sh
-drawio-png-cli library add ./shapes.xml --title Shapes
-drawio-png-cli library search cylinder
+d-png-cli library add ./shapes.xml --title Shapes
+d-png-cli library search cylinder
 #   shapes/cylinder	shape	60x80	Cylinder
-drawio-png-cli library vscode --write          # VS Code 拡張のライブラリ欄にも出す
+d-png-cli library vscode --write          # VS Code 拡張のライブラリ欄にも出す
 ```
 
 - 複数のリポジトリで同じ図形を使う場合は、スコープを付けて取得元から配布できます（[スコープと取得元](#スコープと取得元)）。
-- AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
+- AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
 - 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認してください。
 
 手順の例は [usecase.md の I](docs/usecase.md#drawio-の図形をライブラリにする) にあります。
@@ -286,12 +286,12 @@ drawio-png-cli library vscode --write          # VS Code 拡張のライブラ�
 | `desktop-app` | draw.io Desktop 27.0.2 以降のアプリ |
 
 ```sh
-drawio-png-cli write diagram.xml -o diagram.drawio.png                          # vscode
-drawio-png-cli write diagram.xml -o desktop.drawio.png --renderer desktop-compat
-drawio-png-cli write diagram.xml -o app.drawio.png --renderer desktop-app
+d-png-cli write diagram.xml -o diagram.drawio.png                          # vscode
+d-png-cli write diagram.xml -o desktop.drawio.png --renderer desktop-compat
+d-png-cli write diagram.xml -o app.drawio.png --renderer desktop-app
 ```
 
-優先順位は、コマンドのオプション → 環境変数 `DRAWIO_PNG_RENDERER` → プロジェクトの `config.toml` → ユーザーの `config.toml` → `vscode` です。プロジェクトで描画方式とフォントを揃える場合は `config.toml` に書きます。
+優先順位は、コマンドのオプション → 環境変数 `D_PNG_RENDERER` → プロジェクトの `config.toml` → ユーザーの `config.toml` → `vscode` です。プロジェクトで描画方式とフォントを揃える場合は `config.toml` に書きます。
 
 ```toml
 [render]
@@ -305,14 +305,14 @@ allow-network = false
 
 全方式で指定ページを描画し、全ページの編集用 XML を PNG に埋め込みます。`raw` もメタデータなし PNG を生成する方式ではありません。`raw`・`desktop-compat` は倍率1・余白0で draw.io のエクスポーターを呼び、XML の `scale`・`border` は反映しません。`desktop-compat` は参照環境の処理に合わせたもので、異なるフォント・ブラウザー・draw.io 資材での完全一致は保証しません。
 
-`vscode` は拡張の安定版1.9.0が同梱する draw.io 26.0.2 に合わせ、`raw`・`desktop-compat` は Desktop 31.4.5 に合わせた資材をそれぞれ同梱しています。拡張の保存結果は保存時のエディターの表示倍率で変わり、drawio-png-cli は倍率100%の結果に合わせます。devcontainer や WSL でも図はホスト側の VS Code が描画するため、Windows と Linux ではフォント等による画素差が残ります。詳細は [描画互換性](docs/rendering.md) を参照してください。
+`vscode` は拡張の安定版1.9.0が同梱する draw.io 26.0.2 に合わせ、`raw`・`desktop-compat` は Desktop 31.4.5 に合わせた資材をそれぞれ同梱しています。拡張の保存結果は保存時のエディターの表示倍率で変わり、d-png-cli は倍率100%の結果に合わせます。devcontainer や WSL でも図はホスト側の VS Code が描画するため、Windows と Linux ではフォント等による画素差が残ります。詳細は [描画互換性](docs/rendering.md) を参照してください。
 
 ## フォントの統一
 
 `--default-font` でセルの `fontFamily` が未指定の場合のフォントを選び、`--fallback-font` で代替候補を指定できます。どのレンダラーにも同じフォント候補を渡し、設定を全ページの XML にも保存します。`config.toml` の `[render]` の `default-font`・`fallback-fonts` でも指定でき、`expand` にも適用します。
 
 ```sh
-drawio-png-cli write diagram.xml -o diagram.drawio.png \
+d-png-cli write diagram.xml -o diagram.drawio.png \
   --default-font "Noto Sans CJK JP" \
   --fallback-font "Noto Sans CJK JP" \
   --fallback-font "Noto Color Emoji"
@@ -330,12 +330,12 @@ drawio-png-cli write diagram.xml -o diagram.drawio.png \
 
 ## Chromium / Chrome の準備
 
-`desktop-app` 以外のレンダラーと `library preview` は Chromium / Chrome で描画します。既定では Chrome を使用し、Chrome が見つからない場合だけ Chromium を使います。検索順は `DRAWIO_PNG_CHROME_PATH` → `CHROME_PATH` → PATH → OS 標準インストール先です。PATH ではまず Chrome（`google-chrome`、`google-chrome-stable`、`chrome`、Windows では `chrome.exe`）をすべてのディレクトリから探し、なければ Chromium（`chromium`、`chromium-browser`、Windows では `chromium.exe`）を探します。Linux の標準インストール先は `/usr/bin/google-chrome`、`/opt/google/chrome/chrome`、`/usr/bin/chromium` の順です。明示指定のパスが不正な場合は別候補へ切り替えません。
+`desktop-app` 以外のレンダラーと `library preview` は Chromium / Chrome で描画します。既定では Chrome を使用し、Chrome が見つからない場合だけ Chromium を使います。検索順は `D_PNG_CHROME_PATH` → `CHROME_PATH` → PATH → OS 標準インストール先です。PATH ではまず Chrome（`google-chrome`、`google-chrome-stable`、`chrome`、Windows では `chrome.exe`）をすべてのディレクトリから探し、なければ Chromium（`chromium`、`chromium-browser`、Windows では `chromium.exe`）を探します。Linux の標準インストール先は `/usr/bin/google-chrome`、`/opt/google/chrome/chrome`、`/usr/bin/chromium` の順です。明示指定のパスが不正な場合は別候補へ切り替えません。
 
 ```sh
 # Chromium を使う場合は明示する
-export DRAWIO_PNG_CHROME_PATH=/usr/bin/chromium
-drawio-png-cli write diagram.xml -o diagram.drawio.png
+export D_PNG_CHROME_PATH=/usr/bin/chromium
+d-png-cli write diagram.xml -o diagram.drawio.png
 ```
 
 ヘッドレスで起動するため Xvfb は不要です。Node.js、Python、ChromeDriver、オンライン版 draw.io への接続も不要です。フォントは OS にインストールされたものを使用するので、日本語には日本語フォントを用意してください。
@@ -346,27 +346,27 @@ drawio-png-cli write diagram.xml -o diagram.drawio.png
 # export3.html を含む Webアプリのルートを指定（拡張1.9.0と同じ draw.io 26.0.2 の例）
 git clone https://github.com/jgraph/drawio.git
 git -C drawio checkout 96a916a337d13fc8bf622c8a67d422bd284eabe5
-export DRAWIO_PNG_DRAWIO_WEB_PATH="$PWD/drawio/src/main/webapp"
-drawio-png-cli write diagram.xml -o diagram.drawio.png
+export D_PNG_DRAWIO_WEB_PATH="$PWD/drawio/src/main/webapp"
+d-png-cli write diagram.xml -o diagram.drawio.png
 ```
 
-`DRAWIO_PNG_DRAWIO_WEB_PATH` を解除すると同梱資材に戻ります。指定が不正な場合はエラーとし、同梱資材には切り替えません。互換性を確認した上流コミットは、`vscode` が `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2、拡張1.9.0と同じ）、`raw`・`desktop-compat` が `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）です。`vscode` では、拡張と同じく `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込みます。draw.io 26.0.2 には `shapes/` フォルダーがないため、AWS などの図形はこれらから読み込みます。別バージョンでは `export3.html` と、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop-compat` では `render()`・`LoadingComplete` の互換性が必要です。
+`D_PNG_DRAWIO_WEB_PATH` を解除すると同梱資材に戻ります。指定が不正な場合はエラーとし、同梱資材には切り替えません。互換性を確認した上流コミットは、`vscode` が `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2、拡張1.9.0と同じ）、`raw`・`desktop-compat` が `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）です。`vscode` では、拡張と同じく `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込みます。draw.io 26.0.2 には `shapes/` フォルダーがないため、AWS などの図形はこれらから読み込みます。別バージョンでは `export3.html` と、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop-compat` では `render()`・`LoadingComplete` の互換性が必要です。
 
 図面が参照する外部画像・Webフォントの取得は既定で禁止し、必要な外部資材がある場合はエラーにします。明示的に許可するときは次を使います。
 
 ```sh
-drawio-png-cli write diagram.xml -o diagram.drawio.png --allow-network
+d-png-cli write diagram.xml -o diagram.drawio.png --allow-network
 ```
 
 `--allow-network` は外部HTTP(S)画像・フォント等の資材取得を許可します。`vscode` では、外部画像・フォントのCanvasへの埋め込みに配信元のCORS許可も必要です。外部スクリプト、フレーム、任意のローカルファイルの読み込みは許可しません。Chrome 自体も、`--disable-background-networking` 等を指定しても Google のサービス（コンポーネント更新、最適化ガイド、プッシュ通知、アカウント等）へ接続するため、名前解決で止めています。`--allow-network` なしではループバック以外の名前解決をすべて失敗させ、環境変数やシステム設定のプロキシも使いません（プロキシは接続先の名前解決を代行するため）。`--allow-network` ありでは図面の資材を取得するため、既知のサービス用ホストだけを止め、プロキシ設定もそのまま使います。このとき `www.google.com`・`www.gstatic.com` への Chrome 自身の接続は残り、プロキシを使う環境ではサービス用ホストへの接続もプロキシ経由で行われ得ます。外部への通信を確実に避けるには `--allow-network` を指定しないでください。Web資材は、ページ本体をループバック限定の一時HTTPサーバーで、スクリプト等の資材をDevTools Protocol経由で直接ブラウザーに渡し、処理後にサーバーと専用ブラウザープロファイルを片付けます。
 
-追加オプションは `DRAWIO_PNG_CHROME_ARGS` にPOSIX形式で指定します。
+追加オプションは `D_PNG_CHROME_ARGS` にPOSIX形式で指定します。
 
 ```sh
-export DRAWIO_PNG_CHROME_ARGS='--disable-gpu --disable-dev-shm-usage'
+export D_PNG_CHROME_ARGS='--disable-gpu --disable-dev-shm-usage'
 ```
 
-シェル展開は行いません。追加オプションは `--name` または `--name=value` 形式とし、値に空白があれば引用符で囲みます。プロファイル、デバッグ接続、ネットワーク制御など drawio-png-cli が管理するオプションは指定できません。sandbox は自動で無効化しません。テスト用コンテナで必要な場合に限り `--no-sandbox` を明示できます。
+シェル展開は行いません。追加オプションは `--name` または `--name=value` 形式とし、値に空白があれば引用符で囲みます。プロファイル、デバッグ接続、ネットワーク制御など d-png-cli が管理するオプションは指定できません。sandbox は自動で無効化しません。テスト用コンテナで必要な場合に限り `--no-sandbox` を明示できます。
 
 描画しないコマンド（`read`・`expand`・`validate`・`write --metadata-only`、`preview` 以外の `library` の各コマンド）と `--renderer desktop-app` では、Chromium 用の環境変数を読みません。
 
@@ -374,48 +374,48 @@ export DRAWIO_PNG_CHROME_ARGS='--disable-gpu --disable-dev-shm-usage'
 
 `--renderer desktop-app` は draw.io Desktop のアプリで描画します。draw.io Desktop の検索順は次のとおりです。
 
-1. `DRAWIO_PNG_DRAWIO_PATH` に指定された実行ファイル
+1. `D_PNG_DRAWIO_PATH` に指定された実行ファイル
 2. PATH 内の `drawio`／`draw.io`（Windows では `.exe`）
 3. OS の標準インストール先（macOS の `/Applications` と `~/Applications`、Windows の `ProgramFiles`／`LOCALAPPDATA`、Linux の `/opt/drawio/drawio`）
 
 ```sh
-export DRAWIO_PNG_DRAWIO_PATH=/Applications/draw.io.app/Contents/MacOS/draw.io
+export D_PNG_DRAWIO_PATH=/Applications/draw.io.app/Contents/MacOS/draw.io
 ```
 
 明示指定が不正な場合、別の実行ファイルには切り替えません。描画のタイムアウトは 60 秒です。Desktop が見つからない場合や描画に失敗した場合はエラー終了し、既存出力は変更しません。
 
-Desktop の追加オプションは `DRAWIO_PNG_DRAWIO_ARGS` に指定します。`DRAWIO_PNG_DRAWIO_PATH` には実行ファイルのパスだけを指定してください。
+Desktop の追加オプションは `D_PNG_DRAWIO_ARGS` に指定します。`D_PNG_DRAWIO_PATH` には実行ファイルのパスだけを指定してください。
 
 ```sh
-export DRAWIO_PNG_DRAWIO_PATH=/opt/drawio/drawio
-export DRAWIO_PNG_DRAWIO_ARGS='--disable-gpu --disable-dev-shm-usage'
+export D_PNG_DRAWIO_PATH=/opt/drawio/drawio
+export D_PNG_DRAWIO_ARGS='--disable-gpu --disable-dev-shm-usage'
 
-# GUI のないコンテナでは、Xvfb 経由で drawio-png-cli を起動する
-xvfb-run -a drawio-png-cli write diagram.xml -o diagram.drawio.png --renderer desktop-app
+# GUI のないコンテナでは、Xvfb 経由で d-png-cli を起動する
+xvfb-run -a d-png-cli write diagram.xml -o diagram.drawio.png --renderer desktop-app
 ```
 
-Desktop のほかに `xvfb`・`xauth`、日本語を描画する場合は日本語フォントをコンテナに用意してください。`DRAWIO_PNG_DRAWIO_ARGS` の指定だけでは仮想ディスプレイは起動しません。
+Desktop のほかに `xvfb`・`xauth`、日本語を描画する場合は日本語フォントをコンテナに用意してください。`D_PNG_DRAWIO_ARGS` の指定だけでは仮想ディスプレイは起動しません。
 
 空白を含む値は引用符で囲みます。
 
 ```sh
-export DRAWIO_PNG_DRAWIO_ARGS='--disable-gpu --user-data-dir="/tmp/drawio profile"'
+export D_PNG_DRAWIO_ARGS='--disable-gpu --user-data-dir="/tmp/drawio profile"'
 ```
 
 - 全 OS で POSIX シェル形式の引用符・バックスラッシュによる引数分割を使います。Windows のパスも引用符で囲むなど、この形式に合わせて指定してください。
 - シェルは起動せず、環境変数・`~`・ワイルドカード・コマンド置換は展開しません。必要な値は明示的に指定します。
 - 未設定・空文字・空白のみなら追加引数はありません。閉じていない引用符や Unicode として読めない値は、Desktop 起動前に終了コード `1` のエラーにします。
-- 追加引数は `drawio-png-cli` が生成する描画引数の前に渡します。入力ファイル、出力先、形式、ページ選択は `drawio-png-cli` が管理するため、これらを変更するオプションや `--` は指定しないでください。
-- `--renderer desktop-app` 以外では `DRAWIO_PNG_DRAWIO_ARGS` を読みません。
+- 追加引数は `d-png-cli` が生成する描画引数の前に渡します。入力ファイル、出力先、形式、ページ選択は `d-png-cli` が管理するため、これらを変更するオプションや `--` は指定しないでください。
+- `--renderer desktop-app` 以外では `D_PNG_DRAWIO_ARGS` を読みません。
 
-既存の Xvfb ラッパーを `DRAWIO_PNG_DRAWIO_PATH` に指定する方法も使えます。ラッパーでは `"$@"` を転送してください。
+既存の Xvfb ラッパーを `D_PNG_DRAWIO_PATH` に指定する方法も使えます。ラッパーでは `"$@"` を転送してください。
 
 ```sh
 #!/bin/sh
 exec xvfb-run -a /opt/drawio/drawio "$@"
 ```
 
-`drawio-png-cli` は Electron の sandbox を自動で無効化しません。テスト用コンテナで sandbox を無効化する必要がある場合は、`DRAWIO_PNG_DRAWIO_ARGS` に `--no-sandbox` を明示的に追加できます。
+`d-png-cli` は Electron の sandbox を自動で無効化しません。テスト用コンテナで sandbox を無効化する必要がある場合は、`D_PNG_DRAWIO_ARGS` に `--no-sandbox` を明示的に追加できます。
 
 ## 検証・互換性・保存
 
@@ -433,27 +433,27 @@ exec xvfb-run -a /opt/drawio/drawio "$@"
 
 | 環境変数 | 内容 |
 | --- | --- |
-| `DRAWIO_PNG_PROJECT` | プロジェクト領域（`.drawio-png/`）を含むディレクトリ。既定はカレントディレクトリから親へ探す |
-| `DRAWIO_PNG_HOME` | ユーザー領域（個人の `config.toml`）。既定は Linux が `$XDG_CONFIG_HOME/drawio-png-cli`、macOS が `~/Library/Application Support/drawio-png-cli`、Windows が `%APPDATA%\drawio-png-cli` |
-| `DRAWIO_PNG_RENDERER` | 既定のレンダラー（`vscode`・`desktop-compat`・`raw`・`desktop-app`） |
-| `DRAWIO_PNG_CHROME_PATH` / `CHROME_PATH` | Chromium / Chrome の実行ファイル |
-| `DRAWIO_PNG_CHROME_ARGS` | Chromium の追加引数（POSIX 形式のクォート。シェル展開はしない） |
-| `DRAWIO_PNG_DRAWIO_PATH` / `DRAWIO_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数 |
-| `DRAWIO_PNG_DRAWIO_WEB_PATH` | ローカルの draw.io Web 資材のディレクトリ（既定は同梱資材）。AWS などの図形の描画に必要 |
+| `D_PNG_PROJECT` | プロジェクト領域（`.d-png/`）を含むディレクトリ。既定はカレントディレクトリから親へ探す |
+| `D_PNG_HOME` | ユーザー領域（個人の `config.toml`）。既定は Linux が `$XDG_CONFIG_HOME/d-png-cli`、macOS が `~/Library/Application Support/d-png-cli`、Windows が `%APPDATA%\d-png-cli` |
+| `D_PNG_RENDERER` | 既定のレンダラー（`vscode`・`desktop-compat`・`raw`・`desktop-app`） |
+| `D_PNG_CHROME_PATH` / `CHROME_PATH` | Chromium / Chrome の実行ファイル |
+| `D_PNG_CHROME_ARGS` | Chromium の追加引数（POSIX 形式のクォート。シェル展開はしない） |
+| `D_PNG_DRAWIO_PATH` / `D_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数 |
+| `D_PNG_DRAWIO_WEB_PATH` | ローカルの draw.io Web 資材のディレクトリ（既定は同梱資材）。AWS などの図形の描画に必要 |
 | `[scopes]` の `token-env` で指定した名前 | HTTPS の取得元に送るトークン |
-| `DRAWIO_PNG_CACHE` | 取得元から取得したファイルのキャッシュ（既定は OS のキャッシュディレクトリ） |
+| `D_PNG_CACHE` | 取得元から取得したファイルのキャッシュ（既定は OS のキャッシュディレクトリ） |
 
-v0.1.0 の `DRAWIO_PNG_LIBRARY_PATH`・`DRAWIO_PNG_CHROMIUM_MODE` は廃止しました。
+v0.1.0 の環境変数は `DIP_` で始まる名前でした（`DIP_CHROME_PATH` → `D_PNG_CHROME_PATH` など）。`DIP_LIBRARY_PATH`・`DIP_CHROMIUM_MODE` は廃止しました。
 
 ## AI エージェント向けスキル
 
-`skills/drawio-png/` は、Claude Code などの AI エージェントに drawio-png-cli の使い方を教えるスキルです。中身は案内だけで、手順の本文は drawio-png-cli に同梱しており、`drawio-png-cli skill` で出力します。手順は常にインストールされている drawio-png-cli の版と一致します。
+`skills/d-png/` は、Claude Code などの AI エージェントに d-png-cli の使い方を教えるスキルです。中身は案内だけで、手順の本文は d-png-cli に同梱しており、`d-png-cli skill` で出力します。手順は常にインストールされている d-png-cli の版と一致します。
 
 ```sh
 # 対応するエージェントへまとめてインストール（Vercel Labs の skills CLI）
-npx skills add szk302/drawio-png-cli
+npx skills add szk302/d-png-cli
 # または Claude Code へ手動で配置
-mkdir -p ~/.claude/skills && cp -r skills/drawio-png ~/.claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/d-png ~/.claude/skills/
 ```
 
 ## 開発とテスト
@@ -470,14 +470,14 @@ mise exec -- cargo build --release --locked
 Desktop・Chromium の実機テストは通常のテストから除外しています。描画環境を用意して明示的に実行してください。
 
 ```sh
-DRAWIO_PNG_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
+D_PNG_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
   mise exec -- cargo test --test desktop -- --ignored --nocapture
 ```
 
 ```sh
-DRAWIO_PNG_TEST_CHROME_PATH=/usr/bin/google-chrome \
+D_PNG_TEST_CHROME_PATH=/usr/bin/google-chrome \
   mise exec -- cargo test --test chromium -- --ignored --nocapture
-# テスト環境に必要な追加引数は DRAWIO_PNG_TEST_CHROME_ARGS で指定
+# テスト環境に必要な追加引数は D_PNG_TEST_CHROME_ARGS で指定
 python3 scripts/vendor_drawio.py --check
 ```
 
@@ -495,11 +495,13 @@ Linux CIではChromium実機テストも実行します。資材ハッシュの�
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、Cargo依存の著作権表示・ライセンス全文は
 [依存ライセンス一覧](assets/licenses/cargo-dependencies.txt) に記載しています。
 
-本プロジェクトは非公式の独立したプロジェクトであり、draw.ioの提供元であるJGraph Holdings Ltdおよびdraw.io AGとの提携・承認関係はありません。
+d-png-cli is not made or endorsed by draw.io Ltd. draw.io is a registered trademark of draw.io Ltd.
+
+本プロジェクトは非公式の独立したプロジェクトで、draw.io Ltd による作成・承認を受けたものではありません。draw.io は draw.io Ltd の登録商標です。
 
 ソース配布には `LICENSE` と `THIRD_PARTY_NOTICES.md` を含めます。
 ソース・バイナリとも、この2ファイルと `assets/drawio/README.md`・`assets/drawio/licenses/`・`assets/licenses/`（Cargo依存の生成済み一覧を含む）を保持してください。
-同梱描画資材は各資材のライセンスに従います。対象と除外範囲は [資材一覧](assets/drawio/README.md) に記録しています。`drawio-png-cli licenses` で本体・Cargo依存・同梱資材の通知とライセンス全文を確認できます。通常のビルドにライセンス生成ツールは不要です。
+同梱描画資材は各資材のライセンスに従います。対象と除外範囲は [資材一覧](assets/drawio/README.md) に記録しています。`d-png-cli licenses` で本体・Cargo依存・同梱資材の通知とライセンス全文を確認できます。通常のビルドにライセンス生成ツールは不要です。
 
 依存を更新した際は、次の手順で一覧を再生成し、差分を確認して `Cargo.lock` とともにコミットしてください。
 一覧は本パッケージの全featuresで有効になる依存をOSを絞らず収集し、開発用・ビルド用の依存も含めています。`Cargo.lock` にあっても無効な任意依存や常に偽の `cfg` にある依存は対象外です。`about.toml` の優先順で許諾されたライセンスを選択し、`AND` の条件はすべて保持します。
@@ -517,8 +519,8 @@ CIでは `scripts/cargo_licenses.py --check` で更新漏れを検出し、許�
 
 ```sh
 mise exec -- cargo build --release --locked
-python3 scripts/package_binary.py target/release/drawio-png-cli target/drawio-png-cli.tar.gz
-# Windowsでは入力を target/release/drawio-png-cli.exe に、出力を .zip に変更
+python3 scripts/package_binary.py target/release/d-png-cli target/d-png-cli.tar.gz
+# Windowsでは入力を target/release/d-png-cli.exe に、出力を .zip に変更
 ```
 
 リリースは、`Cargo.toml` の `version` と一致するタグ（例: `v0.2.0`）をプッシュすると `.github/workflows/release.yml` が作成します。CI と同じ検査を通過した後、Linux（musl）・macOS・Windows のバイナリを通知一式とともにアーカイブし、`SHA256SUMS` とビルド来歴の証明（attestation）を付けて GitHub Release に公開します。`v0.2.0-rc.1` のように `-` を含むタグはプレリリースになります。Linux 版は musl を静的リンクするため、`assets/licenses/musl-1.2.5-COPYRIGHT.txt` を同梱しています。`mise.toml` の Rust を更新した際は、そのツールチェーンが使う musl の版（Rust リポジトリの `src/ci/docker/scripts/musl.sh`）を確認し、異なれば通知を差し替えてください。

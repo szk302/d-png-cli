@@ -280,7 +280,7 @@ pub fn sync(
             problems.push(Diagnostic::new(
                 Code::LibraryInvalid,
                 format!(
-                    "{} is not in the normalized form that the VS Code extension reads; run `drawio-png-cli library sync`",
+                    "{} is not in the normalized form that the VS Code extension reads; run `d-png-cli library sync`",
                     info.location.as_deref().unwrap_or(&info.name.to_string())
                 ),
             ));

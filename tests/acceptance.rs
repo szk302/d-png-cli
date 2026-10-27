@@ -2,7 +2,7 @@
 //! to the CLI expands to the XML it would take without the CLI.
 mod support;
 
-use drawio_png_cli::{
+use d_png_cli::{
     app::{diagram, libraries::Libraries},
     domain::{
         library::{self, Library, Origin},
@@ -23,7 +23,7 @@ fn load(name: &str, path: PathBuf) -> Library {
 /// The example project: three libraries of its own and @acme/brand installed
 /// from examples/acme-drawio-libraries.
 fn repositories() -> (Memory, Memory) {
-    let project = examples().join("project/.drawio-png/libraries");
+    let project = examples().join("project/.d-png/libraries");
     (
         Memory {
             origin: Origin::Project,
@@ -112,7 +112,7 @@ fn the_written_png_holds_the_expanded_xml() {
         &libraries,
     )
     .unwrap();
-    let stored = drawio_png_cli::domain::drawio_png::extract(&written.png).unwrap();
+    let stored = d_png_cli::domain::drawio_png::extract(&written.png).unwrap();
     let expected = String::from_utf8(read("h-new-diagram", "no-cli.xml")).unwrap();
     assert_same_cells(&stored, &expected);
     let types: Vec<_> = written

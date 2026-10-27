@@ -1,6 +1,6 @@
 # 初回実装の検証記録
 
-この記録は v0.1.0 の実装時のもので、コマンド・オプション名は当時のもの（`extract`・`embed`・`--no-render`・`--chromium-mode` など）である。v0.2.0 での対応は [仕様の 12 章](spec.md#12-v010-からの変更) を参照。
+この記録は v0.1.0 の実装時のもので、コマンド・オプション名は当時のもの（`extract`・`embed`・`--no-render`・`--chromium-mode` など）である。当時の実行ファイル名は `dip`、環境変数は `DIP_*` で、ここでは実行ファイル名と残っている環境変数を現在の名前（`d-png-cli`・`D_PNG_*`）で記す。v0.2.0 での対応は [仕様の 12 章](spec.md#12-v010-からの変更) を参照。
 
 2026-09-19、Linux ARM64（Debian 13）、Rust 1.98.1 で検証。
 
@@ -23,10 +23,10 @@ mise exec -- cargo build --release --locked
 
 ## Desktop 実機
 
-公式 draw.io Desktop 31.4.5 の ARM64 Debian パッケージを `.tmp` に展開し、Xvfb 経由で実行した。テスト環境のラッパーでは Electron の `--no-sandbox --disable-gpu` を指定した。これらのフラグは `drawio-png-cli` 自体では追加しない。
+公式 draw.io Desktop 31.4.5 の ARM64 Debian パッケージを `.tmp` に展開し、Xvfb 経由で実行した。テスト環境のラッパーでは Electron の `--no-sandbox --disable-gpu` を指定した。これらのフラグは `d-png-cli` 自体では追加しない。
 
 ```sh
-DRAWIO_PNG_TEST_DRAWIO_PATH=/absolute/path/to/drawio-wrapper \
+D_PNG_TEST_DRAWIO_PATH=/absolute/path/to/drawio-wrapper \
   mise exec -- cargo test --test desktop -- --ignored --nocapture
 ```
 
@@ -43,22 +43,22 @@ Windows/macOS の実機確認と GitHub 上の CI 実行は、このローカル
 
 | 操作 | 中央値 | p95 |
 | --- | ---: | ---: |
-| `drawio-png-cli --help` | 1.93 ms | 2.21 ms |
-| `drawio-png-cli validate` | 2.22 ms | 2.54 ms |
-| `drawio-png-cli extract` | 2.18 ms | 2.40 ms |
-| `drawio-png-cli embed --no-render` | 3.38 ms | 3.82 ms |
+| `d-png-cli --help` | 1.93 ms | 2.21 ms |
+| `d-png-cli validate` | 2.22 ms | 2.54 ms |
+| `d-png-cli extract` | 2.18 ms | 2.40 ms |
+| `d-png-cli embed --no-render` | 3.38 ms | 3.82 ms |
 
 実行ファイルは 1,878,264 bytes。測定値はこの環境の小規模 fixture に対する参考値であり、大規模図面・コールドキャッシュ・Desktop の起動や描画時間を含まない。
 
 ## 環境変数による Desktop オプション指定の追加
 
-`DRAWIO_PNG_DRAWIO_ARGS` 対応後、通常テスト 33 件と Desktop 実機テスト 1 件が成功した。format・clippy・リリースビルドも成功した。
+`D_PNG_DRAWIO_ARGS` 対応後、通常テスト 33 件と Desktop 実機テスト 1 件が成功した。format・clippy・リリースビルドも成功した。
 
 - 未設定・空文字・空白、引用符・エスケープ、Unicode と空白を含む引数を確認した。
 - 環境変数・ワイルドカード・コマンド置換が展開されず、追加引数が描画引数の前にそのまま渡ることを確認した。
 - 引用符が不正な場合は Desktop が起動せず、既存出力が変化しないことを確認した。
-- `extract`・`validate`・`embed --no-render` は不正な `DRAWIO_PNG_DRAWIO_ARGS` も読み取らないことを確認した。
-- 実機テストでは Xvfb の下でテストを実行し、`DRAWIO_PNG_TEST_DRAWIO_PATH` に Desktop 本体を指定した。`DRAWIO_PNG_DRAWIO_ARGS` から `--no-sandbox --disable-gpu --disable-dev-shm-usage` と空白を含む `--user-data-dir` を渡し、PNG の描画と Desktop での再読み込みが成功した。
+- `extract`・`validate`・`embed --no-render` は不正な `D_PNG_DRAWIO_ARGS` も読み取らないことを確認した。
+- 実機テストでは Xvfb の下でテストを実行し、`D_PNG_TEST_DRAWIO_PATH` に Desktop 本体を指定した。`D_PNG_DRAWIO_ARGS` から `--no-sandbox --disable-gpu --disable-dev-shm-usage` と空白を含む `--user-data-dir` を渡し、PNG の描画と Desktop での再読み込みが成功した。
 
 ## Chromium 描画対応
 
@@ -73,10 +73,10 @@ Windows/macOS の実機確認と GitHub 上の CI 実行は、このローカル
 - 上流Webアプリの `src/main/webapp` を直接指定する手動描画も成功した。
 - releaseバイナリをリポジトリ外の一時ディレクトリへコピーし、DesktopからChromiumへの自動フォールバック、同梱資材による描画、2ページの抽出・再検証が成功した。
 - format、Linuxのclippy、releaseビルド、資材ハッシュ確認が成功。Windows GNUターゲットの全ターゲットcheck・clippyも成功した。
-- `cargo package --allow-dirty --offline` による配布物の検証ビルドが成功し、`.tmp` の参考チェックアウトに依存しないことを確認した。最初のワークスペース内ビルドではオブジェクトファイル作成時にPermission deniedが発生したため、`CARGO_TARGET_DIR=/tmp/drawio-png-cli-package-verification-target` で独立したビルド先を使って検証した。
+- `cargo package --allow-dirty --offline` による配布物の検証ビルドが成功し、`.tmp` の参考チェックアウトに依存しないことを確認した。最初のワークスペース内ビルドではオブジェクトファイル作成時にPermission deniedが発生したため、`CARGO_TARGET_DIR=/tmp/d-png-cli-package-verification-target` で独立したビルド先を使って検証した。
 
 ```sh
-DRAWIO_PNG_TEST_CHROME_PATH=/usr/bin/chromium \
+D_PNG_TEST_CHROME_PATH=/usr/bin/chromium \
   mise exec -- cargo test --locked --test chromium -- --ignored --nocapture
 python3 scripts/vendor_drawio.py --check
 ```
@@ -88,7 +88,7 @@ Desktopの既存通常テストは成功したが、今回の変更でDesktop実
 2026-09-20、Chromiumの画像サイズをDesktopと同じ `ceil(bounds.size + bounds.offset) + 1` に変更した。追加後の寸法に対して画像バッファの64 MiB制限を適用する。
 
 - 文字なしの100×40の矩形について、Desktop 31.4.5の出力寸法104×44をChromium実機テストに追加した。変更前は103×43で失敗し、変更後は成功した。
-- 通常テスト41件、Chromium実機テスト4件、format・clippyが成功した。実機テストは `/usr/bin/chromium`、`DRAWIO_PNG_TEST_CHROME_ARGS=--disable-dev-shm-usage`、`--test-threads=1` で実行した。
+- 通常テスト41件、Chromium実機テスト4件、format・clippyが成功した。実機テストは `/usr/bin/chromium`、`D_PNG_TEST_CHROME_ARGS=--disable-dev-shm-usage`、`--test-threads=1` で実行した。
 - 比較用画像を再描画し、文字なし図形104×44とHTMLラベル244×84が、既存のDesktop出力と同じ寸法になることを確認した。4例とも抽出XMLは一致した。
 - 日本語と英数字・記号を含むプレーンテキストの例は、Desktop 131×44に対しChromium 149×44となる。実際に選択されるフォントが異なるため、寸法計算の統一だけでは文字を含むすべての図面のサイズ一致を保証しない。
 - DPR・縮小方式は変更していないため、寸法が一致しても画素の完全一致は保証しない。
@@ -105,11 +105,11 @@ Desktopの既存通常テストは成功したが、今回の変更でDesktop実
 - フォント候補の統一は描画方式の統一ではない。今回の日本語ラベルでは、同じNoto Sans CJK JPを候補に指定してもDesktop 131×44、Chromium 132×44の1px差が残る。macOS/Windowsの実フォント選択は今回検証していない。
 
 ```sh
-DRAWIO_PNG_TEST_DRAWIO_PATH=/absolute/path/to/drawio-wrapper \
-  DRAWIO_PNG_DRAWIO_ARGS=--disable-dev-shm-usage \
-  DRAWIO_PNG_TEST_CHROME_PATH=/usr/bin/chromium \
-  DRAWIO_PNG_TEST_CHROME_ARGS=--disable-dev-shm-usage \
-  DRAWIO_PNG_TEST_FONT='Noto Sans CJK JP' \
+D_PNG_TEST_DRAWIO_PATH=/absolute/path/to/drawio-wrapper \
+  D_PNG_DRAWIO_ARGS=--disable-dev-shm-usage \
+  D_PNG_TEST_CHROME_PATH=/usr/bin/chromium \
+  D_PNG_TEST_CHROME_ARGS=--disable-dev-shm-usage \
+  D_PNG_TEST_FONT='Noto Sans CJK JP' \
   mise exec -- cargo test --locked --test desktop --test fonts --test chromium \
   -- --ignored --nocapture --test-threads=1
 ```
@@ -150,7 +150,7 @@ CLI生成PNGを拡張経路で再読み込み・再保存する18件も成功し
 
 2026-09-20、Chromiumレンダラーをdraw.ioの `Editor.exportToCanvas()` に変更した。同梱Web資材も、調査した拡張のサブモジュールと同じ `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd` に合わせた。Desktopの描画方式・autoのDesktop優先は維持する。
 
-同じ9入力を再出力し、拡張HTMLで独立生成したPNGと比較した。全9件で寸法・RGBAが一致し、各PNGの `drawio-png-cli validate` も成功した。
+同じ9入力を再出力し、拡張HTMLで独立生成したPNGと比較した。全9件で寸法・RGBAが一致し、各PNGの `d-png-cli validate` も成功した。
 
 | 図面 | フォント | 拡張／新Chromiumの寸法 | RGBAが異なる画素数 |
 | --- | --- | --- | --- |
@@ -190,6 +190,6 @@ Desktop互換は参照したDesktop環境の処理に合わせたモードであ
 
 ## Chromiumモードの環境変数指定
 
-2026-09-20、`DRAWIO_PNG_CHROMIUM_MODE` を追加した。CLIの `--chromium-mode` → 環境変数 → vscodeの順で選ぶ。CLI指定時、Desktop選択時、抽出・検証・no-renderでは環境変数を読まない。
+2026-09-20、`DIP_CHROMIUM_MODE` を追加した。CLIの `--chromium-mode` → 環境変数 → vscodeの順で選ぶ。CLI指定時、Desktop選択時、抽出・検証・no-renderでは環境変数を読まない。
 
 Chromium関連の通常テスト8件とモード選択の実機テスト1件が成功した。環境変数で3モードを選び、CLI指定時と同じ寸法・各互換基準画像になること、不正な環境変数でも明示CLI指定を優先することを確認した。空文字・未知値・大文字・余分な空白はエラーになり、既存出力を保持する。format・clippy・releaseビルドも成功した。
