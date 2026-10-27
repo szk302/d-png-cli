@@ -1,0 +1,13 @@
+<mxfile>
+  <diagram id="page-1" name="構成図">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="db" value="PostgreSQL" style="shape=image;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;image=data:image/svg+xml,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PHBhdGggZmlsbD0iIzMzNjc5MSIgZD0iTTAgMGg0OHY0OEgweiIvPjwvc3ZnPg==;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="64" height="64" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

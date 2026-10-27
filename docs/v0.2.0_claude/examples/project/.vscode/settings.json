@@ -1,0 +1,19 @@
+{
+  "hediet.vscode-drawio.customLibraries": [
+    {
+      "entryId": "drawio-png-cli",
+      "libName": "Components",
+      "file": "${workspaceFolder}/.drawio-png/libraries/components.xml"
+    },
+    {
+      "entryId": "drawio-png-cli",
+      "libName": "Simple Icons",
+      "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
+    },
+    {
+      "entryId": "drawio-png-cli @acme",
+      "libName": "ACME Brand",
+      "file": "${workspaceFolder}/.drawio-png/libraries/@acme/brand.xml"
+    }
+  ]
+}

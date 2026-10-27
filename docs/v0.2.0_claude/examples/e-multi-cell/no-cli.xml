@@ -1,0 +1,31 @@
+<mxfile>
+  <diagram id="page-1" name="構成図">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="card" value="決済処理" style="group;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="card-1" value="タイトル" style="text;html=1;" vertex="1" parent="card">
+          <mxGeometry x="10" y="10" width="220" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="card-2" value="本文" style="text;html=1;" vertex="1" parent="card">
+          <mxGeometry x="10" y="50" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="branch-1" value="分岐" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="200" width="80" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="branch-2" value="処理" style="rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="460" y="200" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="branch-3" value="" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" edge="1" parent="1" source="branch-1" target="branch-2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="card-to-branch" style="endArrow=block;html=1;" edge="1" parent="1" source="card" target="branch-1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

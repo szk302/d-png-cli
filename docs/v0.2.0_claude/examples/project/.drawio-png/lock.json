@@ -1,0 +1,10 @@
+{
+  "lockfileVersion": 1,
+  "libraries": {
+    "@acme/brand": {
+      "version": "1.0.0",
+      "resolved": "file:../acme-drawio-libraries",
+      "integrity": "sha256-sBOSRnQChE4BD7t9wykTJVDR5nb4zAIvz/Jkp2UBBYI="
+    }
+  }
+}

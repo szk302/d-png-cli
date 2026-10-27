@@ -1,0 +1,9 @@
+# drawio-png-cli の設定（spec.md 2.4）
+
+[scopes]
+# 実際のチームでは "git+https://github.com/acme/drawio-libraries.git" のような Git の取得元を書く。
+# この例では、同じ構成のディレクトリ examples/acme-drawio-libraries を指す（相対パスはプロジェクトのルートから）。
+acme = "file:../acme-drawio-libraries"
+
+[dependencies]
+"@acme/brand" = "^1.0.0"

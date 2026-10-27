@@ -1,0 +1,13 @@
+<mxfile>
+  <diagram id="page-1" name="構成図">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="logo" value="会社ロゴ" style="shape=image;image=lib:@acme/brand/logo;aspect=fixed;imageAspect=0;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="120" height="60" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
