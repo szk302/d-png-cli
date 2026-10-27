@@ -1,0 +1,623 @@
+//! The command line (spec 2-11): parses arguments, reads input, assembles
+//! the adapters for the use cases, and prints results and diagnostics with
+//! the exit codes of spec 2.1.
+use clap::{Parser, Subcommand};
+use serde_json::{Value, json};
+use std::{
+    env,
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
+
+use crate::{
+    adapters::{
+        builtin::BuiltinLibraries,
+        fs,
+        project::{self, Project, ProjectLibraries},
+        render::RendererKind,
+    },
+    app::{
+        diagram::{self, Pixels, WriteRequest},
+        libraries::{Libraries, SearchQuery},
+        library::{self, PreviewRequest},
+        ports::LibraryRepository,
+    },
+    domain::{
+        diagnostic::{Code, Diagnostic, Diagnostics},
+        fonts::{self, FontPolicy},
+        library::EntryKind,
+        reference::LibraryName,
+    },
+};
+
+mod output;
+
+#[derive(Parser)]
+#[command(
+    name = "drawio-png-cli",
+    version,
+    about = "Write draw.io diagrams, given as XML on standard input, into PNG images that VS Code's draw.io extension can edit",
+    after_help = "Environment:\n  DRAWIO_PNG_PROJECT          Directory holding the project area (.drawio-png/)\n  DRAWIO_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  DRAWIO_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  DRAWIO_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  DRAWIO_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  DRAWIO_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  DRAWIO_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
+)]
+struct Cli {
+    /// Directory holding the project area (.drawio-png/); default: the nearest above the current directory
+    #[arg(long, global = true, value_name = "DIR")]
+    project: Option<PathBuf>,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Print a diagram's XML for editing; library images become image=lib: references
+    Read {
+        /// XML or .drawio.png (omit or "-" for standard input)
+        input: Option<PathBuf>,
+        /// XML file to write (default: standard output)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Print the XML stored in the PNG as it is
+        #[arg(long)]
+        raw: bool,
+        /// Print a JSON summary to standard output (needs --output)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Expand references, check, render and save a diagram as a .drawio.png
+    Write {
+        /// XML or .drawio.png (omit or "-" for standard input)
+        input: Option<PathBuf>,
+        /// PNG file to write ("-" for standard output)
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Page to render, starting at 1; every page is saved
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// vscode (default), desktop-compat, raw or desktop-app
+        #[arg(long, value_parser = renderer_name, conflicts_with = "metadata_only")]
+        renderer: Option<RendererKind>,
+        /// Allow external HTTP(S) images and fonts (not with desktop-app)
+        #[arg(long, conflicts_with = "metadata_only")]
+        allow_network: bool,
+        /// Set and save the font for cells without an explicit fontFamily
+        #[arg(long, value_parser = fonts::parse_family)]
+        default_font: Option<String>,
+        /// Append a fallback family (repeatable, in priority order); requires --default-font
+        #[arg(long, value_parser = fonts::parse_family, requires = "default_font")]
+        fallback_font: Vec<String>,
+        /// Save the XML without rendering; pixels come from --base-image or a transparent 1x1 image
+        #[arg(long)]
+        metadata_only: bool,
+        /// PNG whose pixels to keep with --metadata-only
+        #[arg(long, requires = "metadata_only")]
+        base_image: Option<PathBuf>,
+        /// Print a JSON summary to standard output
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print the diagram with references expanded: the XML that write saves
+    Expand {
+        /// XML or .drawio.png (omit or "-" for standard input)
+        input: Option<PathBuf>,
+        /// XML file to write (default: standard output)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Set and save the font for cells without an explicit fontFamily
+        #[arg(long, value_parser = fonts::parse_family)]
+        default_font: Option<String>,
+        /// Append a fallback family (repeatable, in priority order); requires --default-font
+        #[arg(long, value_parser = fonts::parse_family, requires = "default_font")]
+        fallback_font: Vec<String>,
+        /// Print a JSON summary to standard output (needs --output)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check a diagram as write would before rendering; writes nothing
+    Validate {
+        /// XML or .drawio.png (omit or "-" for standard input)
+        input: Option<PathBuf>,
+        /// Print a JSON summary to standard output
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create the project area (.drawio-png/)
+    Init {
+        /// Directory to create it in (default: the current directory)
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Find, inspect and preview library entries
+    Library {
+        #[command(subcommand)]
+        command: LibraryCommand,
+    },
+    /// Print the agent skill guide for this version of drawio-png-cli
+    Skill,
+    /// Print licenses and notices for drawio-png-cli, dependencies, and bundled assets
+    Licenses,
+}
+
+#[derive(Subcommand)]
+enum LibraryCommand {
+    /// List libraries: name, version, entries and title
+    List {
+        /// Only libraries of this scope (drawio for the built-in ones)
+        #[arg(long)]
+        scope: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Search entries; prints reference, kind, size and title, without their content
+    Search {
+        /// Words the title or ID must contain (case-insensitive); omit for every entry
+        query: Vec<String>,
+        #[command(flatten)]
+        filter: Filter,
+        /// Most results to print; 0 for all
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a library, or an entry's style, cells and a placeholder example
+    Show {
+        /// Library name or reference string
+        reference: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Render matching entries, labelled with their references, into a PNG
+    Preview {
+        /// References, library names (all their entries) or search words
+        #[arg(required_unless_present_any = ["library", "scope", "kind"])]
+        targets: Vec<String>,
+        /// PNG file to write
+        #[arg(short, long)]
+        output: PathBuf,
+        #[command(flatten)]
+        filter: Filter,
+        /// Allow external HTTP(S) images and fonts
+        #[arg(long)]
+        allow_network: bool,
+    },
+}
+
+#[derive(clap::Args)]
+struct Filter {
+    /// Only this library
+    #[arg(long, value_name = "NAME")]
+    library: Option<String>,
+    /// Only libraries of this scope (drawio for the built-in ones)
+    #[arg(long)]
+    scope: Option<String>,
+    /// Only entries of this kind: image, shape, edge, group, set or invalid
+    #[arg(long, value_parser = kind_name)]
+    kind: Option<EntryKind>,
+}
+
+fn renderer_name(text: &str) -> Result<RendererKind, String> {
+    RendererKind::parse(text).ok_or_else(|| format!("expected {}", RendererKind::NAMES.join(", ")))
+}
+
+fn kind_name(text: &str) -> Result<EntryKind, String> {
+    EntryKind::parse(text)
+        .ok_or_else(|| "expected image, shape, edge, group, set or invalid".to_owned())
+}
+
+/// A failed command: the problems, and whether they go out as JSON.
+struct Failure {
+    problems: Diagnostics,
+    warnings: Vec<Diagnostic>,
+}
+
+impl From<Diagnostic> for Failure {
+    fn from(d: Diagnostic) -> Self {
+        Failure {
+            problems: d.into(),
+            warnings: Vec::new(),
+        }
+    }
+}
+
+impl From<Diagnostics> for Failure {
+    fn from(problems: Diagnostics) -> Self {
+        Failure {
+            problems,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+type Outcome = Result<(), Failure>;
+
+/// Parses the arguments, runs the command and returns the exit code.
+pub fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let json = cli.command.json();
+    match run(cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(failure) => {
+            eprint!(
+                "{}",
+                output::diagnostics(&failure.problems.0, &failure.warnings, json)
+            );
+            if failure.problems.0.iter().any(|d| d.code == Code::Usage) {
+                ExitCode::from(2)
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+impl Command {
+    fn json(&self) -> bool {
+        match self {
+            Command::Read { json, .. }
+            | Command::Write { json, .. }
+            | Command::Expand { json, .. }
+            | Command::Validate { json, .. }
+            | Command::Init { json, .. } => *json,
+            Command::Library { command } => match command {
+                LibraryCommand::List { json, .. }
+                | LibraryCommand::Search { json, .. }
+                | LibraryCommand::Show { json, .. } => *json,
+                LibraryCommand::Preview { .. } => false,
+            },
+            Command::Skill | Command::Licenses => false,
+        }
+    }
+}
+
+/// The adapters a command works with.
+struct Context {
+    project: Option<Project>,
+    builtin: BuiltinLibraries,
+}
+
+impl Context {
+    fn new(explicit: Option<PathBuf>) -> Result<Self, Diagnostic> {
+        let explicit = explicit.or_else(|| env::var_os("DRAWIO_PNG_PROJECT").map(PathBuf::from));
+        let current = env::current_dir()
+            .map_err(|e| Diagnostic::new(Code::InputRead, format!("no current directory: {e}")))?;
+        Ok(Self {
+            project: Project::discover(explicit.as_deref(), &current)?,
+            builtin: BuiltinLibraries::default(),
+        })
+    }
+
+    fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
+        let project: Option<ProjectLibraries> = self.project.as_ref().map(Project::libraries);
+        let mut repositories: Vec<&dyn LibraryRepository> = vec![&self.builtin];
+        if let Some(project) = &project {
+            repositories.push(project);
+        }
+        run(&Libraries::new(repositories))
+    }
+}
+
+fn run(cli: Cli) -> Outcome {
+    match cli.command {
+        Command::Skill => print(include_str!("../../../assets/skill/drawio-png.md")),
+        Command::Licenses => print(crate::BUNDLED_LICENSES),
+        Command::Init { dir, json } => {
+            let directory = match dir {
+                Some(dir) => dir,
+                None => env::current_dir().map_err(|e| {
+                    Diagnostic::new(Code::InputRead, format!("no current directory: {e}"))
+                })?,
+            };
+            let done = project::init(&directory)?;
+            if json {
+                print_json(
+                    &json!({"area": done.area.display().to_string(), "created": done.created}),
+                )
+            } else {
+                print(&format!(
+                    "{} {}\n",
+                    if done.created { "created" } else { "exists" },
+                    done.area.display()
+                ))
+            }
+        }
+        Command::Read {
+            input,
+            output,
+            raw,
+            json,
+        } => {
+            require_output_for_json(json, output.as_deref())?;
+            let bytes = read_input(input.as_deref())?;
+            let context = Context::new(cli.project)?;
+            let read = context.with_libraries(|libraries| diagram::read(&bytes, raw, libraries))?;
+            write_text_output(output.as_deref(), &read.xml)?;
+            if !raw && !json {
+                eprintln!(
+                    "{} image(s) replaced with library references, {} kept; use `drawio-png-cli expand` for the image data",
+                    read.compacted.len(),
+                    read.kept.len()
+                );
+            }
+            if json {
+                print_json(&output::read_json(&read, &display(output.as_deref())))?;
+            }
+            Ok(())
+        }
+        Command::Expand {
+            input,
+            output,
+            default_font,
+            fallback_font,
+            json,
+        } => {
+            require_output_for_json(json, output.as_deref())?;
+            let fonts = font_policy(default_font, &fallback_font)?;
+            let bytes = read_input(input.as_deref())?;
+            let context = Context::new(cli.project)?;
+            let expanded = context
+                .with_libraries(|libraries| diagram::expand(&bytes, fonts.as_ref(), libraries))?;
+            write_text_output(output.as_deref(), &expanded.xml)?;
+            if json {
+                print_json(&json!({
+                    "output": display(output.as_deref()),
+                    "pages": expanded.pages,
+                    "expanded": output::expanded_json(&expanded.expanded),
+                    "warnings": [],
+                }))?;
+            }
+            Ok(())
+        }
+        Command::Validate { input, json } => {
+            let bytes = read_input(input.as_deref())?;
+            let context = Context::new(cli.project)?;
+            let validation =
+                context.with_libraries(|libraries| diagram::validate(&bytes, libraries))?;
+            if json {
+                print_json(&json!({
+                    "valid": true,
+                    "pages": validation.pages,
+                    "cells": validation.cells,
+                    "refs": validation.refs,
+                    "warnings": [],
+                }))?;
+            }
+            Ok(())
+        }
+        Command::Write {
+            input,
+            output,
+            page,
+            renderer,
+            allow_network,
+            default_font,
+            fallback_font,
+            metadata_only,
+            base_image,
+            json,
+        } => {
+            let to_stdout = output.as_os_str() == "-";
+            if to_stdout && json {
+                return Err(usage("--json writes to standard output; give -o a file").into());
+            }
+            let fonts = font_policy(default_font, &fallback_font)?;
+            let bytes = read_input(input.as_deref())?;
+            let base = base_image.as_deref().map(read_file).transpose()?;
+            // Rendering settings are read only when rendering.
+            let kind = match (renderer, metadata_only) {
+                (Some(kind), _) => kind,
+                (None, false) => RendererKind::from_env()?.unwrap_or_default(),
+                (None, true) => RendererKind::default(),
+            };
+            let renderer = kind.renderer();
+            let pixels = if metadata_only {
+                Pixels::Keep(base.as_deref())
+            } else {
+                Pixels::Render {
+                    renderer: renderer.as_ref(),
+                    allow_network,
+                }
+            };
+            let context = Context::new(cli.project)?;
+            let written = context.with_libraries(|libraries| {
+                diagram::write(
+                    WriteRequest {
+                        input: &bytes,
+                        page,
+                        fonts: fonts.as_ref(),
+                        pixels,
+                    },
+                    libraries,
+                )
+            })?;
+            if to_stdout {
+                write_stdout(&written.png)?;
+            } else {
+                write_file(&output, &written.png)?;
+            }
+            if json {
+                print_json(&output::written_json(
+                    &written,
+                    &output.display().to_string(),
+                    (!metadata_only).then_some(kind.as_str()),
+                ))?;
+            } else {
+                eprint!("{}", output::diagnostics(&[], &written.warnings, false));
+            }
+            Ok(())
+        }
+        Command::Library { command } => {
+            let context = Context::new(cli.project)?;
+            library_command(&context, command)
+        }
+    }
+}
+
+fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
+    match command {
+        LibraryCommand::List { scope, json } => {
+            let listed =
+                context.with_libraries(|libraries| library::list(libraries, scope.as_deref()))?;
+            if json {
+                print_json(&Value::Array(
+                    listed
+                        .iter()
+                        .map(|(origin, info)| output::library_json(*origin, info))
+                        .collect(),
+                ))
+            } else {
+                print(
+                    &listed
+                        .iter()
+                        .map(|(_, info)| output::library_line(info))
+                        .collect::<String>(),
+                )
+            }
+        }
+        LibraryCommand::Search {
+            query,
+            filter,
+            limit,
+            json,
+        } => {
+            let query = SearchQuery {
+                words: query,
+                ..filter.query()?
+            };
+            let found =
+                context.with_libraries(|libraries| library::search(libraries, &query, limit))?;
+            if found.hits.len() < found.total {
+                eprintln!(
+                    "{} of {} entries shown; narrow the search or use --limit 0",
+                    found.hits.len(),
+                    found.total
+                );
+            }
+            if json {
+                print_json(&Value::Array(
+                    found.hits.iter().map(output::hit_json).collect(),
+                ))
+            } else {
+                print(&found.hits.iter().map(output::hit_line).collect::<String>())
+            }
+        }
+        LibraryCommand::Show { reference, json } => {
+            let shown = context.with_libraries(|libraries| library::show(libraries, &reference))?;
+            if json {
+                print_json(&output::shown_json(&shown))
+            } else {
+                print(&output::shown_text(&shown))
+            }
+        }
+        LibraryCommand::Preview {
+            targets,
+            output,
+            filter,
+            allow_network,
+        } => {
+            let request = PreviewRequest {
+                targets,
+                query: filter.query()?,
+            };
+            let renderer = RendererKind::Vscode.renderer();
+            let png = context.with_libraries(|libraries| {
+                library::preview(libraries, &request, renderer.as_ref(), allow_network)
+            })?;
+            write_file(&output, &png)
+        }
+    }
+}
+
+impl Filter {
+    fn query(&self) -> Result<SearchQuery, Diagnostic> {
+        Ok(SearchQuery {
+            words: Vec::new(),
+            library: self
+                .library
+                .as_deref()
+                .map(LibraryName::parse)
+                .transpose()?,
+            scope: self.scope.clone(),
+            kind: self.kind,
+        })
+    }
+}
+
+fn usage(message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(Code::Usage, message)
+}
+
+fn require_output_for_json(json: bool, output: Option<&Path>) -> Result<(), Diagnostic> {
+    if json && output.is_none_or(|p| p.as_os_str() == "-") {
+        return Err(usage(
+            "--json prints to standard output; give -o a file for the XML",
+        ));
+    }
+    Ok(())
+}
+
+fn font_policy(
+    default: Option<String>,
+    fallbacks: &[String],
+) -> Result<Option<FontPolicy>, Diagnostic> {
+    default
+        .map(|default| FontPolicy::new(&default, fallbacks))
+        .transpose()
+        .map_err(|e| Diagnostic::from_error(Code::Usage, &e))
+}
+
+/// Codes a failure to read: size limits, or anything else.
+fn read_error(error: &anyhow::Error) -> Diagnostic {
+    let message = format!("{error:#}");
+    if message.contains("exceeds 64 MiB") {
+        Diagnostic::new(Code::LimitExceeded, message)
+    } else {
+        Diagnostic::new(Code::InputRead, message)
+    }
+}
+
+fn read_file(path: &Path) -> Result<Vec<u8>, Diagnostic> {
+    fs::read(path).map_err(|e| read_error(&e))
+}
+
+/// The file, or standard input for none or "-".
+fn read_input(path: Option<&Path>) -> Result<Vec<u8>, Diagnostic> {
+    match path {
+        Some(path) if path.as_os_str() != "-" => read_file(path),
+        _ => fs::read_limited(io::stdin().lock()).map_err(|e| read_error(&e)),
+    }
+}
+
+fn display(path: Option<&Path>) -> String {
+    path.map_or("-".into(), |p| p.display().to_string())
+}
+
+fn write_file(path: &Path, bytes: &[u8]) -> Outcome {
+    fs::atomic_write(path, bytes).map_err(|e| Diagnostic::from_error(Code::OutputWrite, &e).into())
+}
+
+fn write_stdout(bytes: &[u8]) -> Outcome {
+    match io::stdout().lock().write_all(bytes) {
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(Diagnostic::new(Code::OutputWrite, format!("cannot write: {e}")).into()),
+        Ok(()) => Ok(()),
+    }
+}
+
+/// XML to the file, or standard output for none or "-".
+fn write_text_output(path: Option<&Path>, text: &str) -> Outcome {
+    match path {
+        Some(path) if path.as_os_str() != "-" => write_file(path, text.as_bytes()),
+        _ => write_stdout(text.as_bytes()),
+    }
+}
+
+/// Writes to stdout; a consumer such as `head` may stop reading early.
+fn print(text: &str) -> Outcome {
+    write_stdout(text.as_bytes())
+}
+
+fn print_json(value: &Value) -> Outcome {
+    print(&format!("{value}\n"))
+}

@@ -1,14 +1,12 @@
-# drawio-png: drawio-png-cli で .drawio.png を扱う（vscode モード）
+# drawio-png: drawio-png-cli で .drawio.png を作る・直す
 
 `.drawio.png` は、見た目の PNG 画像と、編集用の draw.io XML（PNG のテキストチャンク内）を 1 ファイルに持つ。
-`drawio-png-cli` はこの XML を取り出し（extract）、検証し（validate）、編集後の XML から画像を描き直して書き戻す（embed）CLI。
+`drawio-png-cli` は、**draw.io の XML を標準入力で受け取って `.drawio.png` を書く**（write）CLI。
+既存の `.drawio.png` からは編集用の XML を取り出せる（read）。
 PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず drawio-png-cli を経由する。
 
-このスキルは、**VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる vscode モード
-（Chrome / Chromium で描画）を使う。Desktop レンダラー、`raw`・`desktop` モード、フォント指定、
-`--no-render` など、ここに無い機能が必要なときは `drawio-png-cli skill --full` を読む。
-その場合も、ユーザーが別のレンダラー・モードを明示的に求めない限り、embed の
-`--renderer chromium --chromium-mode vscode` は変えない。
+描画は既定で **VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる（`vscode` レンダラー。Chrome / Chromium を使う）。
+ユーザーが求めない限り `--renderer` は変えない。
 
 ## 準備
 
@@ -17,38 +15,33 @@ PNG を Python などで直接いじると、圧縮形式の違いや画像と�
 
 ## 基本の流れ
 
-一時ファイルはリポジトリの外（スクラッチ領域や `mktemp -d`）に置く。作業用 XML をリポジトリに残さない。
-
 ```sh
-drawio-png-cli extract diagram.drawio.png -o "$tmp/diagram.xml"   # 全ページを非圧縮 XML で取得
+# 新しい図面: XML を書いて標準入力で渡す
+drawio-png-cli write -o diagram.drawio.png <<'EOF'
+<mxfile>…</mxfile>
+EOF
+
+# 既存の図面: 読む → 編集 → 書く（一時ファイルはリポジトリの外に置く）
+drawio-png-cli read diagram.drawio.png -o "$tmp/diagram.xml"
 # … XML を編集 …
-drawio-png-cli validate "$tmp/diagram.xml"                         # 構造を検証
-drawio-png-cli embed --renderer chromium --chromium-mode vscode \
-  -i "$tmp/diagram.xml" -o diagram.drawio.png           # 先頭ページを描画し、全ページの XML を保存
+drawio-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
 ```
 
-- **embed には常に `--renderer chromium --chromium-mode vscode` を付ける。** 省略すると、draw.io Desktop が
-  入っている環境では Desktop で描画され、VS Code 拡張と見た目が変わる。
-- **読むだけなら extract だけでよい。** `-o` を省けば stdout に出る。図面の説明を求められたら、
-  セルの `value`（ラベル）、`source`/`target`（接続）、`parent`（グループやコンテナ）、ページ名を読み取って答える。
-- **大きな画像データを読み込まない。** アイコン入りの図面では、セルの `style` に `image=data:image/...` の
-  Base64 が数千〜数万文字入ることがある。行単位の `grep` では同じ行の Base64 も出力されるので、
-  必要な属性だけを取り出して読む: `grep -oE ' (id|value|label|source|target|parent|vertex|edge)="[^"]*"' "$tmp/diagram.xml"`
-- **入力と同じパスへ embed してよい。** 一時ファイルに書いてから置き換えるので、失敗時は元のファイルが残る。
-- **embed は保存前に自動で検証する。** 検証エラーなら何も書き換えないので、XML を直して再実行する。
-- 終了コード: `0` 成功、`1` 処理・検証エラー、`2` 引数エラー。エラー内容は stderr に出る。
+- **write は保存前に参照の展開と検証を行う。** 問題があれば何も書き換えず、すべての問題をコード付きで報告する。
+  直してから再実行する。入力と同じパスへ書いてよい（一時ファイルから置き換える）。
+- **確認だけなら validate。** `drawio-png-cli validate diagram.xml` は write の描画前までを行い、何も書かない。
+- **read は登録済みのアイコン画像を `image=lib:<参照>@<指紋>` に縮める。** Base64 を読まずに編集でき、write で元の画像に戻る。
+  その値は書き換えない。ライブラリにない画像はそのまま残るので、行単位の `grep` で Base64 を読み込まないよう、
+  必要な属性だけを取り出す: `grep -oE ' (id|value|label|source|target|parent|vertex|edge|libref)="[^"]*"' "$tmp/diagram.xml"`
+- **画像を含む単体の XML が必要なら expand。** `drawio-png-cli expand diagram.drawio.png` は参照を展開した、draw.io でそのまま開ける XML を出す。
+- 終了コード: `0` 成功、`1` 入力・参照・描画・保存のエラー、`2` 引数のエラー。`--json` を付けると結果を JSON で受け取れる。
 
-## XML を編集するときの注意
+## XML を書くときの注意
 
-drawio-png-cli は図面の構造（`mxfile`/`mxGraphModel`、各ページの `root` 直下の `<mxCell id="0"/>` と
-`<mxCell id="1" parent="0"/>`）を検証するが、見た目の崩れまでは検出しない。
-
-- **必要な箇所だけ変える。** extract 結果はページ順・ページ名・未知の属性や要素を保持している。
-  関係ないセル・ページ・属性を整形し直したり削ったりしない。
-- **ID はページ内で一意にする。** 新しいセルには既存と重ならない ID を付ける。
-  接続線（`edge="1"`）の `source`/`target` は既存セルの ID を正確に参照する。
-- **既存図面のスタイルに合わせる。** 追加する図形は、近くの同種セルの `style`（色・フォント・角丸など）を真似ると図面になじむ。
-- **新規作成**では次の最小構成から始める。
+- 各ページの `root` 直下に `<mxCell id="0"/>` と `<mxCell id="1" parent="0"/>` が必要。
+- **ID はページ内で一意にする。** `parent`・`source`・`target` は同じページにあるセルの ID を正確に参照する。
+- **既存の図面は必要な箇所だけ変える。** read の結果はページ順・名前・未知の属性や要素を保持している。
+- **既存図面のスタイルに合わせる。** 追加する図形は、近くの同種セルの `style` を真似ると図面になじむ。
 
 ```xml
 <mxfile>
@@ -72,99 +65,55 @@ drawio-png-cli は図面の構造（`mxfile`/`mxGraphModel`、各ページの `r
 </mxfile>
 ```
 
-## アイコン・図形を入れる（ライブラリ）
+## アイコン・図形はライブラリの参照で書く
 
-ロゴやアイコン、AWS などの draw.io の図形は、ライブラリから探して入れる。style を推測で書かない。
-ライブラリは 2 種類あり、どちらも同じコマンド（`drawio-png-cli library search` など）でまとめて扱う。
-
-- **利用者のライブラリ**: draw.io のカスタムライブラリ（`<mxlibrary>` の XML。Simple Icons など）。
-  環境変数 `DRAWIO_PNG_LIBRARY_PATH`（ファイルやディレクトリを `PATH` と同じ区切りで指定）で決まる。ユーザーがライブラリの
-  ファイルを示した場合は、各コマンドに `--library-file <ファイル>` を付ける（このときは組み込みを使わない）。
-- **組み込みライブラリ（`drawio/*`）**: VS Code 拡張 1.9.0 と同じ draw.io 26.0.2 のサイドバーの図形
-  （AWS・Azure・Google Cloud（GCP2）・Kubernetes・UML など）。drawio-png-cli に同梱している。描画には後述の Web 資材が必要。
+AWS などの draw.io の図形、ロゴやアイコンは、style や Base64 を推測で書かず、ライブラリの**参照文字列**で書く。
 
 ```sh
-drawio-png-cli library search lambda                       # ライブラリ名・番号・タイトル・サイズ（style や画像データは出ない）
-drawio-png-cli library style drawio/aws4-compute 16        # 単一セルの図形の style を 1 行で出力（XML を書くときに写す）
-drawio-png-cli insert --library drawio/aws4-compute --index 16 -i "$tmp/diagram.xml" -o "$tmp/diagram.xml" \
-  --id fn --x 40 --y 40                         # 挿入したセルの ID を出力
-drawio-png-cli library preview lambda -o "$tmp/icons.png"  # 候補を画像で見比べる（任意）
+drawio-png-cli library search lambda               # 参照・種類・サイズ・タイトル。先頭の列が参照文字列
+#   @drawio/aws4-compute/lambda	shape	78x78	Lambda
+drawio-png-cli library show @drawio/aws4-compute/lambda   # style、展開後のセルと ID、配置例
+drawio-png-cli library preview lambda -o "$tmp/candidates.png"   # 候補を並べた画像（目で選ぶとき）
 ```
 
-- 検索語はタイトルの部分一致（大文字小文字は区別しない）。見つからなければ短い語や別名で探し直す。
-- 検索結果の 1 列目（ライブラリ名）を `--library` に、2 列目（番号）を `--index` に写す。タイトルで選ぶなら
-  `--name`（一意に決まる必要がある。複数のライブラリにあれば `--library` を付ける）。
-- 図面を XML で丸ごと書くときは、組み込みの図形は `drawio-png-cli library style` の出力を `style="…"` にそのまま写す
-  （XML の属性値としてエスケープ済みなので、`&quot;` などを戻さない）。
-  `shape=` や `resIcon=` だけを抜き出さない。幅・高さは検索結果のサイズを使う（縦横比を保てば拡大・縮小してよい）。
-- 画像のアイコン（利用者のライブラリの多く）や、カード・グループなど複数セルの図形は、style を写せない
-  （`drawio-png-cli library style` はエラーになる）。`drawio-png-cli insert` で入れる。アイコンの `style` には大きな Base64 が入るので、自分で書き写さない。
-- 組み込みには旧版の図形集（`drawio/aws3-*`・`drawio/aws3d`・`drawio/aws4b-*` など）も含まれる。ユーザーが求めない限り、
-  AWS は `drawio/aws4-*`、Azure は `drawio/azure2-*`、Google Cloud は `drawio/gcp2-*`、Kubernetes は `drawio/kubernetes` を使う。
-  同じものが利用者のライブラリにもあれば（最新の公式アイコンなど）、そちらを使ってよい。
-- 見た目で選ぶ必要があるときだけ `drawio-png-cli library preview` を使う。各図形の上に「ライブラリ #番号」とタイトルが出る（図形自身のラベルは下に出る）。
-  一度に 60 件まで。多すぎれば検索語か `--library` で絞る。組み込みの図形の描画には Web 資材が必要。
-- 挿入後のラベル付けや接続線は、出力された ID（`--id` で指定可）を使って XML を編集する。
-  `--label` でラベルも付けられるが、位置・書式はライブラリの `style` のまま（アイコンに重なることがある）。
-- 組み込みの図形のうち、アイコンの画像データを含むもの（GCP2 の製品別アイコンなど）は収録していない。
-  Google Cloud などのアイコンは利用者のライブラリから入れる。
-- アイコン（ブランドロゴ）のライセンス・商標の条件は提供元に従う。
+参照文字列は `<ライブラリ>/<エントリー>`（プロジェクトのライブラリ）か `@<スコープ>/<ライブラリ>/<エントリー>`
+（`@drawio/…` は組み込みの図形）。検索結果からそのまま写し、推測で作ったりスコープを補ったりしない。
 
-## 描画について
-
-embed は**先頭ページだけ**を画像にする。2 ページ目以降を編集しても PNG の見た目は変わらない
-（XML には全ページが保存される）。2 ページ目以降を変えたときは、そのことをユーザーに伝える。
-
-描画に失敗したときは、勝手に描画を省略したり、レンダラーやモードを変えたりしない。原因をユーザーに伝える。
-
-### AWS・Google Cloud（GCP2）などの図形
-
-`shape=mxgraph.aws4.*`・`mxgraph.gcp2.*` などの draw.io 図形集は、描画用の資材を同梱していないので、
-`Unsupported shape: ...` になる。VS Code 拡張 1.9.0 と同じ **draw.io 26.0.2**
-（コミット `96a916a337d13fc8bf622c8a67d422bd284eabe5`）の Web 資材を `DRAWIO_PNG_DRAWIO_WEB_PATH` で指定する。
-他のコミット（例: `f3abfe0f…` の 31.4.5）は使わない。VS Code 拡張と見た目が 1px ずれる。
-
-```sh
-git clone https://github.com/jgraph/drawio.git "$tmp/drawio"
-git -C "$tmp/drawio" checkout 96a916a337d13fc8bf622c8a67d422bd284eabe5
-DRAWIO_PNG_DRAWIO_WEB_PATH="$tmp/drawio/src/main/webapp" \
-  drawio-png-cli embed --renderer chromium --chromium-mode vscode -i "$tmp/diagram.xml" -o diagram.drawio.png
+```xml
+<!-- エントリーのセルごと置く。位置・ラベル・style（キー単位で上書き）・サイズを指定できる -->
+<mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+  <mxGeometry x="40" y="40" as="geometry"/>
+</mxCell>
+<!-- 画像だけを使う。style とサイズは自分で書く -->
+<mxCell id="db" value="DB" style="shape=image;image=lib:simple-icons/postgresql;aspect=fixed;" vertex="1" parent="1">
+  <mxGeometry x="200" y="40" width="48" height="48" as="geometry"/>
+</mxCell>
 ```
 
-- **`DRAWIO_PNG_DRAWIO_WEB_PATH` が既に設定されていれば、そのまま embed する。** 指定先のディレクトリは開かない
-  （`ls`・`find`・`grep`、版や git コミットの確認、図形・アイコンの有無の確認をしない）。
-  資材の確認は drawio-png-cli が行い、使えない資材ならエラーになる。図形の有無は、資材ではなく `drawio-png-cli library search` で調べる。
-- 設定されていなければ、資材の場所をユーザーに尋ねるか、了承を得て上記のとおり clone する
-  （clone は外部への通信）。ディスク上の draw.io 資材を探し回らない。
-- 「Google Cloud Platform 2026」（`mxgraph.gcp3.*`）は 26.0.2 に無く、VS Code 拡張 1.9.0 でも表示されない。使わない。
-- 画像を `data:` URL で埋め込んだ図形（Simple Icons、Google Cloud Icons など）は Web 資材なしで描ける。
+- **種類で書けるものが決まる**（`library search` の 2 列目）。`image`・`shape` は幅・高さを指定できる（片方なら縦横比を保つ）。
+  `edge` は `source`・`target` を書く。`group`・`set` は位置だけ。迷ったら `vertex`・`edge` 属性は書かない。
+- **複数セルのエントリー**は、最上位のセルがプレースホルダーの ID になり、子は `<ID>-1`、`<ID>-2`… になる。
+  最上位が複数（`set`）なら全セルが `<ID>-1`… になり、`<ID>` 自体は残らない。中のセルへ接続するときは
+  `library show <参照>` の `cells` で ID を確かめる。
+- 保存される XML には参照は残らず、普通の draw.io XML になる。
+- AWS などの `mxgraph.*` の図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要。
+  `ASSET_MISSING` になったらユーザーに用意を依頼する。
+- 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する。勝手に別の部品で代用しない。
 
-図形の探し方・入れ方は、前述の「アイコン・図形を入れる（ライブラリ）」を参照。
+## エラーへの対処
 
-### よくあるエラーと対応
-
-| エラー | 対応 |
+| コード | 行うこと |
 | --- | --- |
-| `Chromium/Chrome not found` | Chrome / Chromium の導入、または `DRAWIO_PNG_CHROME_PATH` の設定をユーザーに案内する |
-| `Unsupported shape: ...` | 図形集（AWS 等）が必要。上記の 26.0.2 の Web 資材を指定する。指定済みでも出る場合は、その図形・アイコン（`resIcon`・`grIcon` 等）が 26.0.2 に無い。資材を調べて確かめず、エラーの図形名をユーザーに伝える。図形を勝手に別の形へ置き換えない |
-| `Math and automatic layout require ...` | 数式・自動レイアウトにも `DRAWIO_PNG_DRAWIO_WEB_PATH` が必要 |
-| `external resource blocked` / 外部画像・フォントの取得エラー | 既定でネットワーク取得を禁止している。外部 URL への接続が問題ないかユーザーに確認してから `--allow-network` を付ける |
-| `draw.io opened a ... dialog` | 指定した Web 資材がエラーを出している。資材の中身は調べず、`DRAWIO_PNG_DRAWIO_WEB_PATH` の指定先と版（26.0.2 か）の確認をユーザーに依頼する |
-| `Chromium rendering timed out` | 描画が60秒以内に終わらない。資材や図面の大きさを確認する |
-| `interrupted (signal N)` | 描画中に中断された。後片付け済みで出力は変わっていない |
-| 検証エラー（`missing essential <mxCell id="0">` など） | XML を直す。`--no-validate` はデバッグ用なので使わない |
+| `REF_NOT_FOUND` | `candidates` を確認し、`library search` で正しい参照文字列を探す |
+| `REF_KIND` | `image=lib:` を画像以外に使っていないか、`vertex`・`edge` の指定が種類と合っているか確かめる |
+| `REF_OVERRIDE` | `library show` の種類を見て、許されない幅・高さ・ラベル・style の指定を外す |
+| `REF_ID_CONFLICT` | プレースホルダーの ID を変える。`set` の ID を参照していれば `<ID>-n` に直す |
+| `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す（全件まとめて報告される） |
+| `IMAGE_CHANGED` | read の後でライブラリの画像が変わった。元の画像が必要ならユーザーに相談する |
+| `RENDERER_NOT_FOUND`・`ASSET_MISSING` | Chrome や描画資材の用意をユーザーに依頼する。別の部品に置き換えない |
 
-`--allow-network` は外部への通信を許可する。既定では Chrome 自身の Google への通信も止めているが、
-`--allow-network` 時は一部残り、プロキシ環境ではプロキシ経由で外に出得る。必要なときだけ、ユーザーの了承を得て使う。
+## 完了の確認
 
-### VS Code 拡張との見た目の差
-
-同じフォント環境なら、保存時の表示倍率が 100% の VS Code 拡張 1.9.0 と同じ見た目（寸法・配置・画素）になる。
-VS Code（Windows など）と drawio-png-cli（Linux など）で OS やフォントが違うと、文字の幅が変わり、
-画素だけでなく画像の寸法や配置も変わり得る。完全な一致は保証しない。
-
-## 仕上げ
-
-- 変更後は `drawio-png-cli validate diagram.drawio.png` で書き戻した結果を確認できる。
-- 報告では、何を変えたか（追加・変更したセル、挿入したアイコン）と、描画の有無
-  （先頭ページのみ描画、`DRAWIO_PNG_DRAWIO_WEB_PATH` を使った場合はその版）を伝える。
+write が成功したら、**PNG を画像として開き**、図形・アイコンの種類、欠け・変形、ラベルの重なり、線の接続と矢印を確認する。
+2 ページ目以降を変えた場合は `--page N` で別のファイルに描いて確認する。
+ユーザーには、出力ファイル、変更した内容、見た目の確認結果を伝える。

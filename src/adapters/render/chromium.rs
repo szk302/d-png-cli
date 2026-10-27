@@ -61,7 +61,7 @@ pub fn discover() -> Result<PathBuf> {
     paths
         .into_iter()
         .find(|p| executable(p))
-        .context("Chromium/Chrome not found; set DRAWIO_PNG_CHROME_PATH or use --no-render")
+        .context("Chromium/Chrome not found; set DRAWIO_PNG_CHROME_PATH or use --metadata-only")
 }
 
 /// Standard install locations, with every Chrome candidate before any Chromium.
@@ -187,7 +187,7 @@ fn extra_args() -> Result<Vec<String>> {
 }
 
 /// Output policy within the Chromium backend; this never launches Desktop.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ChromiumMode {
     /// Native 1x screenshot, without pixel resampling
     Raw,
@@ -208,36 +208,20 @@ impl ChromiumMode {
     }
 }
 
-pub fn render(xml: &str, allow_network: bool) -> Result<Vec<u8>> {
-    render_configured(xml, allow_network, None)
-}
-
-pub(crate) fn render_configured(
+/// Renders page `page` (1-based) with the discovered browser and the
+/// environment's Chromium options.
+pub fn render_page(
     xml: &str,
+    page: usize,
     allow_network: bool,
-    explicit_mode: Option<ChromiumMode>,
+    mode: ChromiumMode,
 ) -> Result<Vec<u8>> {
-    let mode = if let Some(mode) = explicit_mode {
-        mode
-    } else if let Some(value) = env::var_os("DRAWIO_PNG_CHROMIUM_MODE") {
-        let value = value
-            .to_str()
-            .context("DRAWIO_PNG_CHROMIUM_MODE must be valid Unicode")?;
-        <ChromiumMode as clap::ValueEnum>::from_str(value, false).map_err(|_| {
-            anyhow::anyhow!("invalid DRAWIO_PNG_CHROMIUM_MODE: expected raw, desktop, or vscode")
-        })?
-    } else {
-        ChromiumMode::default()
-    };
-    render_mode(xml, allow_network, mode)
-}
-
-pub fn render_mode(xml: &str, allow_network: bool, mode: ChromiumMode) -> Result<Vec<u8>> {
     let args = extra_args()?;
     let program = discover()?;
-    render_with_mode(
+    render_with_page(
         &program,
         xml,
+        page,
         TIMEOUT,
         &args,
         env::var_os("DRAWIO_PNG_DRAWIO_WEB_PATH").map(PathBuf::from),
@@ -275,6 +259,30 @@ pub fn render_with_mode(
     allow_network: bool,
     mode: ChromiumMode,
 ) -> Result<Vec<u8>> {
+    render_with_page(
+        program,
+        xml,
+        1,
+        timeout,
+        args,
+        web_root,
+        allow_network,
+        mode,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_with_page(
+    program: &Path,
+    xml: &str,
+    page: usize,
+    timeout: Duration,
+    args: &[String],
+    web_root: Option<PathBuf>,
+    allow_network: bool,
+    mode: ChromiumMode,
+) -> Result<Vec<u8>> {
+    ensure!(page >= 1, "pages start at 1");
     // Declared first so it is dropped after the browser and its profile.
     let _interrupt = super::interrupt::Guard::new();
     ensure!(xml.len() <= MAX_BYTES, "XML exceeds 64 MiB limit");
@@ -415,8 +423,8 @@ pub fn render_with_mode(
         let window = cdp.call("Runtime.evaluate", json!({"expression":"window"}))?;
         let rendered = cdp.call("Runtime.callFunctionOn", json!({
             "objectId":window["result"]["objectId"],
-            "functionDeclaration":format!("function(xml, bundled, mode, preload) {{ {} return drawioPngRender(xml, bundled, mode, preload); }}", include_str!("../../../assets/chromium-render.js")),
-            "arguments":[{"value":xml},{"value":cdp.assets.bundled},{"value":mode.name()},{"value":cdp.assets.preload}],
+            "functionDeclaration":format!("function(xml, bundled, mode, preload, pageIndex) {{ {} return drawioPngRender(xml, bundled, mode, preload, pageIndex); }}", include_str!("../../../assets/chromium-render.js")),
+            "arguments":[{"value":xml},{"value":cdp.assets.bundled},{"value":mode.name()},{"value":cdp.assets.preload},{"value":page - 1}],
             "returnByValue":true, "awaitPromise":true
         }))?;
         ensure!(

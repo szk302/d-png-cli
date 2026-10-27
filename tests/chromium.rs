@@ -16,8 +16,9 @@ fn cli() -> assert_cmd::Command {
         "DRAWIO_PNG_CHROME_PATH",
         "CHROME_PATH",
         "DRAWIO_PNG_CHROME_ARGS",
-        "DRAWIO_PNG_CHROMIUM_MODE",
+        "DRAWIO_PNG_RENDERER",
         "DRAWIO_PNG_DRAWIO_WEB_PATH",
+        "DRAWIO_PNG_PROJECT",
     ] {
         command.env_remove(name);
     }
@@ -25,27 +26,29 @@ fn cli() -> assert_cmd::Command {
 }
 
 #[test]
-fn rendering_flags_conflict_with_no_render() {
+fn rendering_flags_conflict_with_metadata_only() {
     for flags in [
-        vec!["--renderer", "chromium"],
-        vec!["--renderer", "auto"],
+        vec!["--renderer", "vscode"],
+        vec!["--renderer", "raw"],
         vec!["--allow-network"],
-        vec!["--chromium-mode", "raw"],
     ] {
         cli()
-            .args(["embed", "--no-render", "-o", "unused.png"])
+            .args(["write", "--metadata-only", "-o", "unused.png"])
             .args(flags)
             .assert()
             .code(2);
     }
-    cli()
-        .args(["embed", "--renderer", "unknown", "-o", "unused.png"])
-        .assert()
-        .code(2);
+    // v0.1.0 names are gone.
+    for name in ["unknown", "chromium", "auto", "desktop"] {
+        cli()
+            .args(["write", "--renderer", name, "-o", "unused.png"])
+            .assert()
+            .code(2);
+    }
 }
 
 #[test]
-fn no_render_and_xml_commands_ignore_browser_environment() {
+fn metadata_only_and_xml_commands_ignore_browser_environment() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("output.png");
     let mut command = cli();
@@ -53,17 +56,17 @@ fn no_render_and_xml_commands_ignore_browser_environment() {
         .env("DRAWIO_PNG_CHROME_ARGS", "'unfinished")
         .env("DRAWIO_PNG_CHROME_PATH", "missing")
         .env("DRAWIO_PNG_DRAWIO_WEB_PATH", "missing")
-        .env("DRAWIO_PNG_CHROMIUM_MODE", "invalid")
-        .args(["embed", "--no-render", "-o"])
+        .env("DRAWIO_PNG_RENDERER", "invalid")
+        .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
         .success();
-    for command in ["extract", "validate"] {
+    for command in ["read", "expand", "validate"] {
         cli()
             .env("DRAWIO_PNG_CHROME_ARGS", "'unfinished")
             .env("DRAWIO_PNG_DRAWIO_WEB_PATH", "missing")
-            .env("DRAWIO_PNG_CHROMIUM_MODE", "invalid")
+            .env("DRAWIO_PNG_RENDERER", "invalid")
             .arg(command)
             .arg(&output)
             .assert()
@@ -76,23 +79,25 @@ fn invalid_browser_configuration_preserves_output() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("output.png");
     fs::write(&output, b"original").unwrap();
-    for (name, value) in [
-        ("DRAWIO_PNG_CHROMIUM_MODE", "unknown"),
-        ("DRAWIO_PNG_CHROMIUM_MODE", ""),
-        ("DRAWIO_PNG_CHROMIUM_MODE", "RAW"),
-        ("DRAWIO_PNG_CHROMIUM_MODE", " raw "),
-        ("DRAWIO_PNG_CHROME_PATH", "missing"),
-        ("CHROME_PATH", "missing"),
-        ("DRAWIO_PNG_CHROME_ARGS", "'unfinished"),
-        ("DRAWIO_PNG_CHROME_ARGS", "--user-data-dir=/tmp/profile"),
+    // A renderer name is a usage error; browser settings are not.
+    for (name, value, code) in [
+        ("DRAWIO_PNG_RENDERER", "unknown", 2),
+        ("DRAWIO_PNG_RENDERER", "", 2),
+        ("DRAWIO_PNG_RENDERER", "RAW", 2),
+        ("DRAWIO_PNG_RENDERER", " raw ", 2),
+        ("DRAWIO_PNG_RENDERER", "chromium", 2),
+        ("DRAWIO_PNG_CHROME_PATH", "missing", 1),
+        ("CHROME_PATH", "missing", 1),
+        ("DRAWIO_PNG_CHROME_ARGS", "'unfinished", 1),
+        ("DRAWIO_PNG_CHROME_ARGS", "--user-data-dir=/tmp/profile", 1),
     ] {
         cli()
             .env(name, value)
-            .args(["embed", "--renderer", "chromium", "-o"])
+            .args(["write", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
-            .code(1);
+            .code(code);
         assert_eq!(fs::read(&output).unwrap(), b"original");
     }
 }
@@ -129,35 +134,33 @@ fn license_texts_are_available_without_a_renderer() {
 }
 
 #[test]
-fn chromium_modes_reject_invalid_combinations_and_preserve_output() {
+fn renderers_reject_invalid_combinations_and_preserve_output() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("out.png");
     fs::write(&output, b"original").unwrap();
     cli()
-        .args(["embed", "--chromium-mode", "unknown", "-o"])
+        .args(["write", "--renderer", "unknown", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
         .code(2);
-    for mode in ["raw", "desktop", "vscode"] {
-        let result = cli()
-            .args([
-                "embed",
-                "--renderer",
-                "desktop",
-                "--chromium-mode",
-                mode,
-                "-o",
-            ])
-            .arg(&output)
-            .write_stdin(MODEL)
-            .assert()
-            .code(1)
-            .get_output()
-            .stderr
-            .clone();
-        assert!(String::from_utf8_lossy(&result).contains("--chromium-mode requires"));
-    }
+    let result = cli()
+        .env("DRAWIO_PNG_DRAWIO_PATH", "missing")
+        .args([
+            "write",
+            "--renderer",
+            "desktop-app",
+            "--allow-network",
+            "-o",
+        ])
+        .arg(&output)
+        .write_stdin(MODEL)
+        .assert()
+        .code(2)
+        .get_output()
+        .stderr
+        .clone();
+    assert!(String::from_utf8_lossy(&result).contains("--allow-network needs a Chromium renderer"));
     assert_eq!(fs::read(output).unwrap(), b"original");
 }
 
@@ -193,7 +196,7 @@ fn real_chromium_renders_first_page_and_preserves_xml() {
         .env("DRAWIO_PNG_CHROME_PATH", program)
         .env("DRAWIO_PNG_CHROME_ARGS", shell_words::join(args))
         .env("DRAWIO_PNG_DRAWIO_PATH", "invalid-but-ignored")
-        .args(["embed", "--renderer", "chromium", "-o"])
+        .args(["write", "--renderer", "vscode", "-o"])
         .arg(&output)
         .write_stdin(MIXED.replace("width=\"100\"", "width=\"300\""))
         .assert()
@@ -243,7 +246,7 @@ fn real_chromium_modes_select_distinct_outputs_and_preserve_xml() {
     for (mode, size, reference) in [
         ("raw", (103, 43), None),
         (
-            "desktop",
+            "desktop-compat",
             (104, 44),
             Some(&include_bytes!("fixtures/geometry-desktop.png")[..]),
         ),
@@ -261,17 +264,17 @@ fn real_chromium_modes_select_distinct_outputs_and_preserve_xml() {
                 .env("DRAWIO_PNG_CHROME_ARGS", shell_words::join(&args))
                 .env("DRAWIO_PNG_DRAWIO_PATH", "invalid-but-ignored")
                 .env(
-                    "DRAWIO_PNG_CHROMIUM_MODE",
+                    "DRAWIO_PNG_RENDERER",
                     if from_env {
                         mode
                     } else {
                         "invalid-but-overridden"
                     },
                 )
-                .args(["embed", "--renderer", "chromium", "-o"])
+                .args(["write", "-o"])
                 .arg(&output);
             if !from_env {
-                command.args(["--chromium-mode", mode]);
+                command.args(["--renderer", mode]);
             }
             command.write_stdin(geometry).assert().success();
             let png = fs::read(output).unwrap();
@@ -381,19 +384,12 @@ fn real_chromium_renders_embedded_stencils_in_all_modes() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("out.png");
     let original = include_bytes!("fixtures/text.drawio.png");
-    for mode in ["raw", "desktop", "vscode"] {
+    for mode in ["raw", "desktop-compat", "vscode"] {
         fs::write(&output, original).unwrap();
         let result = cli()
             .env("DRAWIO_PNG_CHROME_PATH", &program)
             .env("DRAWIO_PNG_CHROME_ARGS", shell_words::join(&args))
-            .args([
-                "embed",
-                "--renderer",
-                "chromium",
-                "--chromium-mode",
-                mode,
-                "-o",
-            ])
+            .args(["write", "--renderer", mode, "-o"])
             .arg(&output)
             .write_stdin(missing.as_str())
             .assert()
@@ -668,7 +664,9 @@ mxCellRenderer.registerShape('mxgraph.aws4.resourceIcon', DipIcon);"#,
 fn real_chromium_previews_a_custom_library_without_web_assets() {
     let (program, args) = browser();
     let dir = tempfile::tempdir().unwrap();
-    let library = dir.path().join("icons.xml");
+    let libraries = dir.path().join(".drawio-png/libraries");
+    fs::create_dir_all(&libraries).unwrap();
+    let library = libraries.join("icons.xml");
     // A red 1x1 PNG, as libraries such as Simple Icons embed their icons.
     fs::write(
         &library,
@@ -679,9 +677,8 @@ fn real_chromium_previews_a_custom_library_without_web_assets() {
     cli()
         .env("DRAWIO_PNG_CHROME_PATH", program)
         .env("DRAWIO_PNG_CHROME_ARGS", shell_words::join(args))
-        .args(["library", "preview", "dot", "--library-file"])
-        .arg(&library)
-        .arg("-o")
+        .current_dir(dir.path())
+        .args(["library", "preview", "dot", "--library", "icons", "-o"])
         .arg(&output)
         .assert()
         .success();
@@ -793,7 +790,7 @@ fn real_chromium_without_network_ignores_inherited_proxies() {
         command.env(name, &proxy);
     }
     command
-        .args(["embed", "--renderer", "chromium", "-o"])
+        .args(["write", "-o"])
         .arg(dir.path().join("out.png"))
         .write_stdin(MODEL)
         .assert()
@@ -891,7 +888,7 @@ mod unix {
         path
     }
     #[test]
-    fn explicit_browser_path_takes_precedence_and_desktop_does_not_fall_back() {
+    fn explicit_browser_path_takes_precedence_and_renderers_never_fall_back() {
         let dir = tempfile::tempdir().unwrap();
         let path = script(dir.path(), "chrome", "echo browser-selected >&2; exit 4");
         let output = dir.path().join("out.png");
@@ -899,7 +896,7 @@ mod unix {
         let result = cli()
             .env("DRAWIO_PNG_CHROME_PATH", &path)
             .env("CHROME_PATH", "missing")
-            .args(["embed", "--renderer", "chromium", "-o"])
+            .args(["write", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
@@ -909,12 +906,12 @@ mod unix {
             .clone();
         assert!(String::from_utf8_lossy(&result).contains("browser-selected"));
         let desktop = script(dir.path(), "desktop", "echo desktop-selected >&2; exit 4");
+        // desktop-app runs Desktop only and ignores the browser settings.
         let result = cli()
             .env("DRAWIO_PNG_CHROME_PATH", &path)
             .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
             .env("DRAWIO_PNG_CHROME_ARGS", "'unfinished")
-            .env("DRAWIO_PNG_CHROMIUM_MODE", "invalid")
-            .args(["embed", "-o"])
+            .args(["write", "--renderer", "desktop-app", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
@@ -924,10 +921,11 @@ mod unix {
             .clone();
         assert!(String::from_utf8_lossy(&result).contains("desktop-selected"));
         assert!(!String::from_utf8_lossy(&result).contains("browser-selected"));
+        // The default renderer is Chromium even when Desktop is installed.
         let result = cli()
             .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
             .env("DRAWIO_PNG_CHROME_PATH", &path)
-            .args(["embed", "--chromium-mode", "raw", "-o"])
+            .args(["write", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
@@ -936,9 +934,8 @@ mod unix {
             .stderr
             .clone();
         let error = String::from_utf8_lossy(&result);
-        assert!(error.contains("Desktop was selected"));
+        assert!(error.contains("browser-selected"));
         assert!(!error.contains("desktop-selected"));
-        assert!(!error.contains("browser-selected"));
         assert_eq!(fs::read(&output).unwrap(), b"original");
     }
 
@@ -954,7 +951,7 @@ mod unix {
         let selected = || {
             let result = cli()
                 .env("PATH", &path)
-                .args(["embed", "--renderer", "chromium", "-o"])
+                .args(["write", "-o"])
                 .arg(&output)
                 .write_stdin(MODEL)
                 .assert()
@@ -981,9 +978,7 @@ mod unix {
         );
         let rules = |network: bool| {
             let mut command = cli();
-            command
-                .env("DRAWIO_PNG_CHROME_PATH", &path)
-                .args(["embed", "--renderer", "chromium"]);
+            command.env("DRAWIO_PNG_CHROME_PATH", &path).args(["write"]);
             if network {
                 command.arg("--allow-network");
             }
@@ -1041,7 +1036,7 @@ exit 7
                 "--label='日本語 space' '--literal=$(touch injected)'",
             )
             .current_dir(dir.path())
-            .args(["embed", "--renderer", "chromium", "-o"])
+            .args(["write", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
@@ -1055,7 +1050,7 @@ exit 7
         cli()
             .env("DRAWIO_PNG_CHROME_PATH", &path)
             .env("DRAWIO_PNG_CHROME_ARGS", "'unfinished")
-            .args(["embed", "--renderer", "chromium", "-o"])
+            .args(["write", "-o"])
             .arg(&output)
             .write_stdin(MODEL)
             .assert()
@@ -1106,9 +1101,9 @@ wait
             let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_drawio-png-cli"))
                 .env("DRAWIO_PNG_CHROME_PATH", &path)
                 .env_remove("DRAWIO_PNG_CHROME_ARGS")
-                .env_remove("DRAWIO_PNG_CHROMIUM_MODE")
+                .env_remove("DRAWIO_PNG_RENDERER")
                 .env_remove("DRAWIO_PNG_DRAWIO_WEB_PATH")
-                .args(["embed", "--renderer", "chromium", "-i"])
+                .arg("write")
                 .arg(dir.path().join("in.xml"))
                 .arg("-o")
                 .arg(&output)
@@ -1157,7 +1152,7 @@ wait
         for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
             fs::write(&output, b"original").unwrap();
             let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_drawio-png-cli"))
-                .args(["embed", "--no-render", "-o"])
+                .args(["write", "--metadata-only", "-o"])
                 .arg(&output)
                 .stdin(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
@@ -1199,9 +1194,9 @@ wait
         command
             .env("DRAWIO_PNG_CHROME_PATH", &path)
             .env_remove("DRAWIO_PNG_CHROME_ARGS")
-            .env_remove("DRAWIO_PNG_CHROMIUM_MODE")
+            .env_remove("DRAWIO_PNG_RENDERER")
             .env_remove("DRAWIO_PNG_DRAWIO_WEB_PATH")
-            .args(["embed", "--renderer", "chromium", "-i"])
+            .arg("write")
             .arg(dir.path().join("in.xml"))
             .arg("-o")
             .arg(dir.path().join("out.png"))

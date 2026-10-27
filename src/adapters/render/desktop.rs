@@ -18,7 +18,7 @@ pub fn discover() -> Result<PathBuf> {
         .context("draw.io Desktop not found; install it or set DRAWIO_PNG_DRAWIO_PATH")
 }
 
-pub(crate) fn discover_optional() -> Result<Option<PathBuf>> {
+fn discover_optional() -> Result<Option<PathBuf>> {
     if let Some(path) = env::var_os("DRAWIO_PNG_DRAWIO_PATH") {
         let path = PathBuf::from(path);
         ensure!(
@@ -75,7 +75,7 @@ pub(crate) fn discover_optional() -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
-pub(crate) fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
+fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
@@ -85,19 +85,22 @@ pub(crate) fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
     shell_words::split(text).context("invalid DRAWIO_PNG_DRAWIO_ARGS: check quotes and escapes")
 }
 
-pub fn render(xml: &str) -> Result<Vec<u8>> {
+/// Renders page `page` (1-based) with the discovered Desktop and the
+/// environment's Desktop options.
+pub fn render_page(xml: &str, page: usize) -> Result<Vec<u8>> {
     let args = parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
-    render_with_args(&discover()?, xml, TIMEOUT, &args)
+    render_with_args(&discover()?, xml, page, TIMEOUT, &args)
 }
 
 /// Kept independent of discovery so renderer failures can be tested without Desktop.
 pub fn render_with(program: &Path, xml: &str, timeout: Duration) -> Result<Vec<u8>> {
-    render_with_args(program, xml, timeout, &[])
+    render_with_args(program, xml, 1, timeout, &[])
 }
 
-pub(crate) fn render_with_args(
+fn render_with_args(
     program: &Path,
     xml: &str,
+    page: usize,
     timeout: Duration,
     args: &[String],
 ) -> Result<Vec<u8>> {
@@ -123,7 +126,7 @@ pub(crate) fn render_with_args(
             OsStr::new("--format"),
             OsStr::new("png"),
             OsStr::new("--page-index"),
-            OsStr::new("1"),
+            OsStr::new(&page.to_string()),
             OsStr::new("--output"),
         ])
         .arg(&output)

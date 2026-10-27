@@ -38,3 +38,34 @@ pub fn inflate(bytes: &[u8], zlib: bool) -> Result<Vec<u8>> {
         );
     }
 }
+
+/// Escapes text for a double-quoted XML attribute, keeping line breaks and tabs.
+pub fn attribute(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\n', "&#xa;")
+        .replace('\r', "&#xd;")
+        .replace('\t', "&#x9;")
+}
+
+/// Escapes XML element text.
+pub fn text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// A coordinate or size as draw.io writes it: integral values without a
+/// fraction, others rounded to 3 decimals.
+pub fn number(value: f64) -> String {
+    let rounded = (value * 1000.0).round() / 1000.0;
+    if rounded == rounded.trunc() {
+        format!("{}", rounded as i64)
+    } else {
+        format!("{rounded}")
+    }
+}

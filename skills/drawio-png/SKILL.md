@@ -1,6 +1,6 @@
 ---
 name: drawio-png
-description: drawio-png-cli で `.drawio.png` に埋め込まれた draw.io 図面を読み取り・編集・新規作成する手順。VS Code の draw.io 拡張で保存したのと同じ見た目の PNG を作る。`.drawio.png` の中身（ノード・接続・ページ）を説明する、図形やラベルを追加・変更・削除する、アイコン（Simple Icons などの draw.io カスタムライブラリ）を図に入れる、XML から VS Code で開ける PNG を作る、図面を検証する、といった依頼では必ずこのスキルを使うこと。ユーザーが CLI の名前を言わなくても、`.drawio.png` や draw.io の PNG 図面を扱う依頼なら該当する。PNG のバイト列を自前のスクリプトで解析・書き換えしないこと。
+description: drawio-png-cli で `.drawio.png` に埋め込まれた draw.io 図面を読み取り・編集・新規作成する手順。VS Code の draw.io 拡張で保存したのと同じ見た目の PNG を作る。`.drawio.png` の中身（ノード・接続・ページ）を説明する、図形やラベルを追加・変更・削除する、アイコンや AWS などの図形をライブラリの参照で図に入れる、XML から VS Code で開ける PNG を作る、図面を検証する、といった依頼では必ずこのスキルを使うこと。ユーザーが CLI の名前を言わなくても、`.drawio.png` や draw.io の PNG 図面を扱う依頼なら該当する。PNG のバイト列を自前のスクリプトで解析・書き換えしないこと。
 ---
 
 # drawio-png
@@ -12,8 +12,7 @@ description: drawio-png-cli で `.drawio.png` に埋め込まれた draw.io 図�
 このファイルは案内用で、使い方の本文ではない。`drawio-png-cli` のコマンドを実行する前に、本文を CLI から読み込む。
 
 ```sh
-drawio-png-cli skill          # 基本の手順（VS Code 拡張と同じ見た目で描く vscode モード）。ここから始める
-drawio-png-cli skill --full   # Desktop レンダラー、raw・desktop モード、フォント指定、--no-render などを含む全機能
+drawio-png-cli skill   # XML を書いて write に渡す手順、ライブラリの参照、既存の PNG の read → 編集 → write
 ```
 
 本文はインストールされている drawio-png-cli に同梱されていて、常にその版のコマンドと一致する。

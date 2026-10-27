@@ -126,8 +126,8 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
     let output = dir.path().join("diagram.png");
     cargo_bin_cmd!("drawio-png-cli")
         .args([
-            "embed",
-            "--no-render",
+            "write",
+            "--metadata-only",
             "--default-font",
             "Noto Sans CJK JP",
             "--fallback-font",
@@ -146,9 +146,15 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         vec!["--default-font", ""],
         vec!["--default-font", "A;B"],
         vec!["--default-font", "Noto Sans CJK JP", "--no-validate"],
+        vec![
+            "--default-font",
+            "Noto Sans CJK JP",
+            "--renderer",
+            "unknown",
+        ],
     ] {
         cargo_bin_cmd!("drawio-png-cli")
-            .args(["embed", "--no-render", "-o"])
+            .args(["write", "--metadata-only", "-o"])
             .arg(&output)
             .args(args)
             .write_stdin(MODEL)
@@ -162,7 +168,7 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
     );
     cargo_bin_cmd!("drawio-png-cli")
         .args([
-            "embed",
+            "write",
             "--default-font",
             "Noto Sans CJK JP",
             "--fallback-font",
@@ -215,7 +221,7 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
     );
     let dir = tempfile::tempdir().unwrap();
     let mut saved_xml = Vec::new();
-    for renderer in ["desktop", "chromium"] {
+    for renderer in ["desktop-app", "vscode"] {
         let mut images = Vec::new();
         for (name, input, options) in [
             ("reference", reference.as_str(), vec![]),
@@ -245,8 +251,8 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
                     std::env::var("DRAWIO_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
                 )
                 .env_remove("DRAWIO_PNG_DRAWIO_WEB_PATH")
-                .env_remove("DRAWIO_PNG_CHROMIUM_MODE")
-                .args(["embed", "--renderer", renderer, "-o"])
+                .env_remove("DRAWIO_PNG_RENDERER")
+                .args(["write", "--renderer", renderer, "-o"])
                 .arg(&output)
                 .args(options)
                 .write_stdin(input)

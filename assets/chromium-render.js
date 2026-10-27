@@ -1,5 +1,5 @@
 // Called with JSON arguments through CDP, never XML interpolated as source code.
-async function drawioPngRender(xml, bundled, mode, preload) {
+async function drawioPngRender(xml, bundled, mode, preload, pageIndex) {
     if (bundled) mxStencilRegistry.dynamicLoading = false;
     // Load the shape bundles the VS Code extension includes, in its order.
     for (const src of preload) {
@@ -25,9 +25,13 @@ async function drawioPngRender(xml, bundled, mode, preload) {
     }
     const doc = mxUtils.parseXml(xml);
     if (doc.getElementsByTagName('parsererror').length) throw Error('Invalid XML');
+    // pageIndex is 0-based; a bare mxGraphModel is page 0.
     const model = doc.documentElement.nodeName === 'mxGraphModel'
-        ? doc.documentElement : doc.querySelector('diagram > mxGraphModel');
-    if (!model) throw Error('Expected an uncompressed mxGraphModel');
+        ? (pageIndex === 0 ? doc.documentElement : null)
+        : Array.from(doc.documentElement.children)
+            .filter(n => n.nodeName === 'diagram')
+            .map(d => Array.from(d.children).find(n => n.nodeName === 'mxGraphModel'))[pageIndex];
+    if (!model) throw Error('Expected an uncompressed mxGraphModel on page ' + (pageIndex + 1));
     if (bundled && (model.getAttribute('math') === '1' ||
         model.querySelector('[layout]') || model.hasAttribute('layout'))) {
         throw Error('Math and automatic layout require local draw.io assets (DRAWIO_PNG_DRAWIO_WEB_PATH)');
@@ -134,7 +138,7 @@ async function drawioPngRender(xml, bundled, mode, preload) {
         return original.apply(this, arguments);
     };
     if (mode !== 'vscode') {
-        render({xml, format: 'png', from: 0, to: 0, scale: 1, border: 0, theme: 'light'});
+        render({xml, format: 'png', from: pageIndex, to: pageIndex, scale: 1, border: 0, theme: 'light'});
         return;
     }
     const file = doc.documentElement;
@@ -156,14 +160,14 @@ async function drawioPngRender(xml, bundled, mode, preload) {
     graph.getGlobalVariable = function(name) {
         // The extension wraps a bare mxGraphModel in a new page named Page-1 (English UI).
         if (name === 'page') return page.nodeName === 'diagram' ? page.getAttribute('name') : 'Page-1';
-        if (name === 'pagenumber') return 1;
+        if (name === 'pagenumber') return pageIndex + 1;
         // EditorUi normally supplies this; count pages before the first is separated.
         if (name === 'pagecount') return file.nodeName === 'mxfile'
             ? Array.from(file.children).filter(n => n.nodeName === 'diagram').length : 1;
         return getGlobalVariable.apply(this, arguments);
     };
     // mxCodec resolves IDs through the owner document. Separate the page so
-    // identical cell IDs on later pages cannot affect the first page's graph.
+    // identical cell IDs on other pages cannot affect this page's graph.
     editor.setGraphXml(mxUtils.parseXml(mxUtils.getXml(model)).documentElement);
     await document.fonts.ready;
     graph.refresh();

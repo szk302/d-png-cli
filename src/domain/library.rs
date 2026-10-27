@@ -1,24 +1,126 @@
-//! draw.io custom libraries (`<mxlibrary>` files): list their entries and add
-//! one to a diagram without exposing its payload, such as an embedded image.
+//! draw.io custom libraries (`<mxlibrary>`): their entries, the IDs that
+//! references use, and the kinds of entry that decide what a reference may
+//! override (spec 9.2, 9.4).
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use roxmltree::{Document, Node};
-use std::collections::{HashMap, HashSet};
+use roxmltree::Node;
+use std::{collections::HashSet, fmt};
 
-use crate::domain::{codec::inflate, diagram};
+use crate::domain::{
+    codec::{self, inflate},
+    diagram,
+    reference::{EntryId, LibraryName},
+};
+
+/// Where a library comes from (spec 9.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// Registered into the project with `library add`; no scope.
+    Project,
+    /// Installed from the source of its scope.
+    Installed,
+    /// Bundled with drawio-png-cli, scope `@drawio`.
+    Builtin,
+}
+
+impl Origin {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Origin::Project => "project",
+            Origin::Installed => "installed",
+            Origin::Builtin => "builtin",
+        }
+    }
+}
+
+impl LibraryName {
+    /// The origin a name belongs to: unscoped names are the project's,
+    /// `@drawio` is built in, other scopes are installed.
+    pub fn origin(&self) -> Origin {
+        match self.scope() {
+            None => Origin::Project,
+            Some(_) if self.is_builtin() => Origin::Builtin,
+            Some(_) => Origin::Installed,
+        }
+    }
+}
+
+/// What an entry is, which decides how a reference may use it (spec 9.4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryKind {
+    /// One vertex showing embedded image data.
+    Image,
+    /// One vertex of any other kind.
+    Shape,
+    /// One top-level edge, possibly with label children.
+    Edge,
+    /// One top-level vertex with descendants.
+    Group,
+    /// Several top-level cells.
+    Set,
+    /// Data that cannot be expanded.
+    Invalid,
+}
+
+impl EntryKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EntryKind::Image => "image",
+            EntryKind::Shape => "shape",
+            EntryKind::Edge => "edge",
+            EntryKind::Group => "group",
+            EntryKind::Set => "set",
+            EntryKind::Invalid => "invalid",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "image" => EntryKind::Image,
+            "shape" => EntryKind::Shape,
+            "edge" => EntryKind::Edge,
+            "group" => EntryKind::Group,
+            "set" => EntryKind::Set,
+            "invalid" => EntryKind::Invalid,
+            _ => return None,
+        })
+    }
+
+    /// Whether a reference may set the width and height.
+    pub fn resizable(self) -> bool {
+        matches!(self, EntryKind::Image | EntryKind::Shape)
+    }
+}
+
+impl fmt::Display for EntryKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// One library entry, as the editor's sidebar shows it.
+#[derive(Clone, Debug)]
 pub struct Entry {
+    pub id: EntryId,
     pub title: String,
     pub width: f64,
     pub height: f64,
     content: Content,
 }
 
+#[derive(Clone, Debug)]
+enum Content {
+    /// An `mxGraphModel`, possibly compressed as draw.io stores it.
+    Model(String),
+    /// An image data URI or URL.
+    Image { data: String, aspect: bool },
+}
+
 impl Entry {
     /// An entry holding an uncompressed `mxGraphModel`.
-    pub fn model(title: String, width: f64, height: f64, xml: String) -> Self {
+    pub fn model(id: EntryId, title: String, width: f64, height: f64, xml: String) -> Self {
         Entry {
+            id,
             title,
             width,
             height,
@@ -26,14 +128,119 @@ impl Entry {
         }
     }
 
-    /// Whether the entry is a single vertex, which `insert` can resize, and the
+    /// The entry as an uncompressed `mxGraphModel`. A `data` entry becomes
+    /// the image cell draw.io's sidebar adds for it.
+    pub fn graph_model(&self) -> Result<String> {
+        match &self.content {
+            Content::Model(xml) if xml.trim_start().starts_with('<') => Ok(xml.clone()),
+            Content::Model(xml) => {
+                let bytes = STANDARD
+                    .decode(xml.trim())
+                    .context("invalid library entry Base64")?;
+                let inflated =
+                    inflate(&bytes, false).context("invalid compressed library entry")?;
+                diagram::percent_decode(diagram::utf8(&inflated)?)
+            }
+            Content::Image { aspect, .. } => {
+                let data = self.data_image().expect("image content");
+                let aspect = if *aspect { "aspect=fixed;" } else { "" };
+                Ok(format!(
+                    r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;{aspect}image={}" vertex="1" parent="1"><mxGeometry width="{}" height="{}" as="geometry"/></mxCell></root></mxGraphModel>"#,
+                    codec::attribute(&data?),
+                    codec::number(self.width),
+                    codec::number(self.height)
+                ))
+            }
+        }
+    }
+
+    /// The image value of a `data` entry as draw.io's sidebar converts it
+    /// (`convertDataUri`): a style value cannot contain ';', so the text from
+    /// the first ';' to the next ',' goes. `None` for model entries.
+    fn data_image(&self) -> Option<Result<String>> {
+        let Content::Image { data, .. } = &self.content else {
+            return None;
+        };
+        Some((|| {
+            let converted = if data.starts_with("data:") {
+                match (data.find(';'), data.find(',')) {
+                    (Some(semicolon), Some(comma)) if semicolon < comma => {
+                        format!("{}{}", &data[..semicolon], &data[comma..])
+                    }
+                    _ => data.clone(),
+                }
+            } else {
+                data.clone()
+            };
+            // Libraries may also link images; rendering those needs --allow-network.
+            let source = converted.starts_with("data:image/")
+                || converted.starts_with("https://")
+                || converted.starts_with("http://");
+            ensure!(
+                source && !converted.contains(';'),
+                "unsupported library image data"
+            );
+            Ok(converted)
+        })())
+    }
+
+    /// The kind of the entry; `Invalid` when its data cannot be read.
+    pub fn kind(&self) -> EntryKind {
+        self.try_kind().unwrap_or(EntryKind::Invalid)
+    }
+
+    fn try_kind(&self) -> Result<EntryKind> {
+        if let Some(data) = self.data_image() {
+            let data = data?;
+            return Ok(if data.starts_with("data:") {
+                EntryKind::Image
+            } else {
+                EntryKind::Shape
+            });
+        }
+        let model = self.graph_model()?;
+        let source = diagram::parse(&model).context("invalid library entry")?;
+        let cells = Cells::of(source.root_element())?;
+        let top = cells.top();
+        Ok(match top.as_slice() {
+            [] => bail!("library entry has no cells"),
+            [_, _, ..] => EntryKind::Set,
+            [cell] if inner(*cell).attribute("edge") == Some("1") => EntryKind::Edge,
+            [_] if cells.content.len() > 1 => EntryKind::Group,
+            [cell] => {
+                let style = inner(*cell).attribute("style").unwrap_or("");
+                if style_value(style, "image").is_some_and(|v| v.starts_with("data:")) {
+                    EntryKind::Image
+                } else {
+                    EntryKind::Shape
+                }
+            }
+        })
+    }
+
+    /// The image value an `image` entry shows: the `image` style value of its
+    /// cell, or the converted data URI of a `data` entry.
+    pub fn image(&self) -> Result<Option<String>> {
+        if let Some(data) = self.data_image() {
+            let data = data?;
+            return Ok(data.starts_with("data:").then_some(data));
+        }
+        if self.kind() != EntryKind::Image {
+            return Ok(None);
+        }
+        Ok(self
+            .cell_style()?
+            .and_then(|style| style_value(&style, "image").map(str::to_owned)))
+    }
+
+    /// Whether the entry is a single vertex that a preview can shrink, and the
     /// size of its top-level cells' bounding box (vertices and edge points, as
-    /// `insert` aligns them), never less than the declared size of a multi-cell entry.
+    /// references align them), never less than the declared size of a multi-cell entry.
     pub fn extent(&self) -> Result<(bool, f64, f64)> {
         if matches!(self.content, Content::Image { .. }) {
             return Ok((true, self.width, self.height));
         }
-        let model = entry_model(self)?;
+        let model = self.graph_model()?;
         let source = diagram::parse(&model).context("invalid library entry")?;
         let cells = Cells::of(source.root_element())?;
         let (mut left, mut top) = (f64::INFINITY, f64::INFINITY);
@@ -45,7 +252,7 @@ impl Entry {
             bottom = bottom.max(y + height);
         };
         let mut vertices = 0;
-        for &cell in cells.content.iter().filter(|c| cells.is_top(**c)) {
+        for cell in cells.top() {
             let Some(geometry) = geometry(cell) else {
                 continue;
             };
@@ -73,19 +280,13 @@ impl Entry {
         })
     }
 
-    /// The style of an entry made of one cell, to copy into hand-written XML;
-    /// `None` for multi-cell entries and images, whose data belongs in `insert`.
-    pub fn style(&self) -> Result<Option<String>> {
-        Ok(self.cell_style()?.filter(|style| !style.contains("data:")))
-    }
-
     /// The style of an entry made of one cell, image data included; `None`
-    /// for multi-cell entries and images.
+    /// for multi-cell entries and `data` entries.
     pub fn cell_style(&self) -> Result<Option<String>> {
         if matches!(self.content, Content::Image { .. }) {
             return Ok(None);
         }
-        let model = entry_model(self)?;
+        let model = self.graph_model()?;
         let source = diagram::parse(&model).context("invalid library entry")?;
         let cells = Cells::of(source.root_element())?;
         Ok(match cells.content.as_slice() {
@@ -95,20 +296,128 @@ impl Entry {
     }
 }
 
-enum Content {
-    /// An `mxGraphModel`, possibly compressed as draw.io stores it.
-    Model(String),
-    /// An image data URI or URL.
-    Image { data: String, aspect: bool },
+/// One cell an expansion creates, as `library show` lists it. IDs are
+/// patterns: `<ID>` is the placeholder's ID.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CellInfo {
+    pub id: String,
+    pub edge: bool,
+    pub label: String,
+    pub parent: Option<String>,
 }
 
-/// Parses an `<mxlibrary>` file.
-pub fn parse(bytes: &[u8]) -> Result<Vec<Entry>> {
-    Ok(parse_library(bytes)?.1)
+/// What `library show` tells about an entry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Description {
+    /// The label of the single top-level cell.
+    pub label: Option<String>,
+    /// The style of the single top-level cell.
+    pub style: Option<String>,
+    /// The custom data on the wrapper of the single top-level cell.
+    pub data: Vec<(String, String)>,
+    pub cells: Vec<CellInfo>,
 }
 
-/// Parses an `<mxlibrary>` file into its optional title and its entries.
-pub fn parse_library(bytes: &[u8]) -> Result<(Option<String>, Vec<Entry>)> {
+/// An image value's media type and decoded size.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageInfo {
+    pub media_type: String,
+    pub bytes: usize,
+}
+
+impl ImageInfo {
+    /// Reads `data:<type>,<payload>`; the payload is Base64 after draw.io's
+    /// conversion, or percent-encoded text.
+    pub fn of(data: &str) -> Option<Self> {
+        let (head, payload) = data.strip_prefix("data:")?.split_once(',')?;
+        let media_type = head.split(';').next().unwrap_or("").to_owned();
+        let bytes = STANDARD
+            .decode(payload)
+            .map(|b| b.len())
+            .or_else(|_| diagram::percent_decode(payload).map(|t| t.len()))
+            .unwrap_or(payload.len());
+        Some(Self { media_type, bytes })
+    }
+}
+
+impl Entry {
+    /// The cells a reference to this entry creates, with the IDs they get.
+    pub fn describe(&self) -> Result<Description> {
+        let model = self.graph_model()?;
+        let source = diagram::parse(&model).context("invalid library entry")?;
+        let cells = Cells::of(source.root_element())?;
+        let top = cells.top();
+        let set = top.len() > 1;
+        let mut ids = std::collections::HashMap::new();
+        let mut next = 1;
+        for cell in &cells.content {
+            let id = if !set && *cell == top[0] {
+                "<ID>".to_owned()
+            } else {
+                next += 1;
+                format!("<ID>-{}", next - 1)
+            };
+            ids.insert(cells.id(*cell), id);
+        }
+        let label_of = |cell: Node<'_, '_>| {
+            if cell.has_tag_name("mxCell") {
+                cell.attribute("value")
+            } else {
+                cell.attribute("label")
+            }
+            .unwrap_or("")
+            .to_owned()
+        };
+        let infos = cells
+            .content
+            .iter()
+            .map(|cell| CellInfo {
+                id: ids[&cells.id(*cell)].clone(),
+                edge: inner(*cell).attribute("edge") == Some("1"),
+                label: label_of(*cell),
+                parent: inner(*cell)
+                    .attribute("parent")
+                    .and_then(|p| ids.get(p))
+                    .cloned(),
+            })
+            .collect();
+        let single = (!set).then(|| top[0]);
+        Ok(Description {
+            label: single.map(label_of),
+            style: single.map(|c| inner(c).attribute("style").unwrap_or("").to_owned()),
+            data: single
+                .filter(|c| !c.has_tag_name("mxCell"))
+                .map(|c| {
+                    c.attributes()
+                        .filter(|a| a.name() != "id" && a.name() != "label")
+                        .map(|a| (a.name().to_owned(), a.value().to_owned()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            cells: infos,
+        })
+    }
+}
+
+/// A library: its name, the optional `<mxlibrary title>` that draw.io shows,
+/// and its entries.
+#[derive(Clone, Debug)]
+pub struct Library {
+    pub name: LibraryName,
+    pub title: Option<String>,
+    pub entries: Vec<Entry>,
+}
+
+impl Library {
+    pub fn entry(&self, id: &EntryId) -> Option<&Entry> {
+        self.entries.iter().find(|e| &e.id == id)
+    }
+}
+
+/// Reads an `<mxlibrary>` file in any form draw.io writes (JSON as text,
+/// CDATA or entity-escaped; compressed or plain models). Entries keep a valid,
+/// unused `id` field; the others get IDs derived from their titles.
+pub fn parse(name: LibraryName, bytes: &[u8]) -> Result<Library> {
     let text = diagram::utf8(bytes)?;
     let doc = diagram::parse(text)?;
     let root = doc.root_element();
@@ -124,239 +433,70 @@ pub fn parse_library(bytes: &[u8]) -> Result<(Option<String>, Vec<Entry>)> {
     let json: String = root.children().filter_map(|n| n.text()).collect();
     let items: Vec<serde_json::Value> =
         serde_json::from_str(json.trim()).context("invalid library JSON")?;
-    let entries = items
+    let mut used = HashSet::new();
+    let explicit: Vec<Option<EntryId>> = items
         .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let number = |key: &str| item[key].as_f64().unwrap_or(0.0);
-            let content = if let Some(xml) = item["xml"].as_str() {
-                Content::Model(xml.to_owned())
-            } else if let Some(data) = item["data"].as_str() {
-                Content::Image {
-                    data: data.to_owned(),
-                    aspect: item["aspect"].as_str() != Some("variable"),
-                }
-            } else {
-                bail!("library entry {} has neither xml nor data", index + 1);
-            };
-            Ok(Entry {
-                title: item["title"].as_str().unwrap_or("").to_owned(),
-                width: number("w"),
-                height: number("h"),
-                content,
-            })
+        .map(|item| {
+            item["id"]
+                .as_str()
+                .filter(|id| EntryId::is_valid(id) && used.insert(id.to_string()))
+                .map(|id| EntryId::parse(id).expect("valid ID"))
         })
-        .collect::<Result<_>>()?;
-    Ok((title, entries))
-}
-
-/// A library: its name, the optional `<mxlibrary title>` that draw.io shows,
-/// and its entries.
-pub struct Library {
-    pub name: String,
-    pub title: Option<String>,
-    pub entries: Vec<Entry>,
-}
-
-/// Selects an entry by exact title, then by a unique case-insensitive title,
-/// across the given libraries.
-pub fn find<'a>(libraries: &'a [Library], name: &str) -> Result<(&'a Library, &'a Entry)> {
-    let matching = |same: &dyn Fn(&str) -> bool| -> Vec<(&'a Library, &'a Entry)> {
-        libraries
-            .iter()
-            .flat_map(|l| l.entries.iter().map(move |e| (l, e)))
-            .filter(|(_, e)| same(&e.title))
-            .collect()
-    };
-    let exact = matching(&|title| title == name);
-    let matches = if exact.is_empty() {
-        let lower = name.to_lowercase();
-        matching(&|title| title.to_lowercase() == lower)
-    } else {
-        exact
-    };
-    let mut names: Vec<&str> = matches.iter().map(|(l, _)| l.name.as_str()).collect();
-    names.dedup();
-    match (matches.as_slice(), names.as_slice()) {
-        ([found], _) => Ok(*found),
-        ([], _) => bail!("no library entry named {name:?}; see `drawio-png-cli library search`"),
-        (_, [library]) => bail!(
-            "{} entries in library {library:?} are named {name:?}; use --index",
-            matches.len()
-        ),
-        _ => bail!(
-            "{name:?} is in libraries {}; use --library",
-            names
-                .iter()
-                .map(|n| format!("{n:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
-}
-
-/// Where and how to add an entry.
-pub struct Placement<'a> {
-    /// 1-based page number.
-    pub page: usize,
-    pub x: f64,
-    pub y: f64,
-    pub width: Option<f64>,
-    pub height: Option<f64>,
-    pub id: Option<&'a str>,
-    pub label: Option<&'a str>,
-}
-
-/// Inserts `entry` into a page of `xml`. Returns the expanded document and the new
-/// cell IDs, the top-level cells first.
-pub fn insert(
-    xml: &str,
-    entry: &Entry,
-    placement: &Placement<'_>,
-) -> Result<(String, Vec<String>)> {
-    let xml = diagram::normalize(xml)?;
-    let model = entry_model(entry)?;
-    let source = diagram::parse(&model).context("invalid library entry")?;
-    let cells = Cells::of(source.root_element())?;
-    ensure!(!cells.content.is_empty(), "library entry has no cells");
-
-    let doc = diagram::parse(&xml)?;
-    let (graph_root, layer, existing) = target(&doc, placement.page)?;
-    let ids = cells.new_ids(placement.id, &existing)?;
-    let top: Vec<_> = cells
-        .content
-        .iter()
-        .filter(|c| cells.is_top(**c))
-        .copied()
         .collect();
-    let single = (top.len() == 1).then(|| top[0]);
-    ensure!(
-        placement.label.is_none() || single.is_some(),
-        "--label needs an entry with one top-level cell"
-    );
-    let resize = placement.width.is_some() || placement.height.is_some();
-    ensure!(
-        !resize || (single.is_some() && cells.content.len() == 1),
-        "--width and --height need an entry with a single cell"
-    );
-
-    let (min_x, min_y) = cells.origin(&top);
-    let edit = Edit {
-        cells: &cells,
-        ids: &ids,
-        layer: &layer,
-        dx: placement.x - min_x,
-        dy: placement.y - min_y,
-        placement,
-    };
-    let mut added = String::new();
-    for &cell in &cells.content {
-        edit.write(cell, &mut added);
+    let mut entries = Vec::with_capacity(items.len());
+    for (index, (item, id)) in items.iter().zip(explicit).enumerate() {
+        let number = |key: &str| item[key].as_f64().unwrap_or(0.0);
+        let content = if let Some(xml) = item["xml"].as_str() {
+            Content::Model(xml.to_owned())
+        } else if let Some(data) = item["data"].as_str() {
+            Content::Image {
+                data: data.to_owned(),
+                aspect: item["aspect"].as_str() != Some("variable"),
+            }
+        } else {
+            bail!("library entry {} has neither xml nor data", index + 1);
+        };
+        let title = item["title"].as_str().unwrap_or("").to_owned();
+        let id = id.unwrap_or_else(|| unique(EntryId::derive(&title), &mut used));
+        entries.push(Entry {
+            id,
+            title,
+            width: number("w"),
+            height: number("h"),
+            content,
+        });
     }
-    // The page's <root> element always ends with its closing tag.
-    let insert = graph_root.range().start
-        + xml[graph_root.range()]
-            .rfind("</")
-            .context("page <root> has no closing tag")?;
-    let mut output = xml.clone();
-    output.insert_str(insert, &added);
-    diagram::validate(&output).context("diagram is invalid after adding the entry")?;
-    let mut order: Vec<String> = top.iter().map(|c| ids[&cells.id(*c)].clone()).collect();
-    for &cell in &cells.content {
-        let id = &ids[&cells.id(cell)];
-        if !order.contains(id) {
-            order.push(id.clone());
-        }
-    }
-    Ok((output, order))
+    Ok(Library {
+        name,
+        title,
+        entries,
+    })
 }
 
-/// The entry as an uncompressed mxGraphModel.
-fn entry_model(entry: &Entry) -> Result<String> {
-    match &entry.content {
-        Content::Model(xml) if xml.trim_start().starts_with('<') => Ok(xml.clone()),
-        Content::Model(xml) => {
-            let bytes = STANDARD
-                .decode(xml.trim())
-                .context("invalid library entry Base64")?;
-            let inflated = inflate(&bytes, false).context("invalid compressed library entry")?;
-            diagram::percent_decode(diagram::utf8(&inflated)?)
-        }
-        Content::Image { data, aspect } => {
-            // A style value cannot contain ';', so draw.io drops ";base64".
-            let data = data.replacen(";base64,", ",", 1);
-            // Libraries may also link images; rendering those needs --allow-network.
-            let source = data.starts_with("data:image/")
-                || data.starts_with("https://")
-                || data.starts_with("http://");
-            ensure!(
-                source && !data.contains(';'),
-                "unsupported library image data"
-            );
-            let aspect = if *aspect { "aspect=fixed;" } else { "" };
-            Ok(format!(
-                r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;{aspect}image={}" vertex="1" parent="1"><mxGeometry width="{}" height="{}" as="geometry"/></mxCell></root></mxGraphModel>"#,
-                attribute(&data),
-                entry.width,
-                entry.height
-            ))
-        }
+/// `base`, or `base-2`, `base-3`… whichever is unused first; marks it used.
+pub fn unique(base: EntryId, used: &mut HashSet<String>) -> EntryId {
+    if used.insert(base.to_string()) {
+        return base;
     }
+    (2..)
+        .map(|n| base.numbered(n))
+        .find(|id| used.insert(id.to_string()))
+        .expect("an unused number")
 }
 
-/// Finds the page's <root>, the layer to add to, and the IDs in use.
-fn target<'a, 'i>(
-    doc: &'a Document<'i>,
-    page: usize,
-) -> Result<(Node<'a, 'i>, String, HashSet<String>)> {
-    ensure!(page >= 1, "--page starts at 1");
-    let root = doc.root_element();
-    let model = if root.has_tag_name("mxGraphModel") {
-        ensure!(page == 1, "the diagram has one page");
-        root
-    } else {
-        let pages: Vec<_> = root
-            .children()
-            .filter(|n| n.has_tag_name("diagram"))
-            .collect();
-        let diagram = pages
-            .get(page - 1)
-            .with_context(|| format!("the diagram has {} page(s)", pages.len()))?;
-        diagram
-            .children()
-            .find(|n| n.has_tag_name("mxGraphModel"))
-            .context("page has no <mxGraphModel>")?
-    };
-    let graph_root = model
-        .children()
-        .find(|n| n.has_tag_name("root"))
-        .context("page has no <root>")?;
-    let mut existing = HashSet::new();
-    let mut parents = HashMap::new();
-    let mut order = Vec::new();
-    for node in graph_root.descendants().filter(|n| is_cell(*n)) {
-        let id = node.attribute("id").unwrap_or("").to_owned();
-        parents.insert(
-            id.clone(),
-            inner(node).attribute("parent").map(str::to_owned),
-        );
-        existing.insert(id.clone());
-        order.push(id);
-    }
-    // Layers are the children of the cell without a parent; use the first.
-    let top = order
-        .iter()
-        .find(|id| parents[*id].is_none())
-        .context("page has no root cell")?;
-    let layer = order
-        .iter()
-        .find(|id| parents[*id].as_deref() == Some(top.as_str()))
-        .context("page has no layer")?
-        .clone();
-    Ok((graph_root, layer, existing))
+/// The value of `key` in a draw.io style; the last one wins, as in draw.io.
+pub fn style_value<'s>(style: &'s str, key: &str) -> Option<&'s str> {
+    style
+        .split(';')
+        .filter_map(|item| item.split_once('='))
+        .filter(|(k, _)| *k == key)
+        .map(|(_, v)| v)
+        .next_back()
 }
 
-fn is_cell(node: Node<'_, '_>) -> bool {
+/// A graph cell: an `mxCell` outside a wrapper, or an `object`/`UserObject`
+/// wrapper holding one.
+pub(crate) fn is_cell(node: Node<'_, '_>) -> bool {
     node.has_tag_name("mxCell")
         && !node
             .parent_element()
@@ -366,7 +506,7 @@ fn is_cell(node: Node<'_, '_>) -> bool {
 }
 
 /// The mxCell carrying parent/source/target: the node or its child.
-fn inner<'a, 'i>(node: Node<'a, 'i>) -> Node<'a, 'i> {
+pub(crate) fn inner<'a, 'i>(node: Node<'a, 'i>) -> Node<'a, 'i> {
     if node.has_tag_name("mxCell") {
         node
     } else {
@@ -376,14 +516,26 @@ fn inner<'a, 'i>(node: Node<'a, 'i>) -> Node<'a, 'i> {
     }
 }
 
-/// The library entry's cells, excluding its root cell and layers.
-struct Cells<'a, 'i> {
-    content: Vec<Node<'a, 'i>>,
+pub(crate) fn geometry<'a, 'i>(cell: Node<'a, 'i>) -> Option<Node<'a, 'i>> {
+    inner(cell)
+        .children()
+        .find(|n| n.has_tag_name("mxGeometry"))
+}
+
+pub(crate) fn number(node: Node<'_, '_>, name: &str) -> f64 {
+    node.attribute(name)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.0)
+}
+
+/// A library entry's cells, excluding its root cell and layers.
+pub(crate) struct Cells<'a, 'i> {
+    pub(crate) content: Vec<Node<'a, 'i>>,
     layers: HashSet<String>,
 }
 
 impl<'a, 'i> Cells<'a, 'i> {
-    fn of(model: Node<'a, 'i>) -> Result<Self> {
+    pub(crate) fn of(model: Node<'a, 'i>) -> Result<Self> {
         ensure!(
             model.has_tag_name("mxGraphModel"),
             "library entry root must be <mxGraphModel>"
@@ -417,64 +569,34 @@ impl<'a, 'i> Cells<'a, 'i> {
         Ok(Self { content, layers })
     }
 
-    fn id(&self, cell: Node<'_, '_>) -> String {
+    pub(crate) fn id(&self, cell: Node<'_, '_>) -> String {
         cell.attribute("id").unwrap_or("").to_owned()
     }
 
-    fn is_top(&self, cell: Node<'_, '_>) -> bool {
+    pub(crate) fn is_top(&self, cell: Node<'_, '_>) -> bool {
         inner(cell)
             .attribute("parent")
             .is_none_or(|p| self.layers.contains(p))
     }
 
-    /// Maps the entry's IDs to IDs unused on the target page.
-    fn new_ids(
-        &self,
-        requested: Option<&str>,
-        existing: &HashSet<String>,
-    ) -> Result<HashMap<String, String>> {
-        let mut used = existing.clone();
-        let mut ids = HashMap::new();
-        let mut next = 1;
-        let mut fresh = |prefix: &str, used: &mut HashSet<String>| loop {
-            let id = format!("{prefix}-{next}");
-            next += 1;
-            if used.insert(id.clone()) {
-                break id;
-            }
-        };
-        let top: Vec<_> = self.content.iter().filter(|c| self.is_top(**c)).collect();
-        if let Some(id) = requested {
-            ensure!(!id.is_empty(), "--id must not be empty");
-            ensure!(
-                top.len() == 1,
-                "--id needs an entry with one top-level cell"
-            );
-            ensure!(
-                used.insert(id.to_owned()),
-                "cell ID {id:?} already exists on the page"
-            );
-            ids.insert(self.id(*top[0]), id.to_owned());
-        }
-        let prefix = requested.unwrap_or("lib");
-        for cell in &self.content {
-            let key = self.id(*cell);
-            if let std::collections::hash_map::Entry::Vacant(slot) = ids.entry(key) {
-                slot.insert(fresh(prefix, &mut used));
-            }
-        }
-        Ok(ids)
+    pub(crate) fn top(&self) -> Vec<Node<'a, 'i>> {
+        self.content
+            .iter()
+            .copied()
+            .filter(|c| self.is_top(*c))
+            .collect()
     }
 
-    /// The top-left corner of the top-level cells' geometry.
-    fn origin(&self, top: &[Node<'_, '_>]) -> (f64, f64) {
+    /// The top-left corner of the top-level cells' geometry: vertex positions
+    /// and edge points.
+    pub(crate) fn origin(&self) -> (f64, f64) {
         let mut x = f64::INFINITY;
         let mut y = f64::INFINITY;
-        for cell in top {
-            let Some(geometry) = geometry(*cell) else {
+        for cell in self.top() {
+            let Some(geometry) = geometry(cell) else {
                 continue;
             };
-            let points: Vec<_> = if inner(*cell).attribute("edge") == Some("1") {
+            let points: Vec<_> = if inner(cell).attribute("edge") == Some("1") {
                 geometry
                     .descendants()
                     .filter(|n| n.has_tag_name("mxPoint") && n.attribute("as") != Some("offset"))
@@ -495,224 +617,61 @@ impl<'a, 'i> Cells<'a, 'i> {
     }
 }
 
-fn geometry<'a, 'i>(cell: Node<'a, 'i>) -> Option<Node<'a, 'i>> {
-    inner(cell)
-        .children()
-        .find(|n| n.has_tag_name("mxGeometry"))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn number(node: Node<'_, '_>, name: &str) -> f64 {
-    node.attribute(name)
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0.0)
-}
+    fn library(json: &str) -> Library {
+        let xml = format!("<mxlibrary title=\"T\">{}</mxlibrary>", codec::text(json));
+        parse(LibraryName::parse("lib").unwrap(), xml.as_bytes()).unwrap()
+    }
 
-struct Edit<'e, 'a, 'i, 'p> {
-    cells: &'e Cells<'a, 'i>,
-    ids: &'e HashMap<String, String>,
-    layer: &'e str,
-    dx: f64,
-    dy: f64,
-    placement: &'e Placement<'p>,
-}
-
-impl Edit<'_, '_, '_, '_> {
-    /// Writes a cell with new IDs and references, moved into place.
-    fn write(&self, cell: Node<'_, '_>, out: &mut String) {
-        let top = self.cells.is_top(cell);
-        let edge = inner(cell).attribute("edge") == Some("1");
-        self.element(
-            cell,
-            out,
-            &|node, name, value| {
-                let is_cell = node == cell;
-                let is_inner = node == inner(cell);
-                match name {
-                    "id" if is_cell => Some(self.ids[value].clone()),
-                    "parent" if is_inner => Some(
-                        self.ids
-                            .get(value)
-                            .cloned()
-                            .unwrap_or_else(|| self.layer.to_owned()),
-                    ),
-                    "source" | "target" if is_inner => {
-                        Some(self.ids.get(value).cloned().unwrap_or_default())
-                    }
-                    // Only the top-level cell is relabelled; a group's
-                    // children keep their own labels.
-                    "value" if top && is_cell && cell.has_tag_name("mxCell") => {
-                        self.placement.label.map(str::to_owned)
-                    }
-                    "label" if top && is_cell && !cell.has_tag_name("mxCell") => {
-                        self.placement.label.map(str::to_owned)
-                    }
-                    // Edges name the port cells they attach to in their style.
-                    "style" if is_inner => remap_ports(value, self.ids),
-                    _ => None,
-                }
-            },
-            top,
-            edge,
+    #[test]
+    fn ids_come_from_the_id_field_or_the_title() {
+        let lib = library(
+            r#"[{"id":"keep","title":"A","xml":"<mxGraphModel/>"},
+                {"title":"Keep","xml":"<mxGraphModel/>"},
+                {"id":"Bad ID","title":"Keep","xml":"<mxGraphModel/>"},
+                {"id":"keep","title":"","xml":"<mxGraphModel/>"}]"#,
         );
+        let ids: Vec<_> = lib.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["keep", "keep-2", "keep-3", "entry"]);
+        assert_eq!(lib.title.as_deref(), Some("T"));
     }
 
-    fn element(
-        &self,
-        node: Node<'_, '_>,
-        out: &mut String,
-        rename: &dyn Fn(Node<'_, '_>, &str, &str) -> Option<String>,
-        top: bool,
-        edge: bool,
-    ) {
-        let name = node.tag_name().name();
-        out.push('<');
-        out.push_str(name);
-        let geometry = name == "mxGeometry" && node.attribute("as") == Some("geometry");
-        // Edge points move with the edge; a label offset is relative.
-        let point = name == "mxPoint" && node.attribute("as") != Some("offset");
-        let mut seen = HashSet::new();
-        for attr in node.attributes() {
-            let key = attr.name();
-            seen.insert(key);
-            let mut value =
-                rename(node, key, attr.value()).unwrap_or_else(|| attr.value().to_owned());
-            if top && ((geometry && !edge) || (point && edge)) {
-                if key == "x" {
-                    value = format_number(number(node, "x") + self.dx);
-                } else if key == "y" {
-                    value = format_number(number(node, "y") + self.dy);
-                }
-            }
-            if geometry
-                && top
-                && let Some(size) = self.size(node, key)
-            {
-                value = size;
-            }
-            push_attribute(out, key, &value);
-        }
-        // Add coordinates and labels the source omitted.
-        if top && ((geometry && !edge) || (point && edge)) {
-            for (key, delta) in [("x", self.dx), ("y", self.dy)] {
-                if !seen.contains(key) && delta != 0.0 {
-                    push_attribute(out, key, &format_number(delta));
-                }
-            }
-        }
-        if let Some(label) = self.placement.label {
-            let wants = if node.has_tag_name("mxCell") {
-                "value"
-            } else {
-                "label"
-            };
-            if rename(node, wants, "").is_some() && !seen.contains(wants) {
-                push_attribute(out, wants, label);
-            }
-        }
-        let children: Vec<_> = node.children().collect();
-        if children
-            .iter()
-            .all(|c| !c.is_element() && c.text().is_none_or(|t| t.trim().is_empty()))
-        {
-            out.push_str("/>");
-            return;
-        }
-        out.push('>');
-        for child in children {
-            if child.is_element() {
-                if is_cell(child) {
-                    continue;
-                }
-                self.element(child, out, rename, top, edge);
-            } else if let Some(text) = child.text() {
-                out.push_str(&text_escape(text));
-            }
-        }
-        out.push_str("</");
-        out.push_str(name);
-        out.push('>');
-    }
-
-    /// The new width or height of a resized single cell.
-    fn size(&self, geometry: Node<'_, '_>, key: &str) -> Option<String> {
-        let (width, height) = (number(geometry, "width"), number(geometry, "height"));
-        let (w, h) = match (self.placement.width, self.placement.height) {
-            (None, None) => return None,
-            (Some(w), Some(h)) => (w, h),
-            (Some(w), None) => (
-                w,
-                if width > 0.0 {
-                    height * w / width
-                } else {
-                    height
-                },
-            ),
-            (None, Some(h)) => (
-                if height > 0.0 {
-                    width * h / height
-                } else {
-                    width
-                },
-                h,
-            ),
+    #[test]
+    fn kinds_follow_the_cells() {
+        let cell = |extra: &str| {
+            format!(
+                r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>{extra}</root></mxGraphModel>"#
+            )
         };
-        match key {
-            "width" => Some(format_number(w)),
-            "height" => Some(format_number(h)),
-            _ => None,
-        }
+        let entries = serde_json::json!([
+            {"title": "image", "xml": cell(r#"<mxCell id="2" style="shape=image;image=data:image/png,AA" vertex="1" parent="1"><mxGeometry width="4" height="4" as="geometry"/></mxCell>"#)},
+            {"title": "shape", "xml": cell(r#"<mxCell id="2" style="rounded=1;" vertex="1" parent="1"><mxGeometry width="4" height="4" as="geometry"/></mxCell>"#)},
+            {"title": "edge", "xml": cell(r#"<mxCell id="2" edge="1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>"#)},
+            {"title": "group", "xml": cell(r#"<mxCell id="2" vertex="1" parent="1"><mxGeometry as="geometry"/></mxCell><mxCell id="3" vertex="1" parent="2"><mxGeometry as="geometry"/></mxCell>"#)},
+            {"title": "set", "xml": cell(r#"<mxCell id="2" vertex="1" parent="1"/><mxCell id="3" vertex="1" parent="1"/>"#)},
+            {"title": "data", "data": "data:image/svg+xml;base64,PHN2Zy8+", "w": 8, "h": 4},
+            {"title": "linked", "data": "https://example.com/a.svg"},
+            {"title": "broken", "xml": "%%%"},
+        ]);
+        let lib = library(&entries.to_string());
+        let kinds: Vec<_> = lib.entries.iter().map(|e| e.kind().as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                "image", "shape", "edge", "group", "set", "image", "shape", "invalid"
+            ]
+        );
+        assert_eq!(
+            lib.entries[5].image().unwrap().as_deref(),
+            Some("data:image/svg+xml,PHN2Zy8+")
+        );
+        assert_eq!(
+            lib.entries[0].image().unwrap().as_deref(),
+            Some("data:image/png,AA")
+        );
+        assert_eq!(lib.entries[1].image().unwrap(), None);
     }
-}
-
-/// Rewrites `sourcePort`/`targetPort` style values that name cells of the entry.
-fn remap_ports(style: &str, ids: &HashMap<String, String>) -> Option<String> {
-    let mut changed = false;
-    let items: Vec<String> = style
-        .split(';')
-        .map(|item| {
-            if let Some((key @ ("sourcePort" | "targetPort"), port)) = item.split_once('=')
-                && let Some(id) = ids.get(port)
-            {
-                changed = true;
-                return format!("{key}={id}");
-            }
-            item.to_owned()
-        })
-        .collect();
-    changed.then(|| items.join(";"))
-}
-
-fn format_number(value: f64) -> String {
-    let rounded = (value * 1000.0).round() / 1000.0;
-    if rounded == rounded.trunc() {
-        format!("{}", rounded as i64)
-    } else {
-        format!("{rounded}")
-    }
-}
-
-fn push_attribute(out: &mut String, key: &str, value: &str) {
-    out.push(' ');
-    out.push_str(key);
-    out.push_str("=\"");
-    out.push_str(&attribute(value));
-    out.push('"');
-}
-
-fn attribute(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('\n', "&#xa;")
-        .replace('\r', "&#xd;")
-        .replace('\t', "&#x9;")
-}
-
-fn text_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }

@@ -3,7 +3,14 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use roxmltree::{Document, Node};
 use std::ops::Range;
 
-use crate::{MAX_BYTES, domain::codec::inflate};
+use crate::{
+    MAX_BYTES,
+    domain::{
+        codec::inflate,
+        diagnostic::{Code, Diagnostic},
+        drawio_png,
+    },
+};
 
 pub fn utf8(bytes: &[u8]) -> Result<&str> {
     Ok(std::str::from_utf8(bytes)
@@ -220,4 +227,54 @@ fn validate_model(model: Node<'_, '_>) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Codes an error from this module by its message: size limits, XML syntax,
+/// or the structure of the diagram.
+fn coded(code: Code, error: &anyhow::Error) -> Diagnostic {
+    let message = format!("{error:#}");
+    if message.contains("exceeds 64 MiB") {
+        Diagnostic::new(Code::LimitExceeded, message)
+    } else {
+        Diagnostic::new(code, message)
+    }
+}
+
+/// A diagram given as XML or as a `.drawio.png` (told apart by the PNG
+/// signature), with compressed pages expanded.
+pub fn decode(bytes: &[u8]) -> std::result::Result<String, Diagnostic> {
+    let xml = if bytes.starts_with(drawio_png::SIGNATURE) {
+        drawio_png::validate(bytes).map_err(|e| coded(Code::PngInvalid, &e))?;
+        drawio_png::extract(bytes).map_err(|e| coded(Code::PngNoDiagram, &e))?
+    } else {
+        utf8(bytes)
+            .map_err(|e| coded(Code::XmlSyntax, &e))?
+            .to_owned()
+    };
+    parse(&xml).map_err(|e| coded(Code::XmlSyntax, &e))?;
+    normalize(&xml).map_err(|e| coded(Code::XmlStructure, &e))
+}
+
+/// The XML stored in a `.drawio.png` as it is, or XML input unchanged.
+pub fn decode_raw(bytes: &[u8]) -> std::result::Result<String, Diagnostic> {
+    if bytes.starts_with(drawio_png::SIGNATURE) {
+        drawio_png::validate(bytes).map_err(|e| coded(Code::PngInvalid, &e))?;
+        drawio_png::extract(bytes).map_err(|e| coded(Code::PngNoDiagram, &e))
+    } else {
+        Ok(utf8(bytes)
+            .map_err(|e| coded(Code::XmlSyntax, &e))?
+            .to_owned())
+    }
+}
+
+/// The number of pages: the `<diagram>` elements, or 1 for a bare model.
+pub fn page_count(xml: &str) -> usize {
+    match parse(xml) {
+        Ok(doc) if doc.root_element().has_tag_name("mxfile") => doc
+            .root_element()
+            .children()
+            .filter(|n| n.has_tag_name("diagram"))
+            .count(),
+        _ => 1,
+    }
 }

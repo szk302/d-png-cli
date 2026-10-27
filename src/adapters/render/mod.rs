@@ -1,7 +1,12 @@
-//! Renderers: headless Chromium, which follows the VS Code extension or draw.io
-//! Desktop, and the draw.io Desktop application itself.
-use anyhow::{Result, ensure};
+//! Renderers: headless Chromium, which follows the VS Code extension or
+//! draw.io Desktop, and the draw.io Desktop application itself. They
+//! implement the `Renderer` port and code their failures (spec 2.3).
 use std::env;
+
+use crate::{
+    app::ports::Renderer,
+    domain::diagnostic::{Code, Diagnostic},
+};
 
 pub mod chromium;
 mod chromium_assets;
@@ -12,53 +17,121 @@ mod resample;
 
 pub use process::TIMEOUT;
 
-#[derive(Clone, Copy, Debug, Default, clap::ValueEnum)]
-pub enum Renderer {
+/// The `--renderer` values (spec 5.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RendererKind {
+    /// Chromium, matching the VS Code extension 1.9.0 (draw.io 26.0.2).
     #[default]
-    Auto,
-    Desktop,
-    Chromium,
+    Vscode,
+    /// Chromium, matching draw.io Desktop's 2x capture and downsampling.
+    DesktopCompat,
+    /// Chromium, the 1x capture as it is.
+    Raw,
+    /// The draw.io Desktop application.
+    DesktopApp,
 }
 
-pub fn render_selected(xml: &str, renderer: Renderer, allow_network: bool) -> Result<Vec<u8>> {
-    render_selected_with_mode(xml, renderer, allow_network, None)
-}
+impl RendererKind {
+    pub const NAMES: [&'static str; 4] = ["vscode", "desktop-compat", "raw", "desktop-app"];
 
-pub fn render_selected_with_mode(
-    xml: &str,
-    renderer: Renderer,
-    allow_network: bool,
-    chromium_mode: Option<chromium::ChromiumMode>,
-) -> Result<Vec<u8>> {
-    match renderer {
-        Renderer::Desktop => {
-            ensure!(
-                chromium_mode.is_none(),
-                "--chromium-mode requires --renderer chromium"
-            );
-            ensure!(
-                !allow_network,
-                "--allow-network requires the Chromium renderer"
-            );
-            desktop::render(xml)
-        }
-        Renderer::Chromium => chromium::render_configured(xml, allow_network, chromium_mode),
-        Renderer::Auto => {
-            if let Some(program) = desktop::discover_optional()? {
-                ensure!(
-                    chromium_mode.is_none(),
-                    "Desktop was selected; use --renderer chromium with --chromium-mode"
-                );
-                ensure!(
-                    !allow_network,
-                    "Desktop was selected; use --renderer chromium with --allow-network"
-                );
-                let args =
-                    desktop::parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
-                desktop::render_with_args(&program, xml, TIMEOUT, &args)
-            } else {
-                chromium::render_configured(xml, allow_network, chromium_mode)
-            }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RendererKind::Vscode => "vscode",
+            RendererKind::DesktopCompat => "desktop-compat",
+            RendererKind::Raw => "raw",
+            RendererKind::DesktopApp => "desktop-app",
         }
     }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "vscode" => RendererKind::Vscode,
+            "desktop-compat" => RendererKind::DesktopCompat,
+            "raw" => RendererKind::Raw,
+            "desktop-app" => RendererKind::DesktopApp,
+            _ => return None,
+        })
+    }
+
+    /// `DRAWIO_PNG_RENDERER`, if set.
+    pub fn from_env() -> Result<Option<Self>, Diagnostic> {
+        let Some(value) = env::var_os("DRAWIO_PNG_RENDERER") else {
+            return Ok(None);
+        };
+        let text = value.to_str().unwrap_or("");
+        Self::parse(text).map(Some).ok_or_else(|| {
+            Diagnostic::new(
+                Code::Usage,
+                format!(
+                    "invalid DRAWIO_PNG_RENDERER {text:?}: expected {}",
+                    Self::NAMES.join(", ")
+                ),
+            )
+        })
+    }
+
+    pub fn renderer(self) -> Box<dyn Renderer> {
+        match self {
+            RendererKind::Vscode => Box::new(ChromiumRenderer(chromium::ChromiumMode::Vscode)),
+            RendererKind::DesktopCompat => {
+                Box::new(ChromiumRenderer(chromium::ChromiumMode::Desktop))
+            }
+            RendererKind::Raw => Box::new(ChromiumRenderer(chromium::ChromiumMode::Raw)),
+            RendererKind::DesktopApp => Box::new(DesktopAppRenderer),
+        }
+    }
+}
+
+/// Headless Chromium with one of its output modes.
+pub struct ChromiumRenderer(pub chromium::ChromiumMode);
+
+impl Renderer for ChromiumRenderer {
+    fn render(&self, xml: &str, page: usize, allow_network: bool) -> Result<Vec<u8>, Diagnostic> {
+        chromium::render_page(xml, page, allow_network, self.0).map_err(|e| coded(&e))
+    }
+}
+
+/// The draw.io Desktop application's export.
+pub struct DesktopAppRenderer;
+
+impl Renderer for DesktopAppRenderer {
+    fn render(&self, xml: &str, page: usize, allow_network: bool) -> Result<Vec<u8>, Diagnostic> {
+        if allow_network {
+            return Err(Diagnostic::new(
+                Code::Usage,
+                "--allow-network needs a Chromium renderer, not desktop-app",
+            ));
+        }
+        desktop::render_page(xml, page).map_err(|e| coded(&e))
+    }
+}
+
+/// Codes a renderer failure by what went wrong.
+fn coded(error: &anyhow::Error) -> Diagnostic {
+    let message = format!("{error:#}");
+    let has = |text: &str| message.contains(text);
+    let code = if has("not found; install")
+        || has("not found; set DRAWIO_PNG_CHROME_PATH")
+        || has("is not an executable file")
+        || has("cannot start Chromium")
+        || has("cannot start draw.io Desktop")
+    {
+        Code::RendererNotFound
+    } else if has("timed out") {
+        Code::RenderTimeout
+    } else if has("external resource blocked") {
+        Code::NetworkBlocked
+    } else if has("Unsupported shape")
+        || has("require local draw.io assets")
+        || has("draw.io resource failed")
+        || has("cannot load draw.io assets")
+        || has("DRAWIO_PNG_DRAWIO_WEB_PATH")
+    {
+        Code::AssetMissing
+    } else if has("exceeds 64 MiB") {
+        Code::LimitExceeded
+    } else {
+        Code::RenderFailed
+    };
+    Diagnostic::new(code, message)
 }

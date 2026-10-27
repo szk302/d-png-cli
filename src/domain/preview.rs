@@ -1,15 +1,21 @@
 //! The page `library preview` renders: entries laid out in rows, each under a label.
 use anyhow::{Context, Result, ensure};
 
-use crate::domain::library::{self, Entry, Library, Placement};
+use crate::domain::{
+    codec,
+    expand::{self, Resolved},
+    library::Entry,
+    reference::Ref,
+};
 
 /// Most entries one preview shows; more would be too small to tell apart.
 pub const PREVIEW_LIMIT: usize = 60;
 
 /// One page laying out the given entries, each below a label naming its
-/// library, index (1-based) and title, for `drawio-png-cli library preview`. The label
-/// goes above the entry because sidebar shapes often show their own label below.
-pub fn preview(entries: &[(&Library, usize)]) -> Result<String> {
+/// reference and title, for `drawio-png-cli library preview`. The label goes
+/// above the entry because sidebar shapes often show their own label below.
+/// Entries are placed with the same expansion as references in diagrams.
+pub fn preview(entries: &[(Ref, &Entry)]) -> Result<String> {
     const ICON: f64 = 96.0;
     const SLOT: f64 = 160.0;
     const WIDTH: f64 = 960.0;
@@ -22,15 +28,15 @@ pub fn preview(entries: &[(&Library, usize)]) -> Result<String> {
         "{} entries match; narrow the query or --library to at most {PREVIEW_LIMIT}",
         entries.len()
     );
-    let mut xml = String::from(
-        r#"<mxfile><diagram name="Preview" id="preview"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>"#,
-    );
+    let mut cells = String::new();
+    let mut resolved = Resolved::default();
     let (mut x, mut y, mut row) = (0.0, 0.0, 0.0_f64);
-    for (library, index) in entries {
-        let entry = &library.entries[*index];
+    for (index, (reference, entry)) in entries.iter().enumerate() {
         // Shrink large single vertices to a common size; other entries keep
         // theirs, so their slot follows their actual extent.
-        let (single, extent_width, extent_height) = entry.extent()?;
+        let (single, extent_width, extent_height) = entry
+            .extent()
+            .with_context(|| format!("cannot place {reference}"))?;
         // draw.io turns a rotated vertex about its centre; lay out its turned bounds.
         let turn = if single {
             rotation(entry.cell_style()?.as_deref().unwrap_or("")).to_radians()
@@ -51,48 +57,39 @@ pub fn preview(entries: &[(&Library, usize)]) -> Result<String> {
         if x > 0.0 && x + slot > WIDTH {
             (x, y, row) = (0.0, y + row, 0.0);
         }
-        let placement = Placement {
-            page: 1,
-            x: x + (slot - width) / 2.0,
-            y: y + LABEL + 4.0 + (shown - height) / 2.0,
-            width: (scale < 1.0).then_some(width),
-            height: (scale < 1.0).then_some(height),
-            id: None,
-            label: None,
-        };
-        let (next, _) = library::insert(&xml, entry, &placement).with_context(|| {
+        let size = if scale < 1.0 {
             format!(
-                "cannot place {} #{} {:?}",
-                library.name,
-                index + 1,
-                entry.title
+                r#" width="{}" height="{}""#,
+                codec::number(width),
+                codec::number(height)
             )
-        })?;
-        let text = format!("{} #{}\n{}", library.name, index + 1, entry.title);
-        let label = Entry::model(
-            String::new(),
-            slot - 10.0,
-            LABEL,
-            format!(
-                r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="{}" style="text;html=0;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=10;fontColor=#333333;" vertex="1" parent="1"><mxGeometry width="{}" height="{LABEL}" as="geometry"/></mxCell></root></mxGraphModel>"#,
-                escape(&text),
-                slot - 10.0
-            ),
-        );
-        let label_at = Placement {
-            page: 1,
-            x: x + 5.0,
-            y,
-            width: None,
-            height: None,
-            id: None,
-            label: None,
+        } else {
+            String::new()
         };
-        xml = library::insert(&next, &label, &label_at)?.0;
+        cells.push_str(&format!(
+            r#"<mxCell id="entry{index}" parent="1" libref="{}"><mxGeometry x="{}" y="{}"{size} as="geometry"/></mxCell>"#,
+            codec::attribute(&reference.to_string()),
+            codec::number(x + (slot - width) / 2.0),
+            codec::number(y + LABEL + 4.0 + (shown - height) / 2.0),
+        ));
+        let text = format!("{reference}\n{}", entry.title);
+        cells.push_str(&format!(
+            r#"<mxCell id="label{index}" value="{}" style="text;html=0;align=center;verticalAlign=bottom;whiteSpace=wrap;fontSize=10;fontColor=#333333;" vertex="1" parent="1"><mxGeometry x="{}" y="{}" width="{}" height="{LABEL}" as="geometry"/></mxCell>"#,
+            escape(&text),
+            codec::number(x + 5.0),
+            codec::number(y),
+            codec::number(slot - 10.0),
+        ));
+        resolved.entries.insert(reference.clone(), (*entry).clone());
         row = row.max(LABEL + 4.0 + shown + OWN_LABEL);
         x += slot;
     }
-    Ok(xml)
+    let xml = format!(
+        r#"<mxfile><diagram name="Preview" id="preview"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>{cells}</root></mxGraphModel></diagram></mxfile>"#
+    );
+    expand::expand(&xml, &resolved)
+        .map(|expansion| expansion.xml)
+        .map_err(|problems| anyhow::anyhow!("cannot lay out the preview: {problems}"))
 }
 
 /// The rotation=… of a style in degrees, 0 when absent.

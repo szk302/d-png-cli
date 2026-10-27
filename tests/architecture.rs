@@ -21,7 +21,10 @@ fn sources(directory: &str) -> Vec<(PathBuf, String)> {
         }
     }
     let mut out = Vec::new();
-    walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join(directory), &mut out);
+    walk(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join(directory),
+        &mut out,
+    );
     out
 }
 
@@ -32,7 +35,12 @@ fn offending(directory: &str, needles: &[&str]) -> Vec<String> {
         for (number, line) in text.lines().enumerate() {
             let code = line.split("//").next().unwrap_or("");
             if needles.iter().any(|n| code.contains(n)) {
-                found.push(format!("{}:{}: {}", path.display(), number + 1, line.trim()));
+                found.push(format!(
+                    "{}:{}: {}",
+                    path.display(),
+                    number + 1,
+                    line.trim()
+                ));
             }
         }
     }

@@ -17,7 +17,8 @@ adapters ──▶ app ──▶ domain
 | アダプター | `src/adapters/` | CLI（引数・出力・終了コード）、ファイル入出力、プロジェクト領域のライブラリ、組み込みライブラリ、レンダラー（Chromium・Desktop） | アプリケーション、ドメイン、OS・プロセス・ファイル・ネットワーク |
 
 - 依存は外から内への一方向だけとする。`domain` は `app`・`adapters` を、`app` は `adapters` を参照しない。`tests/architecture.rs` がソースの `use` を調べてこれを検査する。
-- `src/main.rs` は組み立て役（コンポジションルート）で、アダプターを作ってユースケースに渡すことだけを行う。
+- `src/main.rs` は CLI アダプターを呼ぶだけとする。アダプターの組み立て（プロジェクトの探索、リポジトリ・レンダラーの選択）は、引数を解釈した後に CLI アダプターの `Context` が行い、ユースケースに渡す。
+- ドメインの規則を含まないコマンド（`init`・`skill`・`licenses`）は、ユースケースを経ずに CLI アダプターが直接扱う。
 
 ## 2. ポート（`src/app/ports.rs`）
 
@@ -26,7 +27,6 @@ adapters ──▶ app ──▶ domain
 | ポート | 役割 | 実装（アダプター） |
 | --- | --- | --- |
 | `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`BuiltinLibraries`（`@drawio`） |
-| `LibraryStore` | `LibraryRepository` に加えてライブラリを保存・削除する | `ProjectLibraries` |
 | `Renderer` | 図面 XML の 1 ページを PNG の画素にする | `ChromiumRenderer`（`vscode`・`desktop-compat`・`raw`）、`DesktopAppRenderer` |
 
 ポートの境界では次を守る。
@@ -34,7 +34,7 @@ adapters ──▶ app ──▶ domain
 1. **引数と戻り値はドメインの型にする。** `LibraryName`・`Library`・XML の文字列・PNG のバイト列などを渡す。`Path`・`clap` の型・`roxmltree` のノード・`serde_json::Value` はポートを越えない。ファイルの場所や保存形式はアダプターの内側に閉じる。
 2. **エラーはドメインの診断にする。** ポートは `Result<T, Diagnostic>` を返し、アダプターが自分の失敗を `RENDERER_NOT_FOUND`・`RENDER_FAILED`・`LIBRARY_INVALID` などのコードに対応付ける。アダプター内部では `anyhow` を使ってよい。
 3. **リポジトリは所有権のあるドメインオブジェクトを返す。** 呼び出し側がリポジトリの内部状態に依存しないようにする。
-4. **ポートは必要になった時点で足す。** 設定（`config.toml`）・ロックファイル・取得元（`file:`・Git・HTTPS）・VS Code の設定は、該当するユースケースを実装するときにポートとして追加する。
+4. **ポートは必要になった時点で足す。** ライブラリの保存・削除（`LibraryStore`）、設定（`config.toml`）・ロックファイル・取得元（`file:`・Git・HTTPS）・VS Code の設定は、該当するユースケースを実装するときにポートとして追加する。
 
 ## 3. ユースケース（`src/app/`）
 
@@ -47,7 +47,8 @@ adapters ──▶ app ──▶ domain
 | モジュール | 内容 |
 | --- | --- |
 | `diagnostic` | エラーコード（仕様 2.3）、`Diagnostic`・`Diagnostics` |
-| `codec` | DEFLATE の展開、パーセントデコード、XML の属性・テキストのエスケープ |
+| `codec` | DEFLATE の展開、XML の属性・テキストのエスケープ、数値の書式 |
+| `element` | セルを組み立てるための小さな XML 要素の木 |
 | `diagram` | 図面 XML の解析・圧縮ページの展開・構造の検査 |
 | `drawio_png` | `.drawio.png` の PNG チャンクの検査、XML の取り出し・埋め込み |
 | `reference` | `LibraryName`・`EntryId`・参照文字列・指紋付きの画像参照 |

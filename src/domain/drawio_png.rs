@@ -212,3 +212,15 @@ pub fn transparent() -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+
+/// The width and height in the PNG header.
+pub fn dimensions(bytes: &[u8]) -> Result<(u32, u32)> {
+    let header = chunks(bytes)?
+        .into_iter()
+        .next()
+        .context("PNG has no IHDR")?;
+    let number = |range: std::ops::Range<usize>| -> Result<u32> {
+        Ok(u32::from_be_bytes(header.data[range].try_into()?))
+    };
+    Ok((number(0..4)?, number(4..8)?))
+}

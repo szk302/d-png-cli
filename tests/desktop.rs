@@ -12,7 +12,7 @@ fn real_desktop_renders_first_page_and_preserves_all_pages() {
     let output = directory.path().join("diagram.drawio.png");
     cargo_bin_cmd!("drawio-png-cli")
         .env("DRAWIO_PNG_DRAWIO_PATH", &renderer)
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(
             include_str!("fixtures/mixed-pages.xml").replace("width=\"100\"", "width=\"300\""),
@@ -35,7 +35,7 @@ fn real_desktop_renders_first_page_and_preserves_all_pages() {
     let first_page = directory.path().join("first.png");
     cargo_bin_cmd!("drawio-png-cli")
         .env("DRAWIO_PNG_DRAWIO_PATH", &renderer)
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&first_page)
         .write_stdin(include_str!("fixtures/model.xml"))
         .assert()

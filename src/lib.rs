@@ -1,4 +1,10 @@
+// Diagnostics are large but only travel on error paths, where their detail
+// (location, reference, candidates) is the point; boxing them would only
+// complicate every signature.
+#![allow(clippy::result_large_err)]
+
 pub mod adapters;
+pub mod app;
 pub mod domain;
 
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;

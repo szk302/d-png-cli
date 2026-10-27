@@ -44,7 +44,7 @@ cp "$(dirname "$0")/plain.png" "$7"
     let output = directory.path().join("output.png");
     cli()
         .env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MIXED)
         .assert()
@@ -70,9 +70,9 @@ cp "$(dirname "$0")/plain.png" "$7"
     cli()
         .env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .args([
-            "embed",
+            "write",
             "--renderer",
-            "desktop",
+            "desktop-app",
             "--default-font",
             "Noto Sans CJK JP",
             "--fallback-font",
@@ -112,7 +112,7 @@ fn renderer_failure_does_not_overwrite_destination() {
     fs::write(&output, b"original").unwrap();
     cli()
         .env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -137,7 +137,7 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
     let result = cli()
         .env_remove("DRAWIO_PNG_DRAWIO_PATH")
         .env("PATH", directory.path())
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -149,7 +149,7 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
     let result = cli()
         .env("DRAWIO_PNG_DRAWIO_PATH", "does-not-exist")
         .env("PATH", directory.path())
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -190,7 +190,7 @@ cp "$(dirname "$0")/plain.png" "$7"
     let output = directory.path().join("output.png");
     cli().current_dir(directory.path()).env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .env("DRAWIO_PNG_DRAWIO_ARGS", r#"--disable-gpu --user-data-dir="/tmp/日本語 profile" '$HOME' '$(touch injected)' '`touch injected`'"#)
-        .args(["embed", "-o"]).arg(&output).write_stdin(MODEL).assert().success();
+        .args(["write", "--renderer", "desktop-app", "-o"]).arg(&output).write_stdin(MODEL).assert().success();
     assert_eq!(
         png_data::extract(&fs::read(output).unwrap()).unwrap(),
         MODEL
@@ -206,7 +206,7 @@ fn invalid_environment_options_do_not_start_renderer_or_change_output() {
     let result = cli()
         .env("DRAWIO_PNG_DRAWIO_PATH", &path)
         .env("DRAWIO_PNG_DRAWIO_ARGS", "--user-data-dir='unfinished")
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
