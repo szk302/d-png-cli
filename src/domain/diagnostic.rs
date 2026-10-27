@@ -28,6 +28,7 @@ pub enum Code {
     AssetMissing,
     NetworkBlocked,
     OutputWrite,
+    LibraryManaged,
     /// Warning: `write --metadata-only` kept pixels that may not match.
     MetadataOnly,
 }
@@ -59,6 +60,7 @@ impl Code {
             Code::AssetMissing => "ASSET_MISSING",
             Code::NetworkBlocked => "NETWORK_BLOCKED",
             Code::OutputWrite => "OUTPUT_WRITE",
+            Code::LibraryManaged => "LIBRARY_MANAGED",
             Code::MetadataOnly => "METADATA_ONLY",
         }
     }

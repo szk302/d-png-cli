@@ -4,3 +4,4 @@ pub mod diagram;
 pub mod libraries;
 pub mod library;
 pub mod ports;
+pub mod register;

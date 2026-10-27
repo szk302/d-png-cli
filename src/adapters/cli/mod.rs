@@ -22,11 +22,13 @@ use crate::{
         libraries::{Libraries, SearchQuery},
         library::{self, PreviewRequest},
         ports::LibraryRepository,
+        register,
     },
     domain::{
         diagnostic::{Code, Diagnostic, Diagnostics},
         fonts::{self, FontPolicy},
         library::EntryKind,
+        library_file::Source,
         reference::LibraryName,
     },
 };
@@ -141,6 +143,46 @@ enum Command {
 
 #[derive(Subcommand)]
 enum LibraryCommand {
+    /// Register library or image files as a project library (no scope)
+    Add {
+        /// <mxlibrary> files or PNG, JPEG, GIF, SVG and WebP images ("-" for standard input)
+        #[arg(required = true)]
+        sources: Vec<PathBuf>,
+        /// Library name (default: from the first file name)
+        #[arg(long)]
+        name: Option<String>,
+        /// Title shown in draw.io and VS Code (default: the source's, or the name)
+        #[arg(long)]
+        title: Option<String>,
+        /// Replace an existing library of this name
+        #[arg(long, conflicts_with = "merge")]
+        replace: bool,
+        /// Replace entries with the same ID in an existing library and append the rest
+        #[arg(long)]
+        merge: bool,
+        /// Leave out entries that cannot be expanded instead of failing
+        #[arg(long)]
+        skip_invalid: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a project library, or one of its entries
+    Remove {
+        /// Library name or reference string
+        reference: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rewrite project libraries in the form draw.io and VS Code both read, giving entries IDs
+    Sync {
+        /// Libraries to rewrite (default: all)
+        names: Vec<String>,
+        /// Only report libraries that need it, with exit code 1
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// List libraries: name, version, entries and title
     List {
         /// Only libraries of this scope (drawio for the built-in ones)
@@ -264,6 +306,9 @@ impl Command {
                 LibraryCommand::List { json, .. }
                 | LibraryCommand::Search { json, .. }
                 | LibraryCommand::Show { json, .. } => *json,
+                LibraryCommand::Add { json, .. }
+                | LibraryCommand::Remove { json, .. }
+                | LibraryCommand::Sync { json, .. } => *json,
                 LibraryCommand::Preview { .. } => false,
             },
             Command::Skill | Command::Licenses => false,
@@ -286,6 +331,19 @@ impl Context {
             project: Project::discover(explicit.as_deref(), &current)?,
             builtin: BuiltinLibraries::default(),
         })
+    }
+
+    /// The project's libraries, which commands that write need.
+    fn store(&self) -> Result<ProjectLibraries, Diagnostic> {
+        self.project
+            .as_ref()
+            .map(Project::libraries)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    Code::ProjectNotFound,
+                    "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+                )
+            })
     }
 
     fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
@@ -456,6 +514,78 @@ fn run(cli: Cli) -> Outcome {
 
 fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
     match command {
+        LibraryCommand::Add {
+            sources,
+            name,
+            title,
+            replace,
+            merge,
+            skip_invalid,
+            json,
+        } => {
+            let store = context.store()?;
+            let mut files = Vec::new();
+            for path in &sources {
+                let file_name = (path.as_os_str() != "-")
+                    .then(|| path.file_name().map(|n| n.to_string_lossy().into_owned()))
+                    .flatten();
+                files.push((file_name, read_input(Some(path))?));
+            }
+            let request = register::AddRequest {
+                sources: files
+                    .iter()
+                    .map(|(file_name, bytes)| Source {
+                        file_name: file_name.as_deref(),
+                        bytes,
+                    })
+                    .collect(),
+                name: name.as_deref(),
+                title: title.as_deref(),
+                existing: if replace {
+                    register::Existing::Replace
+                } else if merge {
+                    register::Existing::Merge
+                } else {
+                    register::Existing::Fail
+                },
+                skip_invalid,
+            };
+            let added = register::add(&store, request)?;
+            if json {
+                print_json(&output::added_json(&added))
+            } else {
+                eprint!("{}", output::diagnostics(&[], &added.skipped, false));
+                print(&output::added_text(&added))
+            }
+        }
+        LibraryCommand::Remove { reference, json } => {
+            let store = context.store()?;
+            let removed = register::remove(&store, &reference)?;
+            let (kind, name) = match &removed {
+                register::Removed::Library(name) => ("library", name.to_string()),
+                register::Removed::Entry(reference) => ("entry", reference.to_string()),
+            };
+            if json {
+                print_json(&json!({"removed": name, "type": kind}))
+            } else {
+                print(&format!("removed {name}\n"))
+            }
+        }
+        LibraryCommand::Sync { names, check, json } => {
+            let store = context.store()?;
+            let synced = register::sync(&store, &names, check)?;
+            let names: Vec<String> = synced.normalized.iter().map(|n| n.to_string()).collect();
+            if json {
+                print_json(&json!({"normalized": names, "checked": synced.checked}))
+            } else {
+                print(
+                    &names
+                        .iter()
+                        .map(|n| format!("normalized {n}\n"))
+                        .collect::<String>(),
+                )
+            }
+        }
         LibraryCommand::List { scope, json } => {
             let listed =
                 context.with_libraries(|libraries| library::list(libraries, scope.as_deref()))?;
@@ -467,6 +597,13 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                         .collect(),
                 ))
             } else {
+                for (_, info) in listed.iter().filter(|(_, i)| !i.normalized) {
+                    eprintln!(
+                        "warning: {} is not in the form the VS Code extension reads; run `drawio-png-cli library sync {}`",
+                        info.location.as_deref().unwrap_or("-"),
+                        info.name
+                    );
+                }
                 print(
                     &listed
                         .iter()

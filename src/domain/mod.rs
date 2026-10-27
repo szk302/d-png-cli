@@ -9,6 +9,8 @@ pub mod drawio_png;
 pub mod element;
 pub mod expand;
 pub mod fonts;
+pub mod image;
 pub mod library;
+pub mod library_file;
 pub mod preview;
 pub mod reference;

@@ -98,7 +98,7 @@ drawio-png-cli library preview lambda -o "$tmp/candidates.png"   # 候補を並�
 - 保存される XML には参照は残らず、普通の draw.io XML になる。
 - AWS などの `mxgraph.*` の図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要。
   `ASSET_MISSING` になったらユーザーに用意を依頼する。
-- 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する。勝手に別の部品で代用しない。
+- 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する（ライブラリのファイルや画像を渡されたら `drawio-png-cli library add <ファイル>` で登録できる）。勝手に別の部品で代用しない。
 
 ## エラーへの対処
 

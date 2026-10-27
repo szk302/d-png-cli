@@ -15,6 +15,8 @@ pub struct LibraryInfo {
     pub entries: usize,
     /// Where the library is kept, for people (a path relative to the project).
     pub location: Option<String>,
+    /// Whether the stored file has the normalized form of spec 9.3.
+    pub normalized: bool,
 }
 
 /// Read access to the libraries of one namespace: the project's unscoped
@@ -27,6 +29,16 @@ pub trait LibraryRepository {
 
     /// The library with this name, or `None`.
     fn load(&self, name: &LibraryName) -> Result<Option<Library>, Diagnostic>;
+}
+
+/// A `LibraryRepository` whose libraries can also be saved and removed.
+pub trait LibraryStore: LibraryRepository {
+    /// Saves the library in the normalized form of spec 9.3, replacing one
+    /// of the same name.
+    fn save(&self, library: &Library) -> Result<(), Diagnostic>;
+
+    /// Removes the library; false if there was none.
+    fn remove(&self, name: &LibraryName) -> Result<bool, Diagnostic>;
 }
 
 /// Draws one page of a diagram.

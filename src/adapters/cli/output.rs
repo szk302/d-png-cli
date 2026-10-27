@@ -7,6 +7,7 @@ use crate::{
         libraries::Hit,
         library::{EntryDetails, Shown},
         ports::LibraryInfo,
+        register::Added,
     },
     domain::{
         codec,
@@ -158,7 +159,50 @@ pub fn library_json(origin: Origin, info: &LibraryInfo) -> Value {
         "title": info.title,
         "entries": info.entries,
         "file": info.location,
+        "normalized": info.normalized,
     })
+}
+
+pub fn added_json(added: &Added) -> Value {
+    json!({
+        "name": added.name.to_string(),
+        "action": added.action,
+        "file": added.location,
+        "entries": added.entries.iter().map(|e| json!({
+            "ref": e.reference.to_string(),
+            "kind": e.kind.as_str(),
+            "title": e.title,
+            "width": e.width,
+            "height": e.height,
+        })).collect::<Vec<_>>(),
+        "skipped": added.skipped.iter().map(diagnostic_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn added_text(added: &Added) -> String {
+    let mut text = format!(
+        "{} {} (project, {} {}) -> {}\n",
+        added.action,
+        added.name,
+        added.entries.len(),
+        if added.entries.len() == 1 {
+            "entry"
+        } else {
+            "entries"
+        },
+        added.location.as_deref().unwrap_or("-"),
+    );
+    for e in &added.entries {
+        text.push_str(&format!(
+            "  {}\t{}\t{}x{}\t{}\n",
+            e.reference,
+            e.kind,
+            size(e.width),
+            size(e.height),
+            one_line(&e.title)
+        ));
+    }
+    text
 }
 
 pub fn library_line(info: &LibraryInfo) -> String {

@@ -10,10 +10,11 @@ use std::{
 
 use crate::{
     adapters::fs,
-    app::ports::{LibraryInfo, LibraryRepository},
+    app::ports::{LibraryInfo, LibraryRepository, LibraryStore},
     domain::{
         diagnostic::{Code, Diagnostic},
-        library::{self, Library, Origin},
+        library::{Library, Origin},
+        library_file,
         reference::{LibraryName, is_name},
     },
 };
@@ -105,7 +106,8 @@ pub fn init(directory: &Path) -> Result<Initialized, Diagnostic> {
 /// The project's unscoped libraries.
 pub struct ProjectLibraries {
     directory: PathBuf,
-    cache: RefCell<HashMap<LibraryName, Library>>,
+    /// Each library read, and whether its file is normalized.
+    cache: RefCell<HashMap<LibraryName, (Library, bool)>>,
 }
 
 impl ProjectLibraries {
@@ -137,25 +139,25 @@ impl ProjectLibraries {
         Ok(names)
     }
 
-    fn read(&self, name: &LibraryName) -> Result<Option<Library>, Diagnostic> {
-        if let Some(library) = self.cache.borrow().get(name) {
-            return Ok(Some(library.clone()));
+    fn read(&self, name: &LibraryName) -> Result<Option<(Library, bool)>, Diagnostic> {
+        if let Some(found) = self.cache.borrow().get(name) {
+            return Ok(Some(found.clone()));
         }
         let path = self.path(name);
         if !path.is_file() {
             return Ok(None);
         }
         let bytes = fs::read(&path).map_err(|e| Diagnostic::from_error(Code::InputRead, &e))?;
-        let library = library::parse(name.clone(), &bytes).map_err(|e| {
+        let library = library_file::parse(name.clone(), &bytes).map_err(|e| {
             Diagnostic::new(
                 Code::LibraryInvalid,
                 format!("invalid library {}: {e:#}", path.display()),
             )
         })?;
-        self.cache
-            .borrow_mut()
-            .insert(name.clone(), library.clone());
-        Ok(Some(library))
+        let normalized = library_file::serialize(&library).as_bytes() == bytes.as_slice();
+        let found = (library, normalized);
+        self.cache.borrow_mut().insert(name.clone(), found.clone());
+        Ok(Some(found))
     }
 }
 
@@ -167,11 +169,12 @@ impl LibraryRepository for ProjectLibraries {
     fn list(&self) -> Result<Vec<LibraryInfo>, Diagnostic> {
         let mut infos = Vec::new();
         for name in self.names()? {
-            if let Some(library) = self.read(&name)? {
+            if let Some((library, normalized)) = self.read(&name)? {
                 infos.push(LibraryInfo {
                     location: Some(format!("{AREA}/libraries/{}.xml", name.name())),
                     title: library.title.clone(),
                     entries: library.entries.len(),
+                    normalized,
                     name,
                 });
             }
@@ -183,6 +186,44 @@ impl LibraryRepository for ProjectLibraries {
         if name.scope().is_some() {
             return Ok(None);
         }
-        self.read(name)
+        Ok(self.read(name)?.map(|(library, _)| library))
+    }
+}
+
+impl LibraryStore for ProjectLibraries {
+    fn save(&self, library: &Library) -> Result<(), Diagnostic> {
+        if library.name.scope().is_some() {
+            return Err(Diagnostic::new(
+                Code::LibraryManaged,
+                format!(
+                    "{} is installed from its source; it is not saved here",
+                    library.name
+                ),
+            ));
+        }
+        let text = library_file::serialize(library);
+        let path = self.path(&library.name);
+        let write = || -> anyhow::Result<()> {
+            stdfs::create_dir_all(&self.directory)
+                .with_context(|| format!("cannot create {}", self.directory.display()))?;
+            fs::atomic_write(&path, text.as_bytes())
+        };
+        write().map_err(|e| Diagnostic::from_error(Code::OutputWrite, &e))?;
+        self.cache
+            .borrow_mut()
+            .insert(library.name.clone(), (library.clone(), true));
+        Ok(())
+    }
+
+    fn remove(&self, name: &LibraryName) -> Result<bool, Diagnostic> {
+        self.cache.borrow_mut().remove(name);
+        match stdfs::remove_file(self.path(name)) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(Diagnostic::new(
+                Code::OutputWrite,
+                format!("cannot remove {}: {e}", self.path(name).display()),
+            )),
+        }
     }
 }

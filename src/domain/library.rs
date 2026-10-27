@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use roxmltree::Node;
+use serde_json::Value;
 use std::{collections::HashSet, fmt};
 
 use crate::domain::{
@@ -106,6 +107,9 @@ pub struct Entry {
     pub width: f64,
     pub height: f64,
     content: Content,
+    /// The entry's fields as read from its library file, in their order,
+    /// so that a normalized file keeps what it does not interpret.
+    fields: Vec<(String, Value)>,
 }
 
 #[derive(Clone, Debug)]
@@ -125,7 +129,50 @@ impl Entry {
             width,
             height,
             content: Content::Model(xml),
+            fields: Vec::new(),
         }
+    }
+
+    /// An entry from the fields of a library file: `xml` or `data`, `title`,
+    /// `w`, `h` and `aspect`.
+    pub(crate) fn from_fields(id: EntryId, fields: Vec<(String, Value)>) -> Result<Self> {
+        let get = |key: &str| fields.iter().find(|(k, _)| k == key).map(|(_, v)| v);
+        let text = |key: &str| get(key).and_then(Value::as_str);
+        let number = |key: &str| get(key).and_then(Value::as_f64).unwrap_or(0.0);
+        let content = if let Some(xml) = text("xml") {
+            Content::Model(xml.to_owned())
+        } else if let Some(data) = text("data") {
+            Content::Image {
+                data: data.to_owned(),
+                aspect: text("aspect") != Some("variable"),
+            }
+        } else {
+            bail!("the entry has neither xml nor data");
+        };
+        Ok(Entry {
+            id,
+            title: text("title").unwrap_or("").to_owned(),
+            width: number("w"),
+            height: number("h"),
+            content,
+            fields,
+        })
+    }
+
+    /// The fields of its library file, in their order.
+    pub(crate) fn fields(&self) -> &[(String, Value)] {
+        &self.fields
+    }
+
+    /// Why the entry cannot be registered: data that cannot be expanded, or
+    /// references, which are never expanded inside an entry.
+    pub fn problem(&self) -> Option<String> {
+        if let Err(e) = self.try_kind() {
+            return Some(format!("{e:#}"));
+        }
+        let model = self.graph_model().ok()?;
+        (model.contains("libref=") || model.contains("image=lib:"))
+            .then(|| "an entry cannot hold library references".to_owned())
     }
 
     /// The entry as an uncompressed `mxGraphModel`. A `data` entry becomes
@@ -414,64 +461,7 @@ impl Library {
     }
 }
 
-/// Reads an `<mxlibrary>` file in any form draw.io writes (JSON as text,
-/// CDATA or entity-escaped; compressed or plain models). Entries keep a valid,
-/// unused `id` field; the others get IDs derived from their titles.
-pub fn parse(name: LibraryName, bytes: &[u8]) -> Result<Library> {
-    let text = diagram::utf8(bytes)?;
-    let doc = diagram::parse(text)?;
-    let root = doc.root_element();
-    ensure!(
-        root.has_tag_name("mxlibrary"),
-        "library root must be <mxlibrary>"
-    );
-    let title = root
-        .attribute("title")
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map(str::to_owned);
-    let json: String = root.children().filter_map(|n| n.text()).collect();
-    let items: Vec<serde_json::Value> =
-        serde_json::from_str(json.trim()).context("invalid library JSON")?;
-    let mut used = HashSet::new();
-    let explicit: Vec<Option<EntryId>> = items
-        .iter()
-        .map(|item| {
-            item["id"]
-                .as_str()
-                .filter(|id| EntryId::is_valid(id) && used.insert(id.to_string()))
-                .map(|id| EntryId::parse(id).expect("valid ID"))
-        })
-        .collect();
-    let mut entries = Vec::with_capacity(items.len());
-    for (index, (item, id)) in items.iter().zip(explicit).enumerate() {
-        let number = |key: &str| item[key].as_f64().unwrap_or(0.0);
-        let content = if let Some(xml) = item["xml"].as_str() {
-            Content::Model(xml.to_owned())
-        } else if let Some(data) = item["data"].as_str() {
-            Content::Image {
-                data: data.to_owned(),
-                aspect: item["aspect"].as_str() != Some("variable"),
-            }
-        } else {
-            bail!("library entry {} has neither xml nor data", index + 1);
-        };
-        let title = item["title"].as_str().unwrap_or("").to_owned();
-        let id = id.unwrap_or_else(|| unique(EntryId::derive(&title), &mut used));
-        entries.push(Entry {
-            id,
-            title,
-            width: number("w"),
-            height: number("h"),
-            content,
-        });
-    }
-    Ok(Library {
-        name,
-        title,
-        entries,
-    })
-}
+pub use crate::domain::library_file::parse;
 
 /// `base`, or `base-2`, `base-3`… whichever is unused first; marks it used.
 pub fn unique(base: EntryId, used: &mut HashSet<String>) -> EntryId {

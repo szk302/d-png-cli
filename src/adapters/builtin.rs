@@ -49,6 +49,7 @@ impl LibraryRepository for BuiltinLibraries {
                 title: library.title.clone(),
                 entries: library.entries.len(),
                 location: None,
+                normalized: true,
             })
             .collect())
     }

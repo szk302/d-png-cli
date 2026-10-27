@@ -86,6 +86,7 @@ impl LibraryRepository for Memory {
                 title: l.title.clone(),
                 entries: l.entries.len(),
                 location: None,
+                normalized: true,
             })
             .collect())
     }
