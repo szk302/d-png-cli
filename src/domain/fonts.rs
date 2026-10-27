@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use std::ops::Range;
 
-use crate::{MAX_BYTES, document};
+use crate::{MAX_BYTES, domain::diagram};
 
 /// One family per option; CSS lists are built here, not accepted as option syntax.
 pub fn parse_family(value: &str) -> Result<String, String> {
@@ -36,7 +36,7 @@ impl FontPolicy {
     /// Resolve cell-level defaults into XML so rendering and reopening share them.
     /// Explicit fonts inside HTML labels are left intact.
     pub fn apply(&self, xml: &str) -> Result<String> {
-        let xml = document::normalize(xml)?;
+        let xml = diagram::normalize(xml)?;
         let doc = roxmltree::Document::parse(&xml)?;
         let mut changes: Vec<(Range<usize>, String)> = Vec::new();
         let mut output_size = xml.len();

@@ -1,5 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use drawio_png_cli::{document, png_data};
+use drawio_png_cli::domain::{diagram as document, drawio_png as png_data};
 use std::{env, fs, time::Duration};
 
 /// Run explicitly with DRAWIO_PNG_TEST_DRAWIO_PATH set to Desktop or an xvfb-run wrapper.

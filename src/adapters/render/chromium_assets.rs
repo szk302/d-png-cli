@@ -1,4 +1,4 @@
-use crate::storage;
+use crate::adapters::fs as storage;
 use anyhow::{Context, Result, ensure};
 use std::{
     collections::HashMap,
@@ -16,19 +16,19 @@ use tiny_http::{Header, Response, Server};
 pub(crate) const ASSETS: &[(&str, &[u8])] = &[
     (
         "js/viewer.min.js",
-        include_bytes!("../assets/drawio/js_viewer.min.js.gz"),
+        include_bytes!("../../../assets/drawio/js_viewer.min.js.gz"),
     ),
     (
         "js/export-init.js",
-        include_bytes!("../assets/drawio/js_export-init.js.gz"),
+        include_bytes!("../../../assets/drawio/js_export-init.js.gz"),
     ),
     (
         "js/export.js",
-        include_bytes!("../assets/drawio/js_export.js.gz"),
+        include_bytes!("../../../assets/drawio/js_export.js.gz"),
     ),
     (
         "mxgraph/css/common.css",
-        include_bytes!("../assets/drawio/mxgraph_css_common.css.gz"),
+        include_bytes!("../../../assets/drawio/mxgraph_css_common.css.gz"),
     ),
 ];
 
@@ -36,19 +36,19 @@ pub(crate) const ASSETS: &[(&str, &[u8])] = &[
 pub(crate) const VSCODE_ASSETS: &[(&str, &[u8])] = &[
     (
         "js/viewer.min.js",
-        include_bytes!("../assets/drawio/vscode/js_viewer.min.js.gz"),
+        include_bytes!("../../../assets/drawio/vscode/js_viewer.min.js.gz"),
     ),
     (
         "js/export-init.js",
-        include_bytes!("../assets/drawio/vscode/js_export-init.js.gz"),
+        include_bytes!("../../../assets/drawio/vscode/js_export-init.js.gz"),
     ),
     (
         "js/export.js",
-        include_bytes!("../assets/drawio/vscode/js_export.js.gz"),
+        include_bytes!("../../../assets/drawio/vscode/js_export.js.gz"),
     ),
     (
         "mxgraph/css/common.css",
-        include_bytes!("../assets/drawio/vscode/mxgraph_css_common.css.gz"),
+        include_bytes!("../../../assets/drawio/vscode/mxgraph_css_common.css.gz"),
     ),
 ];
 
@@ -86,7 +86,7 @@ pub(crate) struct Asset {
 
 // `root` must be canonicalized, as it is in `AssetStore::new`.
 fn local_file(root: &Path, url: &str) -> Result<PathBuf> {
-    let decoded = crate::document::percent_decode(url.split('?').next().unwrap_or(url))?;
+    let decoded = crate::domain::diagram::percent_decode(url.split('?').next().unwrap_or(url))?;
     let relative = decoded.strip_prefix('/').context("invalid asset path")?;
     ensure!(!relative.contains('\\'), "invalid asset path");
     ensure!(
@@ -139,7 +139,7 @@ impl AssetStore {
             }
             assets.insert(
                 "/export3.html".into(),
-                include_bytes!("../assets/chromium.html").to_vec(),
+                include_bytes!("../../../assets/chromium.html").to_vec(),
             );
         }
         // CSP also covers WebSockets, workers and requests not intercepted by CDP.
@@ -269,7 +269,7 @@ mod tests {
             .respond("GET", &format!("{}/export3.html?x=1", store.origin))
             .unwrap();
         assert_eq!(page.status, 200);
-        assert_eq!(page.body, include_bytes!("../assets/chromium.html"));
+        assert_eq!(page.body, include_bytes!("../../../assets/chromium.html"));
         assert!(
             page.headers
                 .iter()

@@ -1,11 +1,10 @@
 //! Headless Chromium controlled directly through the Chrome DevTools Protocol.
-use crate::{
-    MAX_BYTES,
+use super::{
     chromium_assets::{AssetServer, AssetStore},
-    png_data,
-    render::{ChildGuard, TIMEOUT, executable, log_excerpt},
+    process::{ChildGuard, TIMEOUT, executable, log_excerpt},
     resample,
 };
+use crate::{MAX_BYTES, domain::drawio_png as png_data};
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
@@ -277,7 +276,7 @@ pub fn render_with_mode(
     mode: ChromiumMode,
 ) -> Result<Vec<u8>> {
     // Declared first so it is dropped after the browser and its profile.
-    let _interrupt = crate::interrupt::Guard::new();
+    let _interrupt = super::interrupt::Guard::new();
     ensure!(xml.len() <= MAX_BYTES, "XML exceeds 64 MiB limit");
     let deadline = Instant::now() + timeout;
     let profile = tempfile::Builder::new()
@@ -381,7 +380,7 @@ pub fn render_with_mode(
         cdp.call("Fetch.enable", json!({"patterns":[{"urlPattern":"*"}]}))?;
         cdp.call(
             "Page.addScriptToEvaluateOnNewDocument",
-            json!({"source":include_str!("../assets/chromium-init.js")}),
+            json!({"source":include_str!("../../../assets/chromium-init.js")}),
         )?;
         cdp.call(
             "Emulation.setDefaultBackgroundColorOverride",
@@ -416,7 +415,7 @@ pub fn render_with_mode(
         let window = cdp.call("Runtime.evaluate", json!({"expression":"window"}))?;
         let rendered = cdp.call("Runtime.callFunctionOn", json!({
             "objectId":window["result"]["objectId"],
-            "functionDeclaration":format!("function(xml, bundled, mode, preload) {{ {} return drawioPngRender(xml, bundled, mode, preload); }}", include_str!("../assets/chromium-render.js")),
+            "functionDeclaration":format!("function(xml, bundled, mode, preload) {{ {} return drawioPngRender(xml, bundled, mode, preload); }}", include_str!("../../../assets/chromium-render.js")),
             "arguments":[{"value":xml},{"value":cdp.assets.bundled},{"value":mode.name()},{"value":cdp.assets.preload}],
             "returnByValue":true, "awaitPromise":true
         }))?;
@@ -513,7 +512,7 @@ fn capture(cdp: &mut Cdp, mode: ChromiumMode, deadline: Instant) -> Result<Vec<u
 }
 
 fn remaining(deadline: Instant) -> Result<Duration> {
-    crate::interrupt::check()?;
+    super::interrupt::check()?;
     deadline
         .checked_duration_since(Instant::now())
         .filter(|d| !d.is_zero())

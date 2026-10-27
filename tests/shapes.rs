@@ -1,6 +1,9 @@
 //! draw.io's built-in shapes, offered as the drawio/* libraries.
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{document, library, png_data, shapes};
+use drawio_png_cli::{
+    adapters::builtin as shapes,
+    domain::{diagram as document, drawio_png as png_data, library, preview},
+};
 use std::fs;
 use tempfile::tempdir;
 
@@ -105,7 +108,7 @@ fn built_in_libraries_are_listed_and_searched_without_styles() {
     let show = stdout(cli().args(["library", "show", "aws4-compute"]));
     assert_eq!(
         show,
-        "name: drawio/aws4-compute\ntitle: AWS / Compute\nfile: (built in: draw.io 26.0.2 sidebar)\nentries: 139\n"
+        "name: drawio/aws4-compute\ntitle: AWS / Compute\nentries: 139\n"
     );
 
     // Every library is searched, legacy palettes included.
@@ -453,7 +456,7 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
         .find(|l| l.name == "drawio/kubernetes")
         .unwrap();
     let chosen: Vec<_> = (0..12).map(|i| (kubernetes, i)).collect();
-    let xml = shapes::preview(&chosen).unwrap();
+    let xml = preview::preview(&chosen).unwrap();
     document::validate(&xml).unwrap();
     assert!(xml.contains("drawio/kubernetes #1&#xa;"));
     assert!(xml.contains("drawio/kubernetes #12&#xa;"));
@@ -467,21 +470,20 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
     ] {
         let library = libraries.iter().find(|l| l.name == name).unwrap();
         let all: Vec<_> = (0..library.entries.len()).map(|i| (library, i)).collect();
-        for chunk in all.chunks(shapes::PREVIEW_LIMIT) {
-            assert_separate(&shapes::preview(chunk).unwrap(), name);
+        for chunk in all.chunks(preview::PREVIEW_LIMIT) {
+            assert_separate(&preview::preview(chunk).unwrap(), name);
         }
     }
     // A rotated custom image keeps its turn although its style is not printed.
     let rotated = library::Library {
         name: "rotated".into(),
         title: None,
-        path: "rotated.xml".into(),
         entries: library::parse(
             br#"<mxlibrary>[{"title":"Rotated Image","w":350,"h":30,"xml":"&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id=\"0\"/&gt;&lt;mxCell id=\"1\" parent=\"0\"/&gt;&lt;mxCell id=\"2\" style=\"shape=image;image=data:image/png,iVBORw0KGgo=;rotation=-90;\" vertex=\"1\" parent=\"1\"&gt;&lt;mxGeometry width=\"350\" height=\"30\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;"}]</mxlibrary>"#,
         )
         .unwrap(),
     };
-    assert_separate(&shapes::preview(&[(&rotated, 0)]).unwrap(), "rotated");
+    assert_separate(&preview::preview(&[(&rotated, 0)]).unwrap(), "rotated");
 
     let directory = tempdir().unwrap();
     let output = directory.path().join("preview.png");

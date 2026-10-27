@@ -1,7 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use drawio_png_cli::{
-    chromium::ChromiumMode, document, fonts, library, png_data, render, shapes, storage,
+    adapters::{
+        builtin as shapes, fs as storage, library_files,
+        render::{self, chromium::ChromiumMode},
+    },
+    domain::{diagram as document, drawio_png as png_data, fonts, library, preview},
 };
 use std::{
     io::{self, Write},
@@ -311,7 +315,7 @@ fn libraries(
     builtin: bool,
 ) -> Result<Vec<library::Library>> {
     let libraries = if let Some(file) = file {
-        vec![library::open(&file)?]
+        vec![library_files::open(&file)?]
     } else {
         let path = std::env::var_os("DRAWIO_PNG_LIBRARY_PATH").filter(|p| !p.is_empty());
         anyhow::ensure!(
@@ -320,7 +324,7 @@ fn libraries(
         );
         let mut libraries = Vec::new();
         if let Some(path) = path {
-            let (found, warnings) = library::search(&path)?;
+            let (found, warnings) = library_files::search(&path)?;
             for warning in warnings {
                 eprintln!("warning: skipped {warning}");
             }
@@ -411,13 +415,8 @@ fn library_command(command: LibraryCommand) -> Result<()> {
         }
         LibraryCommand::Show { name, library_file } => {
             for library in libraries(library_file, Some(&name), true)? {
-                let file = if shapes::is_builtin(&library) {
-                    "(built in: draw.io 26.0.2 sidebar)".to_owned()
-                } else {
-                    library.path.display().to_string()
-                };
                 out.push_str(&format!(
-                    "name: {}\ntitle: {}\nfile: {file}\nentries: {}\n",
+                    "name: {}\ntitle: {}\nentries: {}\n",
                     library.name,
                     library.title.as_deref().map_or("-".into(), one_line),
                     library.entries.len()
@@ -462,7 +461,7 @@ fn library_command(command: LibraryCommand) -> Result<()> {
                 !found.is_empty(),
                 "no entries match; see `drawio-png-cli library search`"
             );
-            let xml = shapes::preview(&found)?;
+            let xml = preview::preview(&found)?;
             let png = render::render_selected_with_mode(
                 &xml,
                 render::Renderer::Chromium,

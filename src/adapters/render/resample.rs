@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{io::Cursor, time::Instant};
 
-use crate::{MAX_BYTES, png_data};
+use crate::{MAX_BYTES, domain::drawio_png as png_data};
 
 pub(crate) const SCALE: u32 = 2;
 const PRECISION: i32 = 1 << 14;
@@ -23,7 +23,7 @@ pub(crate) fn capture_size(width: u32, height: u32) -> Result<usize> {
 }
 
 fn check_deadline(deadline: Instant) -> Result<()> {
-    crate::interrupt::check()?;
+    super::interrupt::check()?;
     ensure!(
         Instant::now() < deadline,
         "Chromium rendering timed out during resizing"
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn matches_electron_hamming1_for_translucent_colors_and_edges() {
         let output = half_png(
-            include_bytes!("../tests/fixtures/resize-input.png"),
+            include_bytes!("../../../tests/fixtures/resize-input.png"),
             8,
             6,
             Instant::now() + Duration::from_secs(5),
@@ -231,7 +231,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             pixels(&output),
-            pixels(include_bytes!("../tests/fixtures/resize-hamming1.png"))
+            pixels(include_bytes!(
+                "../../../tests/fixtures/resize-hamming1.png"
+            ))
         );
     }
 
@@ -261,7 +263,7 @@ mod tests {
         for (width, height) in [(2049, 2048), (0, 1), (u32::MAX, u32::MAX)] {
             assert!(capture_size(width, height).is_err());
         }
-        let png = include_bytes!("../tests/fixtures/resize-input.png");
+        let png = include_bytes!("../../../tests/fixtures/resize-input.png");
         assert!(
             half_png(png, 9, 6, Instant::now() + Duration::from_secs(5))
                 .unwrap_err()

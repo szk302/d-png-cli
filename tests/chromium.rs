@@ -1,5 +1,8 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use drawio_png_cli::{chromium, document, png_data};
+use drawio_png_cli::{
+    adapters::render::chromium,
+    domain::{diagram as document, drawio_png as png_data},
+};
 use std::{fs, path::PathBuf, time::Duration};
 
 const MODEL: &str = include_str!("fixtures/model.xml");
@@ -465,7 +468,7 @@ fn vscode_web_root(root: &std::path::Path) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
             path,
-            drawio_png_cli::storage::read_limited(flate2::read::GzDecoder::new(data)).unwrap(),
+            drawio_png_cli::adapters::fs::read_limited(flate2::read::GzDecoder::new(data)).unwrap(),
         )
         .unwrap();
     }

@@ -1,5 +1,5 @@
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{png_data, storage};
+use drawio_png_cli::{adapters::fs as storage, domain::drawio_png as png_data};
 use std::fs;
 use tempfile::tempdir;
 

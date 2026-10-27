@@ -1,6 +1,6 @@
 #![cfg(unix)]
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{png_data, render};
+use drawio_png_cli::{adapters::render::desktop, domain::drawio_png as png_data};
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -101,7 +101,7 @@ fn renderer_failures_and_invalid_output_are_errors() {
         "echo broken > \"$7\"",
     ] {
         let (_directory, path) = script(body);
-        assert!(render::render_with(&path, MODEL, Duration::from_secs(2)).is_err());
+        assert!(desktop::render_with(&path, MODEL, Duration::from_secs(2)).is_err());
     }
 }
 
@@ -124,7 +124,7 @@ fn renderer_failure_does_not_overwrite_destination() {
 fn timeout_terminates_renderer_promptly() {
     let (_directory, path) = script("exec sleep 30");
     let start = Instant::now();
-    let error = render::render_with(&path, MODEL, Duration::from_millis(80)).unwrap_err();
+    let error = desktop::render_with(&path, MODEL, Duration::from_millis(80)).unwrap_err();
     assert!(error.to_string().contains("timed out"));
     assert!(start.elapsed() < Duration::from_secs(3));
 }
@@ -168,7 +168,7 @@ fn timeout_also_stops_renderer_helpers() {
 wait
 "#,
     );
-    assert!(render::render_with(&path, MODEL, Duration::from_millis(80)).is_err());
+    assert!(desktop::render_with(&path, MODEL, Duration::from_millis(80)).is_err());
     std::thread::sleep(Duration::from_millis(500));
     assert!(!directory.path().join("escaped").exists());
 }

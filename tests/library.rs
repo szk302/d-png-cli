@@ -1,6 +1,6 @@
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use drawio_png_cli::{document, library};
+use drawio_png_cli::domain::{diagram as document, library};
 use std::{fs, io::Write};
 use tempfile::tempdir;
 
@@ -58,7 +58,6 @@ fn library_named(name: &str, entries: serde_json::Value) -> Vec<library::Library
     vec![library::Library {
         name: name.into(),
         title: None,
-        path: "lib.xml".into(),
         entries: library::parse(library_of(entries).as_bytes()).unwrap(),
     }]
 }
@@ -67,7 +66,6 @@ fn entries() -> Vec<library::Library> {
     vec![library::Library {
         name: "test".into(),
         title: Some("test".into()),
-        path: "lib.xml".into(),
         entries: library::parse(library_xml().as_bytes()).unwrap(),
     }]
 }
@@ -125,10 +123,7 @@ fn library_commands_print_libraries_details_and_entries() {
     assert_eq!(run(&["library", "ls"]), "lib\t6\ttest\n");
     assert_eq!(
         run(&["library", "show", "lib"]),
-        format!(
-            "name: lib\ntitle: test\nfile: {}\nentries: 6\n",
-            path.display()
-        )
+        "name: lib\ntitle: test\nentries: 6\n"
     );
     // Entries: library, index, title and size; never the content.
     let all = run(&["library", "search"]);

@@ -1,36 +1,17 @@
+//! draw.io Desktop's command-line export.
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     env,
     ffi::OsStr,
-    fs::{self, File},
-    io::{Read, Seek, SeekFrom},
+    fs,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
-use crate::{MAX_BYTES, png_data, storage};
-
-pub const TIMEOUT: Duration = Duration::from_secs(60);
-
-pub(crate) fn executable(path: &Path) -> bool {
-    let Ok(metadata) = fs::metadata(path) else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
-}
+use super::process::{ChildGuard, TIMEOUT, executable, log_excerpt};
+use crate::{MAX_BYTES, adapters::fs as storage, domain::drawio_png as png_data};
 
 pub fn discover() -> Result<PathBuf> {
     discover_optional()?
@@ -94,32 +75,7 @@ pub(crate) fn discover_optional() -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
-pub(crate) struct ChildGuard {
-    pub(crate) child: Child,
-    pub(crate) finished: bool,
-}
-impl Drop for ChildGuard {
-    fn drop(&mut self) {
-        if !self.finished {
-            #[cfg(unix)]
-            // The child starts a fresh process group; kill its helpers on timeout too.
-            unsafe {
-                libc::kill(-(self.child.id() as i32), libc::SIGKILL);
-            }
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
-    }
-}
-
-pub(crate) fn log_excerpt(log: &mut File) -> String {
-    let _ = log.seek(SeekFrom::Start(0));
-    let mut bytes = Vec::new();
-    let _ = log.take(8192).read_to_end(&mut bytes);
-    String::from_utf8_lossy(&bytes).trim().to_owned()
-}
-
-fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
+pub(crate) fn parse_extra_args(value: Option<&OsStr>) -> Result<Vec<String>> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
@@ -134,69 +90,19 @@ pub fn render(xml: &str) -> Result<Vec<u8>> {
     render_with_args(&discover()?, xml, TIMEOUT, &args)
 }
 
-#[derive(Clone, Copy, Debug, Default, clap::ValueEnum)]
-pub enum Renderer {
-    #[default]
-    Auto,
-    Desktop,
-    Chromium,
-}
-
-pub fn render_selected(xml: &str, renderer: Renderer, allow_network: bool) -> Result<Vec<u8>> {
-    render_selected_with_mode(xml, renderer, allow_network, None)
-}
-
-pub fn render_selected_with_mode(
-    xml: &str,
-    renderer: Renderer,
-    allow_network: bool,
-    chromium_mode: Option<crate::chromium::ChromiumMode>,
-) -> Result<Vec<u8>> {
-    match renderer {
-        Renderer::Desktop => {
-            ensure!(
-                chromium_mode.is_none(),
-                "--chromium-mode requires --renderer chromium"
-            );
-            ensure!(
-                !allow_network,
-                "--allow-network requires the Chromium renderer"
-            );
-            render(xml)
-        }
-        Renderer::Chromium => crate::chromium::render_configured(xml, allow_network, chromium_mode),
-        Renderer::Auto => {
-            if let Some(program) = discover_optional()? {
-                ensure!(
-                    chromium_mode.is_none(),
-                    "Desktop was selected; use --renderer chromium with --chromium-mode"
-                );
-                ensure!(
-                    !allow_network,
-                    "Desktop was selected; use --renderer chromium with --allow-network"
-                );
-                let args = parse_extra_args(env::var_os("DRAWIO_PNG_DRAWIO_ARGS").as_deref())?;
-                render_with_args(&program, xml, TIMEOUT, &args)
-            } else {
-                crate::chromium::render_configured(xml, allow_network, chromium_mode)
-            }
-        }
-    }
-}
-
 /// Kept independent of discovery so renderer failures can be tested without Desktop.
 pub fn render_with(program: &Path, xml: &str, timeout: Duration) -> Result<Vec<u8>> {
     render_with_args(program, xml, timeout, &[])
 }
 
-fn render_with_args(
+pub(crate) fn render_with_args(
     program: &Path,
     xml: &str,
     timeout: Duration,
     args: &[String],
 ) -> Result<Vec<u8>> {
     // Declared first so it is dropped after Desktop and its temporary directory.
-    let _interrupt = crate::interrupt::Guard::new();
+    let _interrupt = super::interrupt::Guard::new();
     let directory = tempfile::Builder::new()
         .prefix("drawio-png-cli-render-")
         .tempdir()?;
@@ -233,7 +139,7 @@ fn render_with_args(
     };
     let deadline = Instant::now() + timeout;
     loop {
-        crate::interrupt::check()?;
+        super::interrupt::check()?;
         if let Some(status) = child.child.try_wait()? {
             child.finished = true;
             ensure!(

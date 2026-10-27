@@ -3,17 +3,9 @@
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use roxmltree::{Document, Node};
-use std::{
-    collections::{HashMap, HashSet},
-    ffi::OsStr,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::{HashMap, HashSet};
 
-use crate::{
-    document,
-    storage::{self, inflate},
-};
+use crate::domain::{codec::inflate, diagram};
 
 /// One library entry, as the editor's sidebar shows it.
 pub struct Entry {
@@ -42,7 +34,7 @@ impl Entry {
             return Ok((true, self.width, self.height));
         }
         let model = entry_model(self)?;
-        let source = document::parse(&model).context("invalid library entry")?;
+        let source = diagram::parse(&model).context("invalid library entry")?;
         let cells = Cells::of(source.root_element())?;
         let (mut left, mut top) = (f64::INFINITY, f64::INFINITY);
         let (mut right, mut bottom) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -94,7 +86,7 @@ impl Entry {
             return Ok(None);
         }
         let model = entry_model(self)?;
-        let source = document::parse(&model).context("invalid library entry")?;
+        let source = diagram::parse(&model).context("invalid library entry")?;
         let cells = Cells::of(source.root_element())?;
         Ok(match cells.content.as_slice() {
             [cell] => Some(inner(*cell).attribute("style").unwrap_or("").to_owned()),
@@ -116,9 +108,9 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Entry>> {
 }
 
 /// Parses an `<mxlibrary>` file into its optional title and its entries.
-fn parse_library(bytes: &[u8]) -> Result<(Option<String>, Vec<Entry>)> {
-    let text = document::utf8(bytes)?;
-    let doc = document::parse(text)?;
+pub fn parse_library(bytes: &[u8]) -> Result<(Option<String>, Vec<Entry>)> {
+    let text = diagram::utf8(bytes)?;
+    let doc = diagram::parse(text)?;
     let root = doc.root_element();
     ensure!(
         root.has_tag_name("mxlibrary"),
@@ -158,68 +150,12 @@ fn parse_library(bytes: &[u8]) -> Result<(Option<String>, Vec<Entry>)> {
     Ok((title, entries))
 }
 
-/// A library file. Its name is the file name without `.xml`; the optional
-/// title is the `<mxlibrary title>` that draw.io shows instead.
+/// A library: its name, the optional `<mxlibrary title>` that draw.io shows,
+/// and its entries.
 pub struct Library {
     pub name: String,
     pub title: Option<String>,
-    pub path: PathBuf,
     pub entries: Vec<Entry>,
-}
-
-/// Reads one library file.
-pub fn open(path: &Path) -> Result<Library> {
-    let (title, entries) = parse_library(&storage::read(path)?)
-        .with_context(|| format!("invalid library {}", path.display()))?;
-    let xml = path
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("xml"));
-    let name = if xml {
-        path.file_stem()
-    } else {
-        path.file_name()
-    }
-    .map(|n| n.to_string_lossy().into_owned())
-    .unwrap_or_default();
-    Ok(Library {
-        name,
-        title,
-        path: path.to_owned(),
-        entries,
-    })
-}
-
-/// Reads the libraries on a search path such as `DRAWIO_PNG_LIBRARY_PATH`: files,
-/// and the `*.xml` files directly in directories, in name order. Unreadable
-/// files found in directories are skipped and reported as warnings.
-pub fn search(path: &OsStr) -> Result<(Vec<Library>, Vec<String>)> {
-    let mut libraries = Vec::new();
-    let mut warnings = Vec::new();
-    for item in std::env::split_paths(path) {
-        if item.as_os_str().is_empty() {
-            continue;
-        }
-        if item.is_dir() {
-            let mut files: Vec<_> = fs::read_dir(&item)
-                .with_context(|| format!("cannot read {}", item.display()))?
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| {
-                    p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xml"))
-                })
-                .collect();
-            files.sort();
-            for file in files {
-                match open(&file) {
-                    Ok(library) => libraries.push(library),
-                    Err(error) => warnings.push(format!("{error:#}")),
-                }
-            }
-        } else {
-            ensure!(item.is_file(), "library not found: {}", item.display());
-            libraries.push(open(&item)?);
-        }
-    }
-    Ok((libraries, warnings))
 }
 
 /// Selects an entry by exact title, then by a unique case-insensitive title,
@@ -278,13 +214,13 @@ pub fn insert(
     entry: &Entry,
     placement: &Placement<'_>,
 ) -> Result<(String, Vec<String>)> {
-    let xml = document::normalize(xml)?;
+    let xml = diagram::normalize(xml)?;
     let model = entry_model(entry)?;
-    let source = document::parse(&model).context("invalid library entry")?;
+    let source = diagram::parse(&model).context("invalid library entry")?;
     let cells = Cells::of(source.root_element())?;
     ensure!(!cells.content.is_empty(), "library entry has no cells");
 
-    let doc = document::parse(&xml)?;
+    let doc = diagram::parse(&xml)?;
     let (graph_root, layer, existing) = target(&doc, placement.page)?;
     let ids = cells.new_ids(placement.id, &existing)?;
     let top: Vec<_> = cells
@@ -324,7 +260,7 @@ pub fn insert(
             .context("page <root> has no closing tag")?;
     let mut output = xml.clone();
     output.insert_str(insert, &added);
-    document::validate(&output).context("diagram is invalid after adding the entry")?;
+    diagram::validate(&output).context("diagram is invalid after adding the entry")?;
     let mut order: Vec<String> = top.iter().map(|c| ids[&cells.id(*c)].clone()).collect();
     for &cell in &cells.content {
         let id = &ids[&cells.id(cell)];
@@ -344,7 +280,7 @@ fn entry_model(entry: &Entry) -> Result<String> {
                 .decode(xml.trim())
                 .context("invalid library entry Base64")?;
             let inflated = inflate(&bytes, false).context("invalid compressed library entry")?;
-            document::percent_decode(document::utf8(&inflated)?)
+            diagram::percent_decode(diagram::utf8(&inflated)?)
         }
         Content::Image { data, aspect } => {
             // A style value cannot contain ';', so draw.io drops ";base64".

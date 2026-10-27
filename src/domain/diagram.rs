@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use roxmltree::{Document, Node};
 use std::ops::Range;
 
-use crate::{MAX_BYTES, storage::inflate};
+use crate::{MAX_BYTES, domain::codec::inflate};
 
 pub fn utf8(bytes: &[u8]) -> Result<&str> {
     Ok(std::str::from_utf8(bytes)

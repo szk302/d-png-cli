@@ -1,7 +1,10 @@
 use anyhow::{Context, Result, bail, ensure};
 use std::io::Cursor;
 
-use crate::{MAX_BYTES, document, storage::inflate};
+use crate::{
+    MAX_BYTES,
+    domain::{codec::inflate, diagram},
+};
 
 pub const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
@@ -140,14 +143,14 @@ pub fn extract(bytes: &[u8]) -> Result<String> {
         } else {
             payload.to_vec()
         };
-        let mut xml = document::utf8(&data)?.to_owned();
+        let mut xml = diagram::utf8(&data)?.to_owned();
         // Legacy Java exporters used application/x-www-form-urlencoded spaces.
         if compressed && xml.starts_with('%') {
             xml = xml.replace('+', " ");
         }
         for _ in 0..2 {
             if xml.starts_with('%') {
-                xml = document::percent_decode(&xml)?;
+                xml = diagram::percent_decode(&xml)?;
             }
         }
         if let Some(previous) = &result {

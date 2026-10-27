@@ -1,5 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use drawio_png_cli::{document, fonts::FontPolicy, png_data};
+use drawio_png_cli::domain::{diagram as document, drawio_png as png_data, fonts::FontPolicy};
 use std::fs;
 
 const MODEL: &str = include_str!("fixtures/model.xml");
