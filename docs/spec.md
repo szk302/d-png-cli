@@ -547,7 +547,7 @@ d-png-cli library list [--scope SCOPE] [--json]
  {"name":"@acme/brand","origin":"installed","version":"1.0.0","range":"^1.0.0","title":"ACME Brand","entries":1,"file":".d-png/libraries/@acme/brand.xml","normalized":true}]
 ```
 
-`normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリは `"installed":false` を付けて出す。
+`normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリ（clone の直後など）は、`--json` では名前・版・範囲に `"installed":false` を付けて出し、テキストではエントリー数を `-`、表示名を `(not installed)` として、標準エラーで `library install` を案内する。
 
 ### 9.8 `library search`
 
@@ -591,7 +591,7 @@ d-png-cli library show REF [--json]
 
 - `cells` は展開後の ID の付き方（`<ID>` はプレースホルダーの ID）と各セルの種類・ラベル・親を示す。
 - `style` は最上位のセルが 1 つのときだけ出す（開発版の `library style` の代わり）。最上位のセルがラッパーで包まれていれば、その独自データを `data`（例 `{"owner":"library","note":"keep"}`）に出す。
-- 種類 `image` には `"image":{"fingerprint":"224afa6bb926","mediaType":"image/svg+xml","bytes":109}` を付ける（`bytes` はデコードした画像の大きさ）。画像データは出さない。
+- 種類 `image` には `"image":{"fingerprint":"224afa6bb926","mediaType":"image/svg+xml","bytes":109}` を付ける（`bytes` はデコードした画像の大きさ）。画像データは出さない。`style` の `image` の値は `lib:<参照>` に置き換えて出すので、`style` はそのまま XML に写せる（例 `shape=image;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;image=lib:simple-icons/postgresql;`）。
 - 取り込んだライブラリのエントリーには `version` を付ける。
 - `example` は種類に合わせたプレースホルダーの例（`image`・`shape` は幅・高さ付き、`edge` は `source`・`target` 付き）。
 
@@ -770,5 +770,4 @@ v0.1.0 の後に開発版（`main` ブランチ）に入り、リリースしな
 - B〜E・G の「CLI がない場合の XML」は、0.1.0 系の CLI で `validate` を通し、Chrome の vscode モード（draw.io 26.0.2 の Web 資材）で描画した（`expected.drawio.png`）。利用者ライブラリの部品は 0.1.0 系の `insert` でも展開し、ID・位置・サイズ・画像の値が一致することを確かめた。A・F・H は v0.2.0 の CLI の `write`（vscode、同梱資材のみ）で描画した。全ケースの展開結果は `tests/acceptance.rs` で検査している。
 - 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.d-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
 - テキストの出力例と `--json` の例は、例のプロジェクトで実行した結果と照合した。実際の `--json` はキーをアルファベット順に並べ、幅・高さを `48.0` の形で出す。
-- 次の点は実装がこの仕様に追いついていない: 9.7 の `range` と取り込まれていない依存の `"installed":false`、9.8・9.9 の取り込んだライブラリの `version`、9.9 で種類 `image` の `style` から画像データを除くこと（今は `style` に画像の値がそのまま入る）。
 - VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。

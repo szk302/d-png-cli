@@ -14,6 +14,7 @@ use crate::{
         expand::{References, Resolved},
         library::{Entry, EntryKind, Library, Origin},
         reference::{ImageRef, LibraryName, Ref, fingerprint},
+        version::Version,
     },
 };
 
@@ -35,6 +36,8 @@ pub struct Libraries<'a> {
 pub struct Hit {
     pub reference: Ref,
     pub origin: Origin,
+    /// The installed version, for an installed library's entry.
+    pub version: Option<Version>,
     pub title: String,
     pub kind: EntryKind,
     pub width: f64,
@@ -322,6 +325,7 @@ impl<'a> Libraries<'a> {
                             entry: entry.id.clone(),
                         },
                         origin,
+                        version: info.version,
                         title: entry.title.clone(),
                         kind,
                         width: entry.width,

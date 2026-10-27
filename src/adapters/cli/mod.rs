@@ -4,6 +4,7 @@
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use std::{
+    collections::BTreeMap,
     env,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -24,7 +25,7 @@ use crate::{
         install,
         libraries::{Libraries, SearchQuery},
         library::{self, PreviewRequest},
-        ports::{DependencyStore, LibraryRepository},
+        ports::{DependencyStore, LibraryRepository, LockStore},
         register,
         vscode::{self, EntryIds},
     },
@@ -33,6 +34,7 @@ use crate::{
         fonts::{self, FontPolicy},
         library::EntryKind,
         library_file::Source,
+        lock::Lock,
         reference::LibraryName,
         settings::Settings,
         version::Range,
@@ -483,6 +485,15 @@ impl Context {
             })
     }
 
+    /// `[dependencies]` and `lock.json`, which `library list` and `show`
+    /// describe installed libraries with; none without a project.
+    fn dependencies(&self) -> Result<(BTreeMap<LibraryName, Range>, Lock), Diagnostic> {
+        let Some(project) = &self.project else {
+            return Ok(Default::default());
+        };
+        Ok((self.settings()?.dependencies, project.lock().load()?))
+    }
+
     fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
         let project: Option<ProjectLibraries> = self.project.as_ref().map(Project::libraries);
         let installed = self.project.as_ref().map(Project::installed);
@@ -924,29 +935,31 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             }
         }
         LibraryCommand::List { scope, json } => {
-            let listed =
-                context.with_libraries(|libraries| library::list(libraries, scope.as_deref()))?;
+            let (dependencies, lock) = context.dependencies()?;
+            let listed = context.with_libraries(|libraries| {
+                library::list(libraries, &dependencies, &lock, scope.as_deref())
+            })?;
             if json {
                 print_json(&Value::Array(
-                    listed
-                        .iter()
-                        .map(|(origin, info)| output::library_json(*origin, info))
-                        .collect(),
+                    listed.iter().map(output::library_json).collect(),
                 ))
             } else {
-                for (_, info) in listed.iter().filter(|(_, i)| !i.normalized) {
-                    eprintln!(
-                        "warning: {} is not in the form the VS Code extension reads; run `d-png-cli library sync {}`",
-                        info.location.as_deref().unwrap_or("-"),
-                        info.name
-                    );
+                for listed in &listed {
+                    let info = &listed.info;
+                    if !listed.installed {
+                        eprintln!(
+                            "warning: {} is not installed; run `d-png-cli library install`",
+                            info.name
+                        );
+                    } else if !info.normalized {
+                        eprintln!(
+                            "warning: {} is not in the form the VS Code extension reads; run `d-png-cli library sync {}`",
+                            info.location.as_deref().unwrap_or("-"),
+                            info.name
+                        );
+                    }
                 }
-                print(
-                    &listed
-                        .iter()
-                        .map(|(_, info)| output::library_line(info))
-                        .collect::<String>(),
-                )
+                print(&listed.iter().map(output::library_line).collect::<String>())
             }
         }
         LibraryCommand::Search {
@@ -977,7 +990,10 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             }
         }
         LibraryCommand::Show { reference, json } => {
-            let shown = context.with_libraries(|libraries| library::show(libraries, &reference))?;
+            let (dependencies, lock) = context.dependencies()?;
+            let shown = context.with_libraries(|libraries| {
+                library::show(libraries, &dependencies, &lock, &reference)
+            })?;
             if json {
                 print_json(&output::shown_json(&shown))
             } else {

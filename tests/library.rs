@@ -183,6 +183,16 @@ fn show_describes_libraries_and_entries() {
     .unwrap();
     assert_eq!(raw["image"]["mediaType"], "image/png");
     assert_eq!(raw["image"]["bytes"], 8);
+    // The style names the image instead of carrying it, and works as written.
+    let style = raw["style"].as_str().unwrap();
+    assert!(style.contains("image=lib:icons/raw;"), "{style}");
+    assert!(!style.contains("data:"), "{style}");
+    assert!(!run(dir.path(), &["library", "show", "icons/raw"]).contains("data:"));
+    let xml = format!(
+        r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="r" style="{style}" vertex="1" parent="1"><mxGeometry width="16" height="8" as="geometry"/></mxCell></root></mxGraphModel>"#
+    );
+    let expanded = stdout(cli().current_dir(dir.path()).arg("expand").write_stdin(xml));
+    assert!(expanded.contains("image=data:image/png,"), "{expanded}");
     assert!(
         raw["example"]
             .as_str()

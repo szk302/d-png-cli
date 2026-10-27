@@ -154,6 +154,55 @@ fn packed_and_installed_files_are_the_examples() {
     );
 }
 
+fn json(w: &Workspace, args: &[&str]) -> serde_json::Value {
+    serde_json::from_str(&w.run(args)).unwrap()
+}
+
+#[test]
+fn installed_libraries_show_their_version_and_range() {
+    let w = Workspace::new();
+    w.pack("1.0.0", &[&logo()]);
+    w.run(&["library", "install", "@acme/brand"]);
+    assert_eq!(
+        json(&w, &["library", "list", "--json"]),
+        serde_json::json!([{"name": "@acme/brand", "origin": "installed", "version": "1.0.0", "range": "^1.0.0", "title": "ACME Brand", "entries": 1, "file": ".d-png/libraries/@acme/brand.xml", "normalized": true}])
+    );
+    assert_eq!(
+        json(&w, &["library", "show", "@acme/brand", "--json"]),
+        json(&w, &["library", "list", "--json"])[0]
+    );
+    assert_eq!(
+        json(&w, &["library", "search", "logo", "--json"])[0]["version"],
+        "1.0.0"
+    );
+    let logo = json(&w, &["library", "show", "@acme/brand/logo", "--json"]);
+    assert_eq!(logo["version"], "1.0.0");
+    assert!(
+        w.run(&["library", "show", "@acme/brand/logo"])
+            .contains("origin: installed\nversion: 1.0.0\n")
+    );
+    // A dependency whose file is missing (as after a clone) is listed as such.
+    fs::remove_file(w.installed()).unwrap();
+    assert_eq!(
+        json(&w, &["library", "list", "--json"]),
+        serde_json::json!([{"name": "@acme/brand", "origin": "installed", "version": "1.0.0", "range": "^1.0.0", "installed": false}])
+    );
+    let mut list = w.command(&["library", "list"]);
+    let output = list.assert().success().get_output().clone();
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "@acme/brand\t1.0.0\t-\t(not installed)\n"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("warning: @acme/brand is not installed; run `d-png-cli library install`")
+    );
+    assert!(
+        w.run(&["library", "show", "@acme/brand"])
+            .contains("range: ^1.0.0\ninstalled: no;")
+    );
+}
+
 #[test]
 fn a_clone_restores_the_locked_versions() {
     let w = Workspace::new();

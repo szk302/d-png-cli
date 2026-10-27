@@ -1,5 +1,7 @@
 //! The library use cases that read libraries (spec 9.7-9.10): list, search,
 //! show and preview.
+use std::collections::BTreeMap;
+
 use crate::{
     app::{
         libraries::{Hit, Libraries, SearchQuery},
@@ -9,21 +11,68 @@ use crate::{
         codec,
         diagnostic::{Code, Diagnostic, Diagnostics},
         library::{Description, EntryKind, ImageInfo, Origin},
+        lock::Lock,
         preview,
         reference::{LibraryName, Ref, fingerprint},
+        version::{Range, Version},
     },
 };
 
-/// Libraries in search order, optionally of one scope.
+/// One library of `library list` (spec 9.7).
+#[derive(Clone, Debug)]
+pub struct Listed {
+    pub origin: Origin,
+    pub info: LibraryInfo,
+    /// Its range in `[dependencies]`.
+    pub range: Option<Range>,
+    /// False for a dependency whose file is not installed; its `info` then
+    /// has only the name and the locked version.
+    pub installed: bool,
+}
+
+/// Libraries in search order, optionally of one scope, with the
+/// dependencies that are not installed among the installed ones.
 pub fn list(
     libraries: &Libraries<'_>,
+    dependencies: &BTreeMap<LibraryName, Range>,
+    lock: &Lock,
     scope: Option<&str>,
-) -> Result<Vec<(Origin, LibraryInfo)>, Diagnostic> {
-    Ok(libraries
+) -> Result<Vec<Listed>, Diagnostic> {
+    let mut listed: Vec<Listed> = libraries
         .list()?
         .into_iter()
-        .filter(|(_, info)| scope.is_none_or(|s| info.name.scope() == Some(s)))
-        .collect())
+        .map(|(origin, info)| Listed {
+            range: dependencies.get(&info.name).copied(),
+            origin,
+            info,
+            installed: true,
+        })
+        .collect();
+    for (name, range) in dependencies {
+        if listed.iter().any(|l| l.info.name == *name) {
+            continue;
+        }
+        listed.push(Listed {
+            origin: Origin::Installed,
+            info: LibraryInfo {
+                name: name.clone(),
+                title: None,
+                entries: 0,
+                location: None,
+                normalized: false,
+                version: lock.libraries.get(name).map(|l| l.version),
+            },
+            range: Some(*range),
+            installed: false,
+        });
+    }
+    // Project, then installed; each in name order.
+    listed.sort_by(|a, b| {
+        let rank = |l: &Listed| matches!(l.origin, Origin::Installed);
+        (rank(a), &a.info.name).cmp(&(rank(b), &b.info.name))
+    });
+    listed.retain(|l| scope.is_none_or(|s| l.info.name.scope() == Some(s)));
+    Ok(listed)
 }
 
 #[derive(Clone, Debug)]
@@ -50,7 +99,7 @@ pub fn search(
 /// What `library show` prints: a library, or one of its entries.
 #[derive(Clone, Debug)]
 pub enum Shown {
-    Library(Origin, LibraryInfo),
+    Library(Listed),
     Entry(EntryDetails),
 }
 
@@ -58,6 +107,8 @@ pub enum Shown {
 pub struct EntryDetails {
     pub reference: Ref,
     pub origin: Origin,
+    /// The installed version, for an installed library's entry.
+    pub version: Option<Version>,
     pub title: String,
     pub kind: EntryKind,
     pub width: f64,
@@ -68,8 +119,14 @@ pub struct EntryDetails {
     pub example: String,
 }
 
-/// `target` is a library name or a reference string.
-pub fn show(libraries: &Libraries<'_>, target: &str) -> Result<Shown, Diagnostics> {
+/// `target` is a library name or a reference string. `dependencies` and
+/// `lock` describe a library as `library list` does.
+pub fn show(
+    libraries: &Libraries<'_>,
+    dependencies: &BTreeMap<LibraryName, Range>,
+    lock: &Lock,
+    target: &str,
+) -> Result<Shown, Diagnostics> {
     if let Ok(reference) = Ref::parse(target) {
         let entry = libraries.entry(&reference)?.ok_or_else(|| {
             Diagnostic::new(Code::RefNotFound, format!("{reference} is not found"))
@@ -82,27 +139,58 @@ pub fn show(libraries: &Libraries<'_>, target: &str) -> Result<Shown, Diagnostic
             .ok()
             .flatten()
             .and_then(|data| Some((fingerprint(&data), ImageInfo::of(&data)?)));
+        let mut description = entry.describe().ok();
+        if kind == EntryKind::Image
+            && let Some(style) = description.as_mut().and_then(|d| d.style.as_mut())
+        {
+            *style = without_image_data(style, &reference);
+        }
+        let version = libraries
+            .list()?
+            .into_iter()
+            .find(|(_, info)| info.name == reference.library)
+            .and_then(|(_, info)| info.version);
         return Ok(Shown::Entry(EntryDetails {
             example: example(&reference, kind, entry.width, entry.height),
             origin: reference.library.origin(),
+            version,
             title: entry.title.clone(),
             kind,
             width: entry.width,
             height: entry.height,
-            description: entry.describe().ok(),
+            description,
             image,
             reference,
         }));
     }
     let name = LibraryName::parse(target).map_err(|d| d.reference(target))?;
-    let (origin, info) = libraries
-        .list()?
+    let listed = list(libraries, dependencies, lock, None)?
         .into_iter()
-        .find(|(_, info)| info.name == name)
+        .find(|l| l.info.name == name)
         .ok_or_else(|| {
             Diagnostic::new(Code::RefNotFound, format!("no library named {name}")).reference(target)
         })?;
-    Ok(Shown::Library(origin, info))
+    Ok(Shown::Library(listed))
+}
+
+/// An image entry's style without the image data (spec 9.9): `image` names
+/// the entry instead, so the style can be written into a diagram as it is.
+fn without_image_data(style: &str, reference: &Ref) -> String {
+    let image = format!("image=lib:{reference}");
+    let mut items: Vec<String> = style
+        .split(';')
+        .filter(|item| !item.is_empty())
+        .map(|item| match item.split_once('=') {
+            Some(("image", _)) => image.clone(),
+            _ => item.to_owned(),
+        })
+        .collect();
+    // draw.io uses the last `image`; one is enough where the first was.
+    let mut seen = false;
+    items.retain(|item| *item != image || !std::mem::replace(&mut seen, true));
+    let mut style = items.join(";");
+    style.push(';');
+    style
 }
 
 /// A placeholder for the kind of entry: a size for images and shapes, ends

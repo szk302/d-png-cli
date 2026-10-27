@@ -6,15 +6,13 @@ use crate::{
         diagram::{Read, Written},
         install::{Change, Packed},
         libraries::Hit,
-        library::{EntryDetails, Shown},
-        ports::LibraryInfo,
+        library::{EntryDetails, Listed, Shown},
         register::Added,
     },
     domain::{
         codec,
         diagnostic::{Diagnostic, Location},
         expand::{Expanded, ExpandedRef},
-        library::Origin,
     },
 };
 
@@ -153,16 +151,30 @@ fn size(value: f64) -> String {
     codec::number((value * 100.0).round() / 100.0)
 }
 
-pub fn library_json(origin: Origin, info: &LibraryInfo) -> Value {
-    json!({
+/// A library of `library list` (spec 9.7); `version` and `range` only for
+/// installed libraries, and a dependency that is not installed only by name.
+pub fn library_json(listed: &Listed) -> Value {
+    let info = &listed.info;
+    let mut value = json!({
         "name": info.name.to_string(),
-        "origin": origin.as_str(),
-        "title": info.title,
-        "entries": info.entries,
-        "file": info.location,
-        "normalized": info.normalized,
-        "version": info.version.map(|v| v.to_string()),
-    })
+        "origin": listed.origin.as_str(),
+    });
+    let object = value.as_object_mut().expect("object");
+    if let Some(version) = info.version {
+        object.insert("version".into(), json!(version.to_string()));
+    }
+    if let Some(range) = &listed.range {
+        object.insert("range".into(), json!(range.to_string()));
+    }
+    if !listed.installed {
+        object.insert("installed".into(), json!(false));
+        return value;
+    }
+    object.insert("title".into(), json!(info.title));
+    object.insert("entries".into(), json!(info.entries));
+    object.insert("file".into(), json!(info.location));
+    object.insert("normalized".into(), json!(info.normalized));
+    value
 }
 
 pub fn added_json(added: &Added) -> Value {
@@ -207,18 +219,27 @@ pub fn added_text(added: &Added) -> String {
     text
 }
 
-pub fn library_line(info: &LibraryInfo) -> String {
+pub fn library_line(listed: &Listed) -> String {
+    let info = &listed.info;
     format!(
         "{}\t{}\t{}\t{}\n",
         info.name,
         info.version.map_or("-".into(), |v| v.to_string()),
-        info.entries,
-        info.title.as_deref().map_or("-".into(), one_line)
+        if listed.installed {
+            info.entries.to_string()
+        } else {
+            "-".into()
+        },
+        if listed.installed {
+            info.title.as_deref().map_or("-".into(), one_line)
+        } else {
+            "(not installed)".into()
+        }
     )
 }
 
 pub fn hit_json(hit: &Hit) -> Value {
-    json!({
+    let mut value = json!({
         "ref": hit.reference.to_string(),
         "library": hit.reference.library.to_string(),
         "id": hit.reference.entry.as_str(),
@@ -227,7 +248,11 @@ pub fn hit_json(hit: &Hit) -> Value {
         "width": hit.width,
         "height": hit.height,
         "origin": hit.origin.as_str(),
-    })
+    });
+    if let Some(version) = hit.version {
+        value["version"] = json!(version.to_string());
+    }
+    value
 }
 
 pub fn hit_line(hit: &Hit) -> String {
@@ -243,7 +268,7 @@ pub fn hit_line(hit: &Hit) -> String {
 
 pub fn shown_json(shown: &Shown) -> Value {
     match shown {
-        Shown::Library(origin, info) => library_json(*origin, info),
+        Shown::Library(listed) => library_json(listed),
         Shown::Entry(details) => entry_json(details),
     }
 }
@@ -259,6 +284,9 @@ fn entry_json(details: &EntryDetails) -> Value {
         "example": details.example,
     });
     let object = value.as_object_mut().expect("object");
+    if let Some(version) = details.version {
+        object.insert("version".into(), json!(version.to_string()));
+    }
     if let Some(description) = &details.description {
         if let Some(label) = &description.label {
             object.insert("label".into(), json!(label));
@@ -307,14 +335,33 @@ fn entry_json(details: &EntryDetails) -> Value {
 
 pub fn shown_text(shown: &Shown) -> String {
     match shown {
-        Shown::Library(origin, info) => format!(
-            "name: {}\ntitle: {}\norigin: {}\nentries: {}\nfile: {}\n",
-            info.name,
-            info.title.as_deref().map_or("-".into(), one_line),
-            origin.as_str(),
-            info.entries,
-            info.location.as_deref().unwrap_or("-"),
-        ),
+        Shown::Library(listed) => {
+            let info = &listed.info;
+            let mut text = format!("name: {}\n", info.name);
+            if listed.installed {
+                text.push_str(&format!(
+                    "title: {}\n",
+                    info.title.as_deref().map_or("-".into(), one_line)
+                ));
+            }
+            text.push_str(&format!("origin: {}\n", listed.origin.as_str()));
+            if let Some(version) = info.version {
+                text.push_str(&format!("version: {version}\n"));
+            }
+            if let Some(range) = &listed.range {
+                text.push_str(&format!("range: {range}\n"));
+            }
+            if !listed.installed {
+                text.push_str("installed: no; run `d-png-cli library install`\n");
+                return text;
+            }
+            text.push_str(&format!(
+                "entries: {}\nfile: {}\n",
+                info.entries,
+                info.location.as_deref().unwrap_or("-"),
+            ));
+            text
+        }
         Shown::Entry(details) => {
             let mut text = format!(
                 "ref: {}\ntitle: {}\nkind: {}\nsize: {}x{}\norigin: {}\n",
@@ -325,6 +372,9 @@ pub fn shown_text(shown: &Shown) -> String {
                 size(details.height),
                 details.origin.as_str(),
             );
+            if let Some(version) = details.version {
+                text.push_str(&format!("version: {version}\n"));
+            }
             if let Some(description) = &details.description {
                 if let Some(label) = &description.label {
                     text.push_str(&format!("label: {}\n", one_line(label)));
