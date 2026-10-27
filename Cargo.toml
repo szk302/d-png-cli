@@ -24,6 +24,7 @@ sha2 = "0.11"
 shell-words = "1"
 tempfile = "3"
 tiny_http = "0.12.0"
+toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 tungstenite = "0.30.0"
 unicode-normalization = "0.1"
 urlencoding = "2"

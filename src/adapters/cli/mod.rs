@@ -13,6 +13,7 @@ use std::{
 use crate::{
     adapters::{
         builtin::BuiltinLibraries,
+        config::{self, ConfigFile},
         fs,
         project::{self, Project, ProjectLibraries},
         render::RendererKind,
@@ -30,6 +31,7 @@ use crate::{
         library::EntryKind,
         library_file::Source,
         reference::LibraryName,
+        settings::{Layer, Settings},
     },
 };
 
@@ -333,6 +335,71 @@ impl Context {
         })
     }
 
+    /// The project's `config.toml` over the user's (spec 2.4).
+    fn settings(&self) -> Result<Settings, Diagnostic> {
+        let user = match config::user_area() {
+            Some(area) => ConfigFile::load(&area.join(config::FILE), Layer::User)?.settings()?,
+            None => Settings::default(),
+        };
+        Ok(match &self.project {
+            Some(project) => ConfigFile::load(&project.area().join(config::FILE), Layer::Project)?
+                .settings()?
+                .over(user),
+            None => user,
+        })
+    }
+
+    /// The font policy: the options, or else the settings.
+    fn fonts(
+        &self,
+        default: Option<String>,
+        fallbacks: &[String],
+    ) -> Result<Option<FontPolicy>, Diagnostic> {
+        if default.is_some() {
+            return font_policy(default, fallbacks);
+        }
+        let render = self.settings()?.render;
+        match (render.default_font, render.fallback_fonts) {
+            (Some(default), fallbacks) => FontPolicy::new(&default, &fallbacks.unwrap_or_default())
+                .map(Some)
+                .map_err(|e| {
+                    Diagnostic::new(Code::ConfigInvalid, format!("[render] fonts: {e:#}"))
+                }),
+            (None, Some(_)) => Err(Diagnostic::new(
+                Code::ConfigInvalid,
+                "config.toml: [render] fallback-fonts needs default-font",
+            )),
+            (None, None) => Ok(None),
+        }
+    }
+
+    /// The renderer: the option, `DRAWIO_PNG_RENDERER`, the settings, then `vscode`.
+    fn renderer(&self, option: Option<RendererKind>) -> Result<RendererKind, Diagnostic> {
+        if let Some(kind) = option {
+            return Ok(kind);
+        }
+        if let Some(kind) = RendererKind::from_env()? {
+            return Ok(kind);
+        }
+        match self.settings()?.render.renderer {
+            Some(name) => RendererKind::parse(&name).ok_or_else(|| {
+                Diagnostic::new(
+                    Code::ConfigInvalid,
+                    format!(
+                        "[render] renderer {name:?}: expected {}",
+                        RendererKind::NAMES.join(", ")
+                    ),
+                )
+            }),
+            None => Ok(RendererKind::default()),
+        }
+    }
+
+    /// `--allow-network`, or the settings.
+    fn allow_network(&self, option: bool) -> Result<bool, Diagnostic> {
+        Ok(option || self.settings()?.render.allow_network.unwrap_or(false))
+    }
+
     /// The project's libraries, which commands that write need.
     fn store(&self) -> Result<ProjectLibraries, Diagnostic> {
         self.project
@@ -411,9 +478,9 @@ fn run(cli: Cli) -> Outcome {
             json,
         } => {
             require_output_for_json(json, output.as_deref())?;
-            let fonts = font_policy(default_font, &fallback_font)?;
             let bytes = read_input(input.as_deref())?;
             let context = Context::new(cli.project)?;
+            let fonts = context.fonts(default_font, &fallback_font)?;
             let expanded = context
                 .with_libraries(|libraries| diagram::expand(&bytes, fonts.as_ref(), libraries))?;
             write_text_output(output.as_deref(), &expanded.xml)?;
@@ -459,14 +526,20 @@ fn run(cli: Cli) -> Outcome {
             if to_stdout && json {
                 return Err(usage("--json writes to standard output; give -o a file").into());
             }
-            let fonts = font_policy(default_font, &fallback_font)?;
+            // Usage errors before any input is read.
+            font_policy(default_font.clone(), &fallback_font)?;
             let bytes = read_input(input.as_deref())?;
             let base = base_image.as_deref().map(read_file).transpose()?;
+            let context = Context::new(cli.project)?;
+            let fonts = context.fonts(default_font, &fallback_font)?;
             // Rendering settings are read only when rendering.
-            let kind = match (renderer, metadata_only) {
-                (Some(kind), _) => kind,
-                (None, false) => RendererKind::from_env()?.unwrap_or_default(),
-                (None, true) => RendererKind::default(),
+            let (kind, allow_network) = if metadata_only {
+                (RendererKind::default(), false)
+            } else {
+                (
+                    context.renderer(renderer)?,
+                    context.allow_network(allow_network)?,
+                )
             };
             let renderer = kind.renderer();
             let pixels = if metadata_only {
@@ -477,7 +550,6 @@ fn run(cli: Cli) -> Outcome {
                     allow_network,
                 }
             };
-            let context = Context::new(cli.project)?;
             let written = context.with_libraries(|libraries| {
                 diagram::write(
                     WriteRequest {
@@ -658,6 +730,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 query: filter.query()?,
             };
             let renderer = RendererKind::Vscode.renderer();
+            let allow_network = context.allow_network(allow_network)?;
             let png = context.with_libraries(|libraries| {
                 library::preview(libraries, &request, renderer.as_ref(), allow_network)
             })?;

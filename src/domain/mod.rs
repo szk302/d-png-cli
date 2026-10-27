@@ -14,3 +14,6 @@ pub mod library;
 pub mod library_file;
 pub mod preview;
 pub mod reference;
+pub mod settings;
+pub mod source;
+pub mod version;

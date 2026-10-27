@@ -60,6 +60,11 @@ impl Project {
         &self.root
     }
 
+    /// The project area, `.drawio-png/`.
+    pub fn area(&self) -> PathBuf {
+        self.root.join(AREA)
+    }
+
     pub fn libraries(&self) -> ProjectLibraries {
         ProjectLibraries {
             directory: self.root.join(AREA).join("libraries"),
@@ -76,10 +81,18 @@ pub struct Initialized {
 }
 
 const CONFIG: &str = "# drawio-png-cli project settings (docs/v0.2.0_claude/spec.md 2.4)\n\
+#\n\
 # [render]\n\
 # renderer = \"vscode\"\n\
 # default-font = \"Noto Sans CJK JP\"\n\
-# fallback-fonts = [\"Noto Sans CJK JP\", \"Noto Color Emoji\"]\n";
+# fallback-fonts = [\"Noto Sans CJK JP\", \"Noto Color Emoji\"]\n\
+# allow-network = false\n\
+#\n\
+# [scopes]\n\
+# acme = \"git+https://github.com/acme/drawio-libraries.git\"\n\
+#\n\
+# [dependencies]\n\
+# \"@acme/brand\" = \"^1.0.0\"\n";
 
 const GITIGNORE: &str =
     "# Libraries installed with `library install`; restored from lock.json\n/libraries/@*/\n";

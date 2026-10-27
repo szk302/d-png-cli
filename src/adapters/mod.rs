@@ -2,6 +2,7 @@
 //! built-in catalog and the renderers.
 pub mod builtin;
 pub mod cli;
+pub mod config;
 pub mod fs;
 pub mod project;
 pub mod render;

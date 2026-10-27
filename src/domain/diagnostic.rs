@@ -29,6 +29,7 @@ pub enum Code {
     NetworkBlocked,
     OutputWrite,
     LibraryManaged,
+    ConfigInvalid,
     /// Warning: `write --metadata-only` kept pixels that may not match.
     MetadataOnly,
 }
@@ -61,6 +62,7 @@ impl Code {
             Code::NetworkBlocked => "NETWORK_BLOCKED",
             Code::OutputWrite => "OUTPUT_WRITE",
             Code::LibraryManaged => "LIBRARY_MANAGED",
+            Code::ConfigInvalid => "CONFIG_INVALID",
             Code::MetadataOnly => "METADATA_ONLY",
         }
     }
