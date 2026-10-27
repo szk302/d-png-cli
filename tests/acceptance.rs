@@ -1,4 +1,4 @@
-//! The use cases of docs/v0.2.0_claude/usecase.md: the XML each case passes
+//! The use cases of docs/usecase.md: the XML each case passes
 //! to the CLI expands to the XML it would take without the CLI.
 mod support;
 
@@ -13,7 +13,7 @@ use std::{fs, path::PathBuf};
 use support::{Memory, assert_same_cells};
 
 fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/v0.2.0_claude/examples")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/examples")
 }
 
 fn load(name: &str, path: PathBuf) -> Library {

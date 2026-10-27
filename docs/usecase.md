@@ -1,6 +1,6 @@
-# v0.2.0（Claude 案）: XML を標準入力で渡して図形・アイコンを配置・編集する
+# v0.2.0 のユースケース: XML を標準入力で渡して図形・アイコンを配置・編集する
 
-この文書は、[v0.2.0 の仕様案](spec.md)を使ってエージェントが図面を作る・直す流れを、ユースケースごとに示す。各ケースで **CLI に渡す XML** と、**CLI がない場合に書く必要がある XML** を並べ、比較できるようにした。
+この文書は、[v0.2.0 の仕様](spec.md)を使ってエージェントが図面を作る・直す流れを、ユースケースごとに示す。各ケースで **CLI に渡す XML** と、**CLI がない場合に書く必要がある XML** を並べ、比較できるようにした。
 
 - **CLI に渡す XML**: エージェントが書いて `drawio-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `libref="…"` と `image=lib:…` で参照する。
 - **CLI がない場合の XML**: 同じ図面を、ライブラリの参照なしで draw.io の普通の XML として書いたもの。エージェントがライブラリのファイルを読み、style・画像・ID・座標を自分で写して組み立てる必要がある。`drawio-png-cli expand` の出力、つまり `write` が PNG に埋め込む XML と同じ内容である。
@@ -802,6 +802,7 @@ git add @acme/brand && git commit -m "@acme/brand 1.0.0" && git push
 ```
 packed @acme/brand@1.0.0 (1 entry) -> ./@acme/brand/1.0.0.xml
   added: logo
+  removed: (none)
 ```
 
 **CLI に渡すもの:** ロゴの画像ファイル（[examples/sources/Logo.svg](examples/sources/Logo.svg)）と、名前・版。

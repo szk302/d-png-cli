@@ -97,7 +97,7 @@ pub struct Initialized {
     pub created: bool,
 }
 
-const CONFIG: &str = "# drawio-png-cli project settings (docs/v0.2.0_claude/spec.md 2.4)\n\
+const CONFIG: &str = "# drawio-png-cli project settings (docs/spec.md 2.4)\n\
 #\n\
 # [render]\n\
 # renderer = \"vscode\"\n\

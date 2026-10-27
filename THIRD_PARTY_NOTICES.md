@@ -153,7 +153,7 @@ drawio-png-cli bundles no shape or icon libraries. draw.io's sidebar shapes,
 icon sets and stencil libraries are not included; users register the
 libraries they choose (`library add`, `library install`) and are responsible
 for the license and trademark terms of what they register. The libraries in
-`docs/v0.2.0_claude/examples/` are original test material: their images are
+`docs/examples/` are original test material: their images are
 plain colored rectangles, and the `shapes` example names draw.io's basic
 shapes by style only.
 

@@ -10,7 +10,7 @@ use support::{cli, stderr, stdout};
 use tempfile::TempDir;
 
 fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/v0.2.0_claude/examples")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/examples")
 }
 
 /// A workspace with a source directory `acme-drawio-libraries/`, a project

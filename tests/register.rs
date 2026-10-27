@@ -6,7 +6,7 @@ use support::{cli, compress, library_file, stderr, stdout};
 use tempfile::tempdir;
 
 fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/v0.2.0_claude/examples")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/examples")
 }
 
 fn project() -> tempfile::TempDir {

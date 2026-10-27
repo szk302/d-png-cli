@@ -3,7 +3,7 @@
 assets/skill/*.md text eol=lf
 skills/**/SKILL.md text eol=lf
 # The v0.2.0 examples record the byte sizes and SHA-256 integrity values of these files.
-docs/v0.2.0_claude/examples/**/*.xml text eol=lf
-docs/v0.2.0_claude/examples/**/*.json text eol=lf
-docs/v0.2.0_claude/examples/**/*.toml text eol=lf
-docs/v0.2.0_claude/examples/**/*.svg text eol=lf
+docs/examples/**/*.xml text eol=lf
+docs/examples/**/*.json text eol=lf
+docs/examples/**/*.toml text eol=lf
+docs/examples/**/*.svg text eol=lf

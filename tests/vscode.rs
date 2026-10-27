@@ -9,7 +9,7 @@ use std::{
 use support::{cli, stderr, stdout};
 
 fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/v0.2.0_claude/examples")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/examples")
 }
 
 /// The example project of use case I: three project libraries and @acme/brand

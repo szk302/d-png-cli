@@ -1,6 +1,6 @@
-# drawio-png-cli v0.2.0 仕様（Claude 案）
+# drawio-png-cli v0.2.0 仕様
 
-この文書は v0.2.0 の CLI 仕様案である。v0.1.0 との互換性は考慮しない。設計の背景は [README](README.md)、VS Code 拡張との連携は [vscode.md](vscode.md)、作業例と XML の比較は [usecase.md](usecase.md) を参照。
+この文書は v0.2.0 の CLI 仕様である。v0.1.0 との互換性は考慮しない。要件は [prd.md](prd.md)、設計判断の理由は [1.1](#11-主な設計判断)、VS Code 拡張との連携は [vscode.md](vscode.md)、作業例と XML の比較は [usecase.md](usecase.md) を参照。
 
 ## 1. 設計方針
 
@@ -10,6 +10,19 @@
 4. **登録したライブラリは VS Code 拡張でもそのまま使える。** 登録先は、VS Code 拡張と draw.io の両方が読めるライブラリファイルとし、拡張の設定も CLI が生成する。
 5. **保存される図面は普通の draw.io XML。** PNG に埋め込む XML には参照を残さない。VS Code・draw.io で開くときに CLI もライブラリも不要。
 6. **操作は一貫させる。** すべてのコマンドが同じ入出力・出力形式・終了コード・エラー形式に従う（[2 章](#2-共通の規約)）。
+
+### 1.1 主な設計判断
+
+1. **`insert` を廃止し、XML に参照を書く。** エージェントは図面全体を XML で書くため、1 図形ずつコマンドで挿入して ID を受け取る流れは合わない。部品は `libref="<ライブラリ>/<ID>"` のプレースホルダーとして書き、`write` が展開する。1 回の呼び出しで図面ができ、中間ファイルも要らない。
+2. **参照は 1 つの文字列にする。** 登録時にエントリーへ安定した ID を付けるため、タイトルの重複・空・`/` を含むタイトル・番号のずれを考えずに済む。PRD 4.2 で計画していた「ライブラリ名・タイトル・番号」と「画像ハッシュ」の 2 系統の指定は、同じ参照文字列の 2 つの書き方（セル群の `libref` と画像だけの `image=lib:`）にまとめた。
+3. **ライブラリの登録を必須にし、ライブラリを同梱しない。** 参照はプロジェクトに登録・取り込みしたライブラリだけで解決する。draw.io のサイドバーの図形（AWS・Azure など）も同梱せず、使う図形は利用者が draw.io でライブラリにして登録する。図形集・アイコンにはそれぞれのライセンス・商標の条件があり、何を使うかは利用者が決めるためである。環境変数で任意のパスを指すのをやめ、どこで実行しても（CI・他の開発者の環境でも）同じ部品になるようにした。登録したファイルはそのまま VS Code 拡張の設定から読ませる。
+4. **ライブラリ名に npm と同じ名前空間を入れる。** スコープのない名前（`components`）はそのプロジェクト専用、スコープ付きの名前（`@acme/brand`）は取得元から取り込む共有ライブラリとする。スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定し、`library install` で取り込んで版を `lock.json` に固定する。同じ名前の部品集が社内・個人にあっても参照が衝突せず、版を上げるまで部品が変わらない。公開・認証を扱うレジストリーサーバーは作らず、Git などの既存の手段で配布する（[9.5](#95-スコープと取得元)）。
+5. **登録ファイルは VS Code 拡張が読める書式で書く。** 拡張 1.9.0 は `<mxlibrary>` の中身を実体参照を解かずに `JSON.parse` するため、CDATA や `&lt;` を使ったライブラリは draw.io で読めても拡張では読めない。CLI は XML の特殊文字を JSON 側のエスケープ（`\u003c` など）で書き、draw.io と拡張の両方で同じ内容になるようにする（[vscode.md](vscode.md#3-ライブラリファイルの書式の制約)）。
+6. **保存する XML には参照を残さない。** PNG の中は普通の draw.io XML なので、VS Code・draw.io で開くのに CLI もライブラリも要らない。
+7. **`read` と `expand` を逆向きの対にする。** `read` は登録済みの画像を指紋付きの `image=lib:` に縮めてエージェントのコンテキストを節約し、`expand` は参照を展開した単体の XML を出す。v0.1.0 の `--keep-images` のようなオプションは要らない。
+8. **既定のレンダラーを VS Code 互換にする。** `--renderer` と `--chromium-mode` を 1 つにまとめ、既定を `vscode` にした。draw.io Desktop が入っているかどうかで結果が変わらない。
+9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** ツール名と合わせて「drawio-png を読む・書く」と読め、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
+10. **入出力・出力形式・エラーを全コマンドで揃える。** 入力は位置引数か標準入力、出力は `-o`、機械向けは `--json`、エラーはコード付きで全件をまとめて報告する（[2 章](#2-共通の規約)）。
 
 ## 2. 共通の規約
 
@@ -63,14 +76,14 @@ drawio-png-cli library <操作> [引数] [オプション]
 テキスト表示（標準エラー）:
 
 ```
-error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder は見つかりません
-  候補: shapes/cylinder
+error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
+  candidates: shapes/cylinder
 ```
 
 `--json` 指定時（標準エラーに 1 行）:
 
 ```json
-{"errors":[{"code":"REF_NOT_FOUND","message":"shapes/cylnder は見つかりません","page":1,"pageName":"構成図","cell":"db","ref":"shapes/cylnder","candidates":["shapes/cylinder"]}],"warnings":[]}
+{"errors":[{"candidates":["shapes/cylinder"],"cell":"db","code":"REF_NOT_FOUND","message":"shapes/cylnder is not found","page":1,"pageName":"構成図","ref":"shapes/cylnder"}],"warnings":[]}
 ```
 
 | コード | 内容 |
@@ -736,3 +749,11 @@ drawio-png-cli init [DIR] [--json]
 - 版の範囲の書き方（現案は完全一致・`^`・`~`・`*` だけ）とプレリリース版、公開した版の取り下げ（npm の `deprecate`・`unpublish`）。
 - 同じエントリー ID のまま中身が変わったことを `library update` で知らせるか（現案は ID の増減だけを出す）。
 - 公開・認証を CLI で扱うレジストリーサーバー（現案は扱わず、取得元ごとの手段で公開する）。
+
+## 14. 確認したこと・していないこと
+
+- VS Code 拡張 1.9.0（タグ `v1.9.0`）のソースで、`customLibraries` の読み込み方法と `extensionKind` を確認した。拡張が使う `xml-parser-xo` 3.1.0 と同じ手順で、例のライブラリと実物の Simple Icons for draw.io 16.35.0 を読み、CDATA 形式が失敗し、CLI の書式が成功することを確かめた。実体参照を使った書式は、パーサーのソースから読めないと判断した（実行はしていない）。
+- draw.io 26.0.2 の `app.min.js` と 31.4.6 のソースで、`data` エントリーの画像の変換（`convertDataUri`）とライブラリの保存処理を確認した。
+- B〜E・G の「CLI がない場合の XML」は、0.1.0 系の CLI で `validate` を通し、Chrome の vscode モード（draw.io 26.0.2 の Web 資材）で描画した（`expected.drawio.png`）。利用者ライブラリの部品は 0.1.0 系の `insert` でも展開し、ID・位置・サイズ・画像の値が一致することを確かめた。A・F・H は v0.2.0 の CLI の `write`（vscode、同梱資材のみ）で描画した。全ケースの展開結果は `tests/acceptance.rs` で検査している。
+- 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.drawio-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
+- テキストの出力例（`library search`・`add`・`install`・`pack`・`update`、エラー表示）は実行結果と照合した。`--json` の例（9.7〜9.9 など）は仕様から作ったもので、キーの順序・数値の書き方・一部の項目が実行結果と異なる。VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。

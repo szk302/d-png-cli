@@ -2,7 +2,7 @@
 
 `drawio-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`libref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
 
-> **このブランチは v0.2.0 の開発中です。** この README は v0.2.0 の仕様（[docs/v0.2.0_claude/](docs/v0.2.0_claude/)）に合わせて書いており、記載したコマンドの多くはまだ実装されていません。現在の CLI の使い方は [main ブランチの README](https://github.com/szk302/drawio-png-cli/blob/main/README.md) を参照してください。v0.1.0 からの変更は [仕様の 12 章](docs/v0.2.0_claude/spec.md#12-v010-からの変更) にまとめています。
+> **v0.2.0 は未リリースです。** この README は v0.2.0（[仕様](docs/spec.md)）の使い方で、このブランチをソースからビルドすると使えます。GitHub Releases の最新版は v0.1.0 で、コマンドが異なります（[v0.1.0 の README](https://github.com/szk302/drawio-png-cli/blob/v0.1.0/README.md)）。v0.1.0 からの変更は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています。
 
 ## インストール
 
@@ -90,11 +90,11 @@ drawio-png-cli write -o arch.drawio.png <<'EOF'
 EOF
 ```
 
-作業例と、CLI を使わない場合に書く XML との比較は [ユースケース](docs/v0.2.0_claude/usecase.md) を参照してください。
+作業例と、CLI を使わない場合に書く XML との比較は [ユースケース](docs/usecase.md) を参照してください。
 
 ## コマンド一覧
 
-各コマンドの詳細は `drawio-png-cli <コマンド> --help` と [仕様](docs/v0.2.0_claude/spec.md) で確認できます。
+各コマンドの詳細は `drawio-png-cli <コマンド> --help` と [仕様](docs/spec.md) で確認できます。
 
 | コマンド | 内容 |
 | --- | --- |
@@ -174,7 +174,7 @@ EOF
 - 複数セルのエントリーは、最上位のセルがプレースホルダーの ID を受け継ぎ、子孫が `<ID>-1`、`<ID>-2`… になります。展開後の ID は `library show REF --json` の `cells` で事前に分かります。
 - 展開したセルには参照が残りません。PNG に保存されるのは普通の draw.io XML で、開くのに CLI もライブラリも要りません。
 
-上書きできる項目・ID の規則・接続線の扱いは [仕様の 4 章](docs/v0.2.0_claude/spec.md#4-図面-xml-と参照) を参照してください。
+上書きできる項目・ID の規則・接続線の扱いは [仕様の 4 章](docs/spec.md#4-図面-xml-と参照) を参照してください。
 
 ## ライブラリ
 
@@ -228,7 +228,7 @@ drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to .
 - 取り込んだファイルは `lock.json` の完全性（SHA-256）で照合します。ネットワークに接続するのは `library install`・`library update` だけです。
 - XML の参照には版を書きません。保存済みの PNG は参照を含まないため、版を上げても既存の図面は変わりません。
 
-詳細は [仕様の 9 章](docs/v0.2.0_claude/spec.md#9-ライブラリ) を参照してください。
+詳細は [仕様の 9 章](docs/spec.md#9-ライブラリ) を参照してください。
 
 ### VS Code 拡張との共有
 
@@ -251,7 +251,7 @@ drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to .
 }
 ```
 
-拡張は CDATA や実体参照で書かれたライブラリを読めないため、CLI は登録時に書式を変換します。拡張の読み込みの制約と、人とエージェントの往復の流れは [VS Code 拡張との連携](docs/v0.2.0_claude/vscode.md) を参照してください。
+拡張は CDATA や実体参照で書かれたライブラリを読めないため、CLI は登録時に書式を変換します。拡張の読み込みの制約と、人とエージェントの往復の流れは [VS Code 拡張との連携](docs/vscode.md) を参照してください。
 
 ## draw.io の図形を使う
 
@@ -272,7 +272,7 @@ drawio-png-cli library vscode --write          # VS Code 拡張のライブラ�
 - AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
 - 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認してください。
 
-手順の例は [usecase.md の I](docs/v0.2.0_claude/usecase.md#drawio-の図形をライブラリにする) にあります。
+手順の例は [usecase.md の I](docs/usecase.md#drawio-の図形をライブラリにする) にあります。
 
 ## レンダラーの選択
 
@@ -483,7 +483,7 @@ python3 scripts/vendor_drawio.py --check
 
 Linux CIではChromium実機テストも実行します。資材ハッシュの確認に使うPythonは開発用で、ビルド・実行時には不要です。
 
-実装の参考にしたコードと fixture の説明は [tests/fixtures/README.md](tests/fixtures/README.md)、要件は [docs/prd.md](docs/prd.md)、v0.2.0 の仕様は [docs/v0.2.0_claude/spec.md](docs/v0.2.0_claude/spec.md) を参照してください。`.tmp` の参考リポジトリはビルドに使用しません。
+実装の参考にしたコードと fixture の説明は [tests/fixtures/README.md](tests/fixtures/README.md)、要件は [docs/prd.md](docs/prd.md)、v0.2.0 の仕様は [docs/spec.md](docs/spec.md) を参照してください。`.tmp` の参考リポジトリはビルドに使用しません。
 
 変更は作業ブランチで行い、Conventional Commits 形式でコミットします。
 
