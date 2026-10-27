@@ -110,6 +110,7 @@ drawio-png-cli library preview lambda -o "$tmp/candidates.png"   # 候補を並�
 | `REF_ID_CONFLICT` | プレースホルダーの ID を変える。`set` の ID を参照していれば `<ID>-n` に直す |
 | `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す（全件まとめて報告される） |
 | `IMAGE_CHANGED` | read の後でライブラリの画像が変わった。元の画像が必要ならユーザーに相談する |
+| `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 名前空間付きのライブラリが取り込まれていない・変わっている（clone 直後に多い）。`drawio-png-cli library install` を実行する |
 | `RENDERER_NOT_FOUND`・`ASSET_MISSING` | Chrome や描画資材の用意をユーザーに依頼する。別の部品に置き換えない |
 
 ## 完了の確認

@@ -221,6 +221,10 @@ impl<'a> Libraries<'a> {
             Origin::Project if self.repository(Origin::Project).is_none() => format!(
                 "{reference} is not found: no project (.drawio-png/) here; run `drawio-png-cli init`"
             ),
+            Origin::Installed if matches!(self.load(&reference.library), Ok(None)) => format!(
+                "{reference} is not found: {} is not installed; add it with `drawio-png-cli library install {}`",
+                reference.library, reference.library
+            ),
             _ => format!("{reference} is not found"),
         };
         Diagnostic::new(Code::RefNotFound, message)

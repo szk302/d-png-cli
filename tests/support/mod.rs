@@ -87,6 +87,7 @@ impl LibraryRepository for Memory {
                 entries: l.entries.len(),
                 location: None,
                 normalized: true,
+                version: None,
             })
             .collect())
     }

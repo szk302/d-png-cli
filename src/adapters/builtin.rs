@@ -50,6 +50,7 @@ impl LibraryRepository for BuiltinLibraries {
                 entries: library.entries.len(),
                 location: None,
                 normalized: true,
+                version: None,
             })
             .collect())
     }

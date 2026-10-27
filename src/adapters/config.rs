@@ -9,6 +9,7 @@ use toml_edit::{DocumentMut, Item, TableLike, Value};
 
 use crate::{
     adapters::{fs, render::RendererKind},
+    app::ports::DependencyStore,
     domain::{
         diagnostic::{Code, Diagnostic},
         fonts,
@@ -255,6 +256,60 @@ impl ConfigFile {
     pub fn save(&self) -> Result<(), Diagnostic> {
         fs::atomic_write(&self.path, self.doc.to_string().as_bytes())
             .map_err(|e| Diagnostic::from_error(Code::OutputWrite, &e))
+    }
+}
+
+/// The project's `config.toml` over the user's, as one store of settings
+/// whose project `[dependencies]` can change.
+pub struct Configuration {
+    /// The project's file, if there is a project.
+    pub project: Option<PathBuf>,
+    pub user: Option<PathBuf>,
+}
+
+impl Configuration {
+    /// The files of a project area (`.drawio-png/`) and the user area.
+    pub fn new(area: Option<&Path>) -> Self {
+        Self {
+            project: area.map(|a| a.join(FILE)),
+            user: user_area().map(|a| a.join(FILE)),
+        }
+    }
+}
+
+impl DependencyStore for Configuration {
+    fn settings(&self) -> Result<Settings, Diagnostic> {
+        let user = match &self.user {
+            Some(path) => ConfigFile::load(path, Layer::User)?.settings()?,
+            None => Settings::default(),
+        };
+        Ok(match &self.project {
+            Some(path) => ConfigFile::load(path, Layer::Project)?
+                .settings()?
+                .over(user),
+            None => user,
+        })
+    }
+
+    fn change(&self, changes: &[(LibraryName, Option<Range>)]) -> Result<(), Diagnostic> {
+        let path = self.project.as_ref().ok_or_else(|| {
+            Diagnostic::new(
+                Code::ProjectNotFound,
+                "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+            )
+        })?;
+        let mut file = ConfigFile::load(path, Layer::Project)?;
+        // Check the file before changing it.
+        file.settings()?;
+        for (name, range) in changes {
+            match range {
+                Some(range) => file.set_dependency(name, range),
+                None => {
+                    file.remove_dependency(name);
+                }
+            }
+        }
+        file.save()
     }
 }
 

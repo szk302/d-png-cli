@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use crate::{
     app::{
         diagram::{Read, Written},
+        install::{Change, Packed},
         libraries::Hit,
         library::{EntryDetails, Shown},
         ports::LibraryInfo,
@@ -160,6 +161,7 @@ pub fn library_json(origin: Origin, info: &LibraryInfo) -> Value {
         "entries": info.entries,
         "file": info.location,
         "normalized": info.normalized,
+        "version": info.version.map(|v| v.to_string()),
     })
 }
 
@@ -207,8 +209,9 @@ pub fn added_text(added: &Added) -> String {
 
 pub fn library_line(info: &LibraryInfo) -> String {
     format!(
-        "{}\t-\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\n",
         info.name,
+        info.version.map_or("-".into(), |v| v.to_string()),
         info.entries,
         info.title.as_deref().map_or("-".into(), one_line)
     )
@@ -353,4 +356,149 @@ pub fn shown_text(shown: &Shown) -> String {
             text
         }
     }
+}
+
+fn ids(ids: &[crate::domain::reference::EntryId]) -> String {
+    if ids.is_empty() {
+        "(none)".into()
+    } else {
+        ids.iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+pub fn changes_json(changes: &[Change]) -> Value {
+    Value::Array(
+        changes
+            .iter()
+            .map(|change| match change {
+                Change::Installed {
+                    name,
+                    version,
+                    resolved,
+                    entries,
+                } => json!({
+                    "name": name.to_string(),
+                    "action": "installed",
+                    "version": version.to_string(),
+                    "resolved": resolved,
+                    "entries": entries.iter().map(|e| json!({
+                        "ref": e.reference.to_string(),
+                        "kind": e.kind.as_str(),
+                        "title": e.title,
+                    })).collect::<Vec<_>>(),
+                }),
+                Change::Updated {
+                    name,
+                    from,
+                    to,
+                    range,
+                    added,
+                    removed,
+                } => json!({
+                    "name": name.to_string(),
+                    "action": "updated",
+                    "from": from.to_string(),
+                    "version": to.to_string(),
+                    "range": range.to_string(),
+                    "added": added.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+                    "removed": removed.iter().map(|i| format!("{name}/{i}")).collect::<Vec<_>>(),
+                }),
+                Change::Removed { name } => json!({"name": name.to_string(), "action": "removed"}),
+                Change::Unchanged { name, version } => json!({
+                    "name": name.to_string(),
+                    "action": "unchanged",
+                    "version": version.to_string(),
+                }),
+            })
+            .collect(),
+    )
+}
+
+pub fn changes_text(changes: &[Change], dry_run: bool) -> String {
+    let mut text = String::new();
+    let would = if dry_run { "would " } else { "" };
+    for change in changes {
+        match change {
+            Change::Installed {
+                name,
+                version,
+                resolved,
+                entries,
+            } => {
+                text.push_str(&format!(
+                    "{would}install {name}@{version} ({} {}) from {resolved}\n",
+                    entries.len(),
+                    if entries.len() == 1 {
+                        "entry"
+                    } else {
+                        "entries"
+                    }
+                ));
+                for e in entries {
+                    text.push_str(&format!(
+                        "  {}\t{}\t{}x{}\t{}\n",
+                        e.reference,
+                        e.kind,
+                        size(e.width),
+                        size(e.height),
+                        one_line(&e.title)
+                    ));
+                }
+            }
+            Change::Updated {
+                name,
+                from,
+                to,
+                range,
+                added,
+                removed,
+            } => text.push_str(&format!(
+                "{would}update {name} {from} -> {to} (range {range})\n  added: {}\n  removed: {}\n",
+                ids(added),
+                ids(removed)
+            )),
+            Change::Removed { name } => text.push_str(&format!("{would}remove {name}\n")),
+            Change::Unchanged { name, version } => {
+                text.push_str(&format!("{name}@{version} is up to date\n"))
+            }
+        }
+    }
+    if !dry_run {
+        text = text
+            .replace("install ", "installed ")
+            .replace("update ", "updated ")
+            .replace("remove ", "removed ");
+    }
+    text
+}
+
+pub fn packed_json(packed: &Packed, path: &str) -> Value {
+    json!({
+        "name": packed.name.to_string(),
+        "version": packed.version.to_string(),
+        "file": path,
+        "entries": packed.entries,
+        "added": packed.added.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+        "removed": packed.removed.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+        "warnings": packed.warnings.iter().map(diagnostic_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn packed_text(packed: &Packed, path: &str) -> String {
+    format!(
+        "packed {}@{} ({} {}) -> {path}\n  added: {}\n  removed: {}\n",
+        packed.name,
+        packed.version,
+        packed.entries,
+        if packed.entries == 1 {
+            "entry"
+        } else {
+            "entries"
+        },
+        ids(&packed.added),
+        ids(&packed.removed)
+    )
 }

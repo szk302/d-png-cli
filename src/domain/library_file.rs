@@ -5,7 +5,10 @@ use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::Value;
-use std::{collections::HashSet, fmt};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use crate::domain::{
     codec, diagram, image,
@@ -62,8 +65,9 @@ fn read(bytes: &[u8]) -> Result<(Option<String>, Vec<Fields>)> {
 }
 
 /// Entries for the fields of a library: a valid, unused `id` field is kept;
-/// the other entries get IDs derived from their titles.
-fn entries(items: Vec<Fields>) -> Result<Vec<Entry>> {
+/// the other entries take the ID `hints` gives their title, if unused, or
+/// else one derived from the title.
+fn entries(items: Vec<Fields>, hints: &HashMap<String, EntryId>) -> Result<Vec<Entry>> {
     let field = |fields: &Fields, key: &str| {
         fields
             .iter()
@@ -84,12 +88,15 @@ fn entries(items: Vec<Fields>) -> Result<Vec<Entry>> {
         .zip(explicit)
         .enumerate()
         .map(|(index, (fields, id))| {
-            let id = id.unwrap_or_else(|| {
-                unique(
-                    EntryId::derive(&field(&fields, "title").unwrap_or_default()),
-                    &mut used,
-                )
-            });
+            let title = field(&fields, "title").unwrap_or_default();
+            let id = id
+                .or_else(|| {
+                    hints
+                        .get(&title)
+                        .filter(|hint| used.insert(hint.to_string()))
+                        .cloned()
+                })
+                .unwrap_or_else(|| unique(EntryId::derive(&title), &mut used));
             Entry::from_fields(id, fields).with_context(|| format!("library entry {}", index + 1))
         })
         .collect()
@@ -102,7 +109,7 @@ pub fn parse(name: LibraryName, bytes: &[u8]) -> Result<Library> {
     Ok(Library {
         name,
         title,
-        entries: entries(items)?,
+        entries: entries(items, &HashMap::new())?,
     })
 }
 
@@ -159,6 +166,15 @@ fn number(value: f64) -> Value {
 /// `<mxlibrary>` files, and one `data` entry per image file. IDs are unique
 /// across all sources. The title is the first library file's title, if any.
 pub fn read_sources(sources: &[Source<'_>]) -> Result<(Option<String>, Vec<Entry>)> {
+    read_sources_after(sources, None)
+}
+
+/// Like `read_sources`, keeping the IDs a previous version of the library
+/// gave to entries of the same title (`library pack`).
+pub fn read_sources_after(
+    sources: &[Source<'_>],
+    previous: Option<&Library>,
+) -> Result<(Option<String>, Vec<Entry>)> {
     let mut title = None;
     let mut items = Vec::new();
     for (index, source) in sources.iter().enumerate() {
@@ -197,7 +213,16 @@ pub fn read_sources(sources: &[Source<'_>]) -> Result<(Option<String>, Vec<Entry
         title = title.or(found_title);
         items.extend(found);
     }
-    Ok((title, entries(items)?))
+    let hints = previous
+        .map(|library| {
+            library
+                .entries
+                .iter()
+                .map(|e| (e.title.clone(), e.id.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((title, entries(items, &hints)?))
 }
 
 /// Writes the normalized form (spec 9.3): `<mxlibrary title>` around a JSON

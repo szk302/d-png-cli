@@ -34,7 +34,7 @@ mise install
 mise exec -- cargo install --path . --locked
 ```
 
-Rust を直接管理している場合は `cargo install --path . --locked` でもインストールできます。実行ファイル名は `drawio-png-cli` です。Node.js や Python は不要です。PNG の描画には Chromium / Chrome（`--renderer desktop-app` では draw.io Desktop 27.0.2 以降）が必要です。Chromium 用の基本描画資材はバイナリに同梱しています。`library install` で Git の取得元を使う場合は `git` が必要です。
+Rust を直接管理している場合は `cargo install --path . --locked` でもインストールできます。実行ファイル名は `drawio-png-cli` です。Node.js や Python は不要です。PNG の描画には Chromium / Chrome（`--renderer desktop-app` では draw.io Desktop 27.0.2 以降）が必要です。Chromium 用の基本描画資材はバイナリに同梱しています。`library install` で Git の取得元を使う場合は `git`、HTTPS の取得元を使う場合は `curl` が必要です。
 
 ## 使い方
 
@@ -435,6 +435,7 @@ exec xvfb-run -a /opt/drawio/drawio "$@"
 | `DRAWIO_PNG_DRAWIO_PATH` / `DRAWIO_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数 |
 | `DRAWIO_PNG_DRAWIO_WEB_PATH` | ローカルの draw.io Web 資材のディレクトリ（既定は同梱資材）。AWS などの図形の描画に必要 |
 | `[scopes]` の `token-env` で指定した名前 | HTTPS の取得元に送るトークン |
+| `DRAWIO_PNG_CACHE` | 取得元から取得したファイルのキャッシュ（既定は OS のキャッシュディレクトリ） |
 
 v0.1.0 の `DRAWIO_PNG_LIBRARY_PATH`・`DRAWIO_PNG_CHROMIUM_MODE` は廃止しました。
 

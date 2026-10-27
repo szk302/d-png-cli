@@ -132,6 +132,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
 | `DRAWIO_PNG_PROJECT` | プロジェクト領域を含むディレクトリ |
 | `DRAWIO_PNG_HOME` | ユーザー領域（個人の `config.toml` を置くディレクトリ） |
 | `[scopes]` の `token-env` で指定した名前 | HTTPS の取得元に送るトークン（[9.5](#95-スコープと取得元)） |
+| `DRAWIO_PNG_CACHE` | 取得元から取得したファイルのキャッシュ。未設定なら OS のキャッシュディレクトリ（Linux は `$XDG_CACHE_HOME/drawio-png-cli`、macOS は `~/Library/Caches/drawio-png-cli`、Windows は `%LOCALAPPDATA%\drawio-png-cli`） |
 | `DRAWIO_PNG_RENDERER` | 既定のレンダラー（[5.2](#52-レンダラー)） |
 | `DRAWIO_PNG_CHROME_PATH`・`CHROME_PATH`・`DRAWIO_PNG_CHROME_ARGS` | Chrome / Chromium の実行ファイルと追加引数（v0.1.0 と同じ） |
 | `DRAWIO_PNG_DRAWIO_PATH`・`DRAWIO_PNG_DRAWIO_ARGS` | draw.io Desktop の実行ファイルと追加引数（v0.1.0 と同じ） |
@@ -444,7 +445,7 @@ drawio-png-cli validate [INPUT] [--json]
 | --- | --- | --- |
 | ディレクトリ | `"file:../drawio-libraries"`、`"file:~/drawio-libraries"` | ファイルを読む。相対パスはプロジェクトのルート（`.drawio-png/` の親。ユーザーの設定では `DRAWIO_PNG_HOME`）から |
 | Git | `"git+https://github.com/acme/drawio-libraries.git"`、`"git+ssh://git@github.com/acme/drawio-libraries.git#release"` | `git` コマンドで取得する。`#` の後はブランチまたはタグ（省略時は既定のブランチ）。認証は Git の設定（認証ヘルパー・SSH 鍵）に任せる |
-| HTTPS | `{ url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }` | HTTPS で取得する。`token-env` があれば、その環境変数の値を `Authorization: Bearer` で送る |
+| HTTPS | `{ url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }` | `curl` コマンドで HTTPS から取得する。`token-env` があれば、その環境変数の値を `Authorization: Bearer` で送る（コマンドラインには出さない） |
 
 取得元の中身は、種類によらず次の構成とする。1 つの取得元に複数のスコープを置ける。CLI は設定したスコープの `@<スコープ>/` の下だけを読む。
 

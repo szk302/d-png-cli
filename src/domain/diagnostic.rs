@@ -30,6 +30,15 @@ pub enum Code {
     OutputWrite,
     LibraryManaged,
     ConfigInvalid,
+    ScopeUnknown,
+    SourceFetch,
+    VersionNotFound,
+    VersionExists,
+    LibraryNotInstalled,
+    LibraryIntegrity,
+    LockOutdated,
+    /// Warning: `library pack` removed entries without a new major version.
+    EntryRemoved,
     /// Warning: `write --metadata-only` kept pixels that may not match.
     MetadataOnly,
 }
@@ -63,6 +72,14 @@ impl Code {
             Code::OutputWrite => "OUTPUT_WRITE",
             Code::LibraryManaged => "LIBRARY_MANAGED",
             Code::ConfigInvalid => "CONFIG_INVALID",
+            Code::ScopeUnknown => "SCOPE_UNKNOWN",
+            Code::SourceFetch => "SOURCE_FETCH",
+            Code::VersionNotFound => "VERSION_NOT_FOUND",
+            Code::VersionExists => "VERSION_EXISTS",
+            Code::LibraryNotInstalled => "LIBRARY_NOT_INSTALLED",
+            Code::LibraryIntegrity => "LIBRARY_INTEGRITY",
+            Code::LockOutdated => "LOCK_OUTDATED",
+            Code::EntryRemoved => "ENTRY_REMOVED",
             Code::MetadataOnly => "METADATA_ONLY",
         }
     }

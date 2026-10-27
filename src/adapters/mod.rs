@@ -6,3 +6,4 @@ pub mod config;
 pub mod fs;
 pub mod project;
 pub mod render;
+pub mod sources;

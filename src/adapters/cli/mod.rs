@@ -13,16 +13,18 @@ use std::{
 use crate::{
     adapters::{
         builtin::BuiltinLibraries,
-        config::{self, ConfigFile},
+        config::{self, Configuration},
         fs,
         project::{self, Project, ProjectLibraries},
         render::RendererKind,
+        sources::{self, Cache, SourceDirectory, Sources},
     },
     app::{
         diagram::{self, Pixels, WriteRequest},
+        install,
         libraries::{Libraries, SearchQuery},
         library::{self, PreviewRequest},
-        ports::LibraryRepository,
+        ports::{DependencyStore, LibraryRepository},
         register,
     },
     domain::{
@@ -31,7 +33,8 @@ use crate::{
         library::EntryKind,
         library_file::Source,
         reference::LibraryName,
-        settings::{Layer, Settings},
+        settings::Settings,
+        version::Range,
     },
 };
 
@@ -168,7 +171,56 @@ enum LibraryCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Remove a project library, or one of its entries
+    /// Install scoped libraries from their sources and record them in lock.json
+    Install {
+        /// Libraries to add, such as @acme/brand or @acme/brand@^1.2.0 (default: install the dependencies)
+        names: Vec<String>,
+        /// Change neither config.toml nor lock.json; fail if they disagree (for CI)
+        #[arg(long)]
+        frozen: bool,
+        /// Use only the cache of fetched files
+        #[arg(long)]
+        offline: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Update installed libraries to the newest version in their range
+    Update {
+        /// Libraries to update (default: all dependencies)
+        names: Vec<String>,
+        /// Go past the range to the newest version and record ^<version>
+        #[arg(long)]
+        latest: bool,
+        /// Report the changes without writing
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Write a version of a scoped library into a source directory
+    Pack {
+        /// <mxlibrary> files or images ("-" for standard input)
+        #[arg(required = true)]
+        sources: Vec<PathBuf>,
+        /// The library, such as @acme/brand
+        #[arg(long)]
+        name: String,
+        /// The new version, MAJOR.MINOR.PATCH
+        #[arg(long)]
+        version: String,
+        /// The source directory (a file: directory, a Git working tree, files for a web server)
+        #[arg(long, value_name = "DIR")]
+        to: PathBuf,
+        /// Title (default: the previous version's, the source's, or the name)
+        #[arg(long)]
+        title: Option<String>,
+        /// Leave out entries that cannot be expanded instead of failing
+        #[arg(long)]
+        skip_invalid: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a project library or one of its entries, or uninstall a scoped library
     Remove {
         /// Library name or reference string
         reference: String,
@@ -310,7 +362,10 @@ impl Command {
                 | LibraryCommand::Show { json, .. } => *json,
                 LibraryCommand::Add { json, .. }
                 | LibraryCommand::Remove { json, .. }
-                | LibraryCommand::Sync { json, .. } => *json,
+                | LibraryCommand::Sync { json, .. }
+                | LibraryCommand::Install { json, .. }
+                | LibraryCommand::Update { json, .. }
+                | LibraryCommand::Pack { json, .. } => *json,
                 LibraryCommand::Preview { .. } => false,
             },
             Command::Skill | Command::Licenses => false,
@@ -335,17 +390,21 @@ impl Context {
         })
     }
 
+    fn configuration(&self) -> Configuration {
+        Configuration::new(self.project.as_ref().map(Project::area).as_deref())
+    }
+
     /// The project's `config.toml` over the user's (spec 2.4).
     fn settings(&self) -> Result<Settings, Diagnostic> {
-        let user = match config::user_area() {
-            Some(area) => ConfigFile::load(&area.join(config::FILE), Layer::User)?.settings()?,
-            None => Settings::default(),
-        };
-        Ok(match &self.project {
-            Some(project) => ConfigFile::load(&project.area().join(config::FILE), Layer::Project)?
-                .settings()?
-                .over(user),
-            None => user,
+        self.configuration().settings()
+    }
+
+    fn project(&self) -> Result<&Project, Diagnostic> {
+        self.project.as_ref().ok_or_else(|| {
+            Diagnostic::new(
+                Code::ProjectNotFound,
+                "no project (.drawio-png/) here or above; run `drawio-png-cli init`",
+            )
         })
     }
 
@@ -415,11 +474,39 @@ impl Context {
 
     fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
         let project: Option<ProjectLibraries> = self.project.as_ref().map(Project::libraries);
+        let installed = self.project.as_ref().map(Project::installed);
         let mut repositories: Vec<&dyn LibraryRepository> = vec![&self.builtin];
         if let Some(project) = &project {
             repositories.push(project);
         }
+        if let Some(installed) = &installed {
+            repositories.push(installed);
+        }
         run(&Libraries::new(repositories))
+    }
+
+    /// The stores for installing, with the sources as the registry.
+    fn with_stores<T>(
+        &self,
+        offline: bool,
+        run: impl FnOnce(&install::Stores<'_>) -> T,
+    ) -> Result<T, Diagnostic> {
+        let project = self.project()?;
+        let configuration = self.configuration();
+        let lock = project.lock();
+        let installed = project.installed();
+        let registry = Sources::new(
+            Some(project.root().to_owned()),
+            config::user_area(),
+            Cache::new(sources::cache_dir()),
+            offline,
+        );
+        Ok(run(&install::Stores {
+            dependencies: &configuration,
+            lock: &lock,
+            installed: &installed,
+            registry: &registry,
+        }))
     }
 }
 
@@ -630,7 +717,108 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 print(&output::added_text(&added))
             }
         }
+        LibraryCommand::Install {
+            names,
+            frozen,
+            offline,
+            json,
+        } => {
+            let add = names
+                .iter()
+                .map(|n| requested(n))
+                .collect::<Result<Vec<_>, _>>()?;
+            let changes = context.with_stores(offline, |stores| {
+                install::install(stores, &install::InstallRequest { add, frozen })
+            })??;
+            if json {
+                print_json(&output::changes_json(&changes))
+            } else {
+                print(&output::changes_text(&changes, false))
+            }
+        }
+        LibraryCommand::Update {
+            names,
+            latest,
+            dry_run,
+            json,
+        } => {
+            let names = names
+                .iter()
+                .map(|n| LibraryName::parse(n))
+                .collect::<Result<Vec<_>, _>>()?;
+            let changes = context.with_stores(false, |stores| {
+                install::update(
+                    stores,
+                    &install::UpdateRequest {
+                        names,
+                        latest,
+                        dry_run,
+                    },
+                )
+            })??;
+            if json {
+                print_json(&output::changes_json(&changes))
+            } else {
+                print(&output::changes_text(&changes, dry_run))
+            }
+        }
+        LibraryCommand::Pack {
+            sources,
+            name,
+            version,
+            to,
+            title,
+            skip_invalid,
+            json,
+        } => {
+            let name = LibraryName::parse(&name).map_err(|d| usage(d.message))?;
+            let version = version.parse().map_err(usage)?;
+            let mut files = Vec::new();
+            for path in &sources {
+                let file_name = (path.as_os_str() != "-")
+                    .then(|| path.file_name().map(|n| n.to_string_lossy().into_owned()))
+                    .flatten();
+                files.push((file_name, read_input(Some(path))?));
+            }
+            let target = SourceDirectory::new(to.clone());
+            let packed = install::pack(
+                &target,
+                install::PackRequest {
+                    sources: files
+                        .iter()
+                        .map(|(file_name, bytes)| Source {
+                            file_name: file_name.as_deref(),
+                            bytes,
+                        })
+                        .collect(),
+                    name,
+                    version,
+                    title: title.as_deref(),
+                    skip_invalid,
+                },
+            )?;
+            let path = to
+                .join(format!("@{}", packed.name.scope().unwrap_or("")))
+                .join(packed.name.name())
+                .join(&packed.file);
+            if json {
+                print_json(&output::packed_json(&packed, &path.display().to_string()))
+            } else {
+                eprint!("{}", output::diagnostics(&[], &packed.warnings, false));
+                print(&output::packed_text(&packed, &path.display().to_string()))
+            }
+        }
         LibraryCommand::Remove { reference, json } => {
+            if let Ok(name) = LibraryName::parse(&reference)
+                && name.scope().is_some()
+            {
+                context.with_stores(false, |stores| install::uninstall(stores, &name))??;
+                return if json {
+                    print_json(&json!({"removed": name.to_string(), "type": "installed"}))
+                } else {
+                    print(&format!("removed {name}\n"))
+                };
+            }
             let store = context.store()?;
             let removed = register::remove(&store, &reference)?;
             let (kind, name) = match &removed {
@@ -646,6 +834,10 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
         LibraryCommand::Sync { names, check, json } => {
             let store = context.store()?;
             let synced = register::sync(&store, &names, check)?;
+            if check {
+                // Installed libraries must match lock.json too.
+                context.with_stores(true, install::verify)??;
+            }
             let names: Vec<String> = synced.normalized.iter().map(|n| n.to_string()).collect();
             if json {
                 print_json(&json!({"normalized": names, "checked": synced.checked}))
@@ -752,6 +944,21 @@ impl Filter {
             kind: self.kind,
         })
     }
+}
+
+/// `@acme/brand` or `@acme/brand@^1.2.0`: a library and an optional range.
+fn requested(text: &str) -> Result<(LibraryName, Option<Range>), Diagnostic> {
+    let (name, range) = match text.rfind('@').filter(|at| *at > 0) {
+        Some(at) => (
+            &text[..at],
+            Some(text[at + 1..].parse::<Range>().map_err(usage)?),
+        ),
+        None => (text, None),
+    };
+    Ok((
+        LibraryName::parse(name).map_err(|d| usage(d.message))?,
+        range,
+    ))
 }
 
 fn usage(message: impl Into<String>) -> Diagnostic {
