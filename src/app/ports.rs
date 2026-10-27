@@ -3,6 +3,7 @@
 //! and how things are stored stays inside the adapters.
 use std::collections::BTreeMap;
 
+use crate::app::vscode::{CustomLibrary, EntryIds};
 use crate::domain::{
     diagnostic::Diagnostic,
     library::{Library, Origin},
@@ -113,5 +114,16 @@ pub trait Publication {
         file: &str,
         bytes: &[u8],
         versions: &Versions,
+    ) -> Result<(), Diagnostic>;
+}
+
+/// The editor's settings: VS Code's `.vscode/settings.json`.
+pub trait EditorSettings {
+    /// Replaces the `customLibraries` items that `ids` manages with `items`,
+    /// keeping the user's items, the other settings and comments.
+    fn write_custom_libraries(
+        &self,
+        ids: &EntryIds,
+        items: &[CustomLibrary],
     ) -> Result<(), Diagnostic>;
 }

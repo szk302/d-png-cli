@@ -13,7 +13,15 @@ fn cli() -> Command {
         .env_remove("DRAWIO_PNG_DRAWIO_PATH")
         .env_remove("DRAWIO_PNG_DRAWIO_ARGS")
         .env_remove("DRAWIO_PNG_RENDERER")
-        .env_remove("DRAWIO_PNG_PROJECT");
+        .env_remove("DRAWIO_PNG_PROJECT")
+        .env(
+            "DRAWIO_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "DRAWIO_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        );
     command
 }
 

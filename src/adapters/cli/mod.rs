@@ -18,6 +18,7 @@ use crate::{
         project::{self, Project, ProjectLibraries},
         render::RendererKind,
         sources::{self, Cache, SourceDirectory, Sources},
+        vscode::VsCodeSettings,
     },
     app::{
         diagram::{self, Pixels, WriteRequest},
@@ -26,6 +27,7 @@ use crate::{
         library::{self, PreviewRequest},
         ports::{DependencyStore, LibraryRepository},
         register,
+        vscode::{self, EntryIds},
     },
     domain::{
         diagnostic::{Code, Diagnostic, Diagnostics},
@@ -220,6 +222,17 @@ enum LibraryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Print or write the VS Code extension's customLibraries setting for these libraries
+    Vscode {
+        /// First part of the extension's headings (default: drawio-png-cli)
+        #[arg(long, value_name = "TEXT")]
+        entry_id: Option<String>,
+        /// Update .vscode/settings.json, keeping other settings, comments and items
+        #[arg(long)]
+        write: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// Remove a project library or one of its entries, or uninstall a scoped library
     Remove {
         /// Library name or reference string
@@ -365,7 +378,8 @@ impl Command {
                 | LibraryCommand::Sync { json, .. }
                 | LibraryCommand::Install { json, .. }
                 | LibraryCommand::Update { json, .. }
-                | LibraryCommand::Pack { json, .. } => *json,
+                | LibraryCommand::Pack { json, .. }
+                | LibraryCommand::Vscode { json, .. } => *json,
                 LibraryCommand::Preview { .. } => false,
             },
             Command::Skill | Command::Licenses => false,
@@ -483,6 +497,22 @@ impl Context {
             repositories.push(installed);
         }
         run(&Libraries::new(repositories))
+    }
+
+    /// Suggests `library vscode --write` when VS Code's settings lack a library.
+    fn hint_vscode(&self, locations: Vec<String>) {
+        let Some(project) = &self.project else {
+            return;
+        };
+        let settings = VsCodeSettings {
+            path: project.root().join(".vscode/settings.json"),
+        };
+        if locations
+            .iter()
+            .any(|l| !settings.lists(&format!("${{workspaceFolder}}/{l}")))
+        {
+            eprintln!("hint: run `drawio-png-cli library vscode --write` to use it in VS Code");
+        }
     }
 
     /// The stores for installing, with the sources as the registry.
@@ -710,6 +740,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 skip_invalid,
             };
             let added = register::add(&store, request)?;
+            context.hint_vscode(added.location.iter().cloned().collect());
             if json {
                 print_json(&output::added_json(&added))
             } else {
@@ -730,6 +761,20 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             let changes = context.with_stores(offline, |stores| {
                 install::install(stores, &install::InstallRequest { add, frozen })
             })??;
+            context.hint_vscode(
+                changes
+                    .iter()
+                    .filter_map(|change| match change {
+                        install::Change::Installed { name, .. } => Some(format!(
+                            "{}/libraries/@{}/{}.xml",
+                            project::AREA,
+                            name.scope().unwrap_or(""),
+                            name.name()
+                        )),
+                        _ => None,
+                    })
+                    .collect(),
+            );
             if json {
                 print_json(&output::changes_json(&changes))
             } else {
@@ -806,6 +851,37 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             } else {
                 eprint!("{}", output::diagnostics(&[], &packed.warnings, false));
                 print(&output::packed_text(&packed, &path.display().to_string()))
+            }
+        }
+        LibraryCommand::Vscode {
+            entry_id,
+            write,
+            json,
+        } => {
+            let project = context.project()?;
+            let ids = EntryIds::new(entry_id.as_deref())?;
+            if !write {
+                let items = context
+                    .with_libraries(|libraries| vscode::custom_libraries(libraries, &ids))?;
+                return print(&crate::adapters::vscode::value(&items));
+            }
+            let settings = VsCodeSettings {
+                path: project.root().join(".vscode/settings.json"),
+            };
+            let items =
+                context.with_libraries(|libraries| vscode::write(&settings, libraries, &ids))?;
+            if json {
+                print_json(&json!({"file": ".vscode/settings.json", "libraries": items.len()}))
+            } else {
+                print(&format!(
+                    "wrote {} {} to .vscode/settings.json\n",
+                    items.len(),
+                    if items.len() == 1 {
+                        "library"
+                    } else {
+                        "libraries"
+                    }
+                ))
             }
         }
         LibraryCommand::Remove { reference, json } => {

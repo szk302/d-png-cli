@@ -26,15 +26,22 @@ adapters ──▶ app ──▶ domain
 
 | ポート | 役割 | 実装（アダプター） |
 | --- | --- | --- |
-| `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`BuiltinLibraries`（`@drawio`） |
+| `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`InstalledLibraries`（取り込み）、`BuiltinLibraries`（`@drawio`） |
+| `LibraryStore` | `LibraryRepository` に加えてライブラリを保存・削除する | `ProjectLibraries` |
 | `Renderer` | 図面 XML の 1 ページを PNG の画素にする | `ChromiumRenderer`（`vscode`・`desktop-compat`・`raw`）、`DesktopAppRenderer` |
+| `Registry` | スコープの取得元から `versions.json` と版のファイルを得る。ネットワークを使う唯一のポート | `Sources`（`file:`・Git・HTTPS とキャッシュ） |
+| `LockStore` | `lock.json` を読み書きする | `ProjectLock` |
+| `InstalledStore` | 取り込んだライブラリのファイルを置く・消す・調べる | `InstalledLibraries` |
+| `DependencyStore` | 設定を読み、`[dependencies]` を書き換える | `Configuration`（プロジェクトとユーザーの `config.toml`） |
+| `Publication` | `library pack` が版を書き込む取得元のディレクトリ | `SourceDirectory` |
+| `EditorSettings` | エディターの設定にライブラリを登録する | `VsCodeSettings`（`.vscode/settings.json`） |
 
 ポートの境界では次を守る。
 
 1. **引数と戻り値はドメインの型にする。** `LibraryName`・`Library`・XML の文字列・PNG のバイト列などを渡す。`Path`・`clap` の型・`roxmltree` のノード・`serde_json::Value` はポートを越えない。ファイルの場所や保存形式はアダプターの内側に閉じる。
 2. **エラーはドメインの診断にする。** ポートは `Result<T, Diagnostic>` を返し、アダプターが自分の失敗を `RENDERER_NOT_FOUND`・`RENDER_FAILED`・`LIBRARY_INVALID` などのコードに対応付ける。アダプター内部では `anyhow` を使ってよい。
 3. **リポジトリは所有権のあるドメインオブジェクトを返す。** 呼び出し側がリポジトリの内部状態に依存しないようにする。
-4. **ポートは必要になった時点で足す。** ライブラリの保存・削除（`LibraryStore`）、設定（`config.toml`）・ロックファイル・取得元（`file:`・Git・HTTPS）・VS Code の設定は、該当するユースケースを実装するときにポートとして追加する。
+4. **ポートは必要になった時点で足す。** 新しい外部とのやり取りは、それを使うユースケースを実装するときにポートとして追加する。描画の既定値（`[render]`）はユースケースの外で解決するため、CLI アダプターが設定を読んでユースケースに値で渡す。
 
 ## 3. ユースケース（`src/app/`）
 
@@ -57,6 +64,10 @@ adapters ──▶ app ──▶ domain
 | `compact` | `read` の画像の参照への置き換え |
 | `check` | 展開後の検査（ID・親子・接続先・残った参照） |
 | `fonts` | フォント指定 |
+| `image` | 画像ファイルの種類と大きさ（`library add` の `data` エントリー） |
+| `library_file` | `<mxlibrary>` の読み込み（どの形式でも）と、正規化した書式での書き出し |
+| `version`・`source`・`settings` | 版と範囲、取得元、`config.toml` の設定 |
+| `registry`・`lock` | `versions.json`・`lock.json` と完全性（SHA-256） |
 | `preview` | `library preview` の一覧図面の配置 |
 
 ## 5. アダプター（`src/adapters/`）
@@ -65,7 +76,10 @@ adapters ──▶ app ──▶ domain
 | --- | --- |
 | `cli` | `clap` の定義、ユースケースの呼び出し、テキスト・JSON の出力、診断の表示、終了コード |
 | `fs` | 上限付きの読み込み、アトミックな書き込み |
-| `project` | プロジェクト領域（`.drawio-png/`）の探索と、`ProjectLibraries`（`libraries/<名前>.xml`） |
+| `project` | プロジェクト領域（`.drawio-png/`）の探索と `init`、`ProjectLibraries`（`libraries/<名前>.xml`）、`InstalledLibraries`（`libraries/@<スコープ>/<名前>.xml`）、`ProjectLock`（`lock.json`） |
+| `config` | `config.toml`（プロジェクト・ユーザー）の読み込みと、コメントを保った `[dependencies]` の書き換え |
+| `sources` | 取得元（`file:`・`git` コマンド・`curl` コマンド）、取得したファイルのキャッシュ、`library pack` の書き込み先 |
+| `vscode` | `.vscode/settings.json`（コメント・末尾のカンマを含む JSON）の `customLibraries` の書き換え |
 | `builtin` | 同梱の図形カタログを読む `BuiltinLibraries` |
 | `render` | Chromium・Desktop の起動と描画、同梱資材、縮小処理、シグナル処理 |
 

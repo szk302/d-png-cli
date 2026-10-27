@@ -125,6 +125,14 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("diagram.png");
     cargo_bin_cmd!("drawio-png-cli")
+        .env(
+            "DRAWIO_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "DRAWIO_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        )
         .args([
             "write",
             "--metadata-only",
@@ -154,6 +162,14 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         ],
     ] {
         cargo_bin_cmd!("drawio-png-cli")
+            .env(
+                "DRAWIO_PNG_HOME",
+                std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+            )
+            .env(
+                "DRAWIO_PNG_CACHE",
+                std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+            )
             .args(["write", "--metadata-only", "-o"])
             .arg(&output)
             .args(args)
@@ -167,6 +183,14 @@ fn cli_round_trip_keeps_the_selected_fonts_and_protects_invalid_output() {
         "vertex=\"1\" style=\"fontFamily='unfinished;\"",
     );
     cargo_bin_cmd!("drawio-png-cli")
+        .env(
+            "DRAWIO_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "DRAWIO_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        )
         .args([
             "write",
             "--default-font",
@@ -244,6 +268,14 @@ fn real_renderers_use_the_default_and_explicit_fallback() {
         ] {
             let output = dir.path().join(format!("{renderer}-{name}.png"));
             cargo_bin_cmd!("drawio-png-cli")
+                .env(
+                    "DRAWIO_PNG_HOME",
+                    std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+                )
+                .env(
+                    "DRAWIO_PNG_CACHE",
+                    std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+                )
                 .env("DRAWIO_PNG_DRAWIO_PATH", &desktop)
                 .env("DRAWIO_PNG_CHROME_PATH", &chrome)
                 .env(

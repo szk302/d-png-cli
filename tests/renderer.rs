@@ -14,7 +14,17 @@ const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 
 fn cli() -> Command {
     let mut command = cargo_bin_cmd!("drawio-png-cli");
-    command.env_remove("DRAWIO_PNG_DRAWIO_ARGS");
+    command
+        .env_remove("DRAWIO_PNG_DRAWIO_ARGS")
+        .env_remove("DRAWIO_PNG_RENDERER")
+        .env(
+            "DRAWIO_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "DRAWIO_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        );
     command
 }
 

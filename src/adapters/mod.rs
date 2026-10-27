@@ -7,3 +7,4 @@ pub mod fs;
 pub mod project;
 pub mod render;
 pub mod sources;
+pub mod vscode;

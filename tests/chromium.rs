@@ -22,6 +22,16 @@ fn cli() -> assert_cmd::Command {
     ] {
         command.env_remove(name);
     }
+    // Neither the developer's settings nor their cache take part.
+    command
+        .env(
+            "DRAWIO_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "DRAWIO_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        );
     command
 }
 
