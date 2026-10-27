@@ -5,22 +5,22 @@
 - **CLI に渡す XML**: エージェントが書いて `drawio-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `libref="…"` と `image=lib:…` で参照する。
 - **CLI がない場合の XML**: 同じ図面を、ライブラリの参照なしで draw.io の普通の XML として書いたもの。エージェントがライブラリのファイルを読み、style・画像・ID・座標を自分で写して組み立てる必要がある。`drawio-png-cli expand` の出力、つまり `write` が PNG に埋め込む XML と同じ内容である。
 
-A〜G は、v0.1.0 で `insert` を使わずに XML を編集する手順・v0.2.0 の前に計画した参照機能の手順と比較したときと同じ依頼・同じ比較用ライブラリを使う（どちらの比較資料もこのリポジトリには含めていない）。H は新しい図面を 1 回の標準入力で作るケース、I はライブラリの登録・取り込みと VS Code の設定のケース、J は名前空間（スコープ）付きの共有ライブラリを公開・更新するケースである。
+B〜G は、v0.1.0 で `insert` を使わずに XML を編集する手順・v0.2.0 の前に計画した参照機能の手順と比較したときと同じ依頼・同じ比較用ライブラリを使う（どちらの比較資料もこのリポジトリには含めていない）。A は draw.io の図形を、利用者が登録したライブラリから置くケースである（F の曲線も同じライブラリから使う）。H は新しい図面を 1 回の標準入力で作るケース、I はライブラリの登録・取り込みと VS Code の設定のケース、J は名前空間（スコープ）付きの共有ライブラリを公開・更新するケースである。
 
-これは仕様案の作業例であり、v0.2.0 の CLI を実行した記録ではない。ただし「CLI がない場合の XML」はすべて現行の CLI（0.1.0 系）で検証・描画でき、展開結果（ID・位置・サイズ・画像）は現行の `insert` の結果と一致することを確認した。各ケースのファイルと、描画した PNG（`expected.drawio.png`）は [examples/](examples/) にある。
+各ケースの「CLI に渡す XML」を v0.2.0 の CLI で展開すると、「CLI がない場合の XML」とセル（ID・位置・サイズ・画像）が一致する（`tests/acceptance.rs` で確認している）。コマンドの出力例は説明用である。各ケースのファイルと、描画した PNG（`expected.drawio.png`）は [examples/](examples/) にある。
 
 ## 1. 比較の要約
 
 | ケース | CLI に渡す XML | CLI がない場合の XML | CLI がない場合にエージェントが自分で用意するもの |
 | --- | --- | --- | --- |
-| [A](#3-a-組み込みライブラリの図形を追加する) 組み込み図形 | 359 | 789 | 約 420 文字の style（`points`・`resIcon` など）とサイズ。推測では書けない |
+| [A](#3-a-drawio-の図形を登録したライブラリから追加する) draw.io の図形 | 353 | 451 | draw.io 固有の style（`boundedLbl`・`size` など）とサイズ。図形集によっては数百文字あり、推測では書けない |
 | [B](#4-b-利用者ライブラリの-xml-図形を追加する) 利用者の図形 | 476 | 481 | エントリーの style・ラッパー・独自データ（`note="keep"`）を読み、上書きと統合 |
 | [C](#5-c-xml-エントリーの画像アイコンを追加する) 画像アイコン | 370 | 615 | 画像の Base64（実物の PostgreSQL は 6,951 文字）、縦横比からの高さ |
 | [D](#6-d-data-エントリーの-pngjpegsvg-を追加する) data 画像 | 487 | 638 | `data` の URI を style 用に変換（`;base64,` → `,`） |
 | [E](#7-e-xml-の複数セルを追加する) 複数セル | 683 | 1,556 | 全セルの ID の振り直し、親子・接続の付け替え、移動量の計算 |
-| [F](#8-f-接続線の-xml-エントリーを使う) 接続線 | 834 | 863 | 接続線の style と、エントリーの端点・経由点を捨てる判断 |
+| [F](#8-f-接続線の-xml-エントリーを使う) 接続線 | 825 | 863 | 接続線の style と、エントリーの端点・経由点を捨てる判断 |
 | [G](#9-g-既存図面の画像を保って編集する) 既存図面の編集 | 873 | 1,000 | 読み込んだ Base64 をそのまま書き戻す（実物では 1 アイコン数 KB） |
-| [H](#10-h-新しい図面を-1-回の標準入力で作る) 新規図面 | 2,067 | 3,555 | A〜D の作業をすべて |
+| [H](#10-h-新しい図面を-1-回の標準入力で作る) 新規図面 | 1,661 | 2,202 | A〜D の作業をすべて |
 
 サイズはバイト数。比較用の画像は、Base64 を省略せず載せるために数百バイトの検証用 SVG（青い正方形・長方形）にしている。**これらは正式な PostgreSQL や会社のロゴではない。** 実物の [Simple Icons for draw.io](https://github.com/mondeja/simple-icons-drawio) 16.35.0 では、画像の値は 1 アイコンあたり中央値 1,199 文字、PostgreSQL で 6,951 文字、最大 72,235 文字あり、C・G・H の差はその分だけ広がる。
 
@@ -64,21 +64,22 @@ EOF
 ### 以下の XML について
 
 - 各ケースの XML は、そのケースだけを含む完全なファイルである。整形・属性の順序は説明用で、CLI の出力文字列との完全一致を示すものではない。
-- 参照するライブラリは [I](#11-i-ライブラリを登録取り込みvs-code-でも使う) で登録したプロジェクト専用の `components`・`simple-icons`、社内の取得元から取り込んだ `@acme/brand`、組み込みの `@drawio/*`。
+- 参照するライブラリは [I](#11-i-ライブラリを登録取り込みvs-code-でも使う) で登録したプロジェクト専用の `components`・`shapes`・`simple-icons` と、社内の取得元から取り込んだ `@acme/brand`。
 
-## 3. A: 組み込みライブラリの図形を追加する
+## 3. A: draw.io の図形を登録したライブラリから追加する
 
-**依頼例:**「構成図に AWS Lambda を追加して、ラベルを Handler にしてください」
+**依頼例:**「構成図に注文 DB を円柱で追加してください」
+
+draw.io のサイドバーの図形は CLI に同梱していない。使う図形は、利用者が draw.io でライブラリにまとめて `library add` で登録しておく（[I](#drawio-の図形をライブラリにする)）。この例の `shapes` は、draw.io の「General」の円柱・人型・曲線を入れたライブラリである。
 
 ```sh
-drawio-png-cli library search lambda --library @drawio/aws4-compute
-# @drawio/aws4-compute/lambda	shape	78x78	Lambda
-# @drawio/aws4-compute/lambda-function	shape	48x48	Lambda Function
+drawio-png-cli library search cylinder
+# shapes/cylinder	shape	60x80	Cylinder
 ```
 
-種類 `shape` なので、位置とラベルだけを書く。幅・高さを省略するとエントリーのサイズ（78×78）になる。
+種類 `shape` なので、位置とラベルだけを書く。幅・高さを省略するとエントリーのサイズ（60×80）になる。
 
-**CLI に渡す XML**（[examples/a-builtin-shape/cli.xml](examples/a-builtin-shape/cli.xml)）
+**CLI に渡す XML**（[examples/a-drawio-shape/cli.xml](examples/a-drawio-shape/cli.xml)）
 
 ```xml
 <mxfile>
@@ -87,7 +88,7 @@ drawio-png-cli library search lambda --library @drawio/aws4-compute
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+        <mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
           <mxGeometry x="40" y="40" as="geometry"/>
         </mxCell>
       </root>
@@ -96,7 +97,7 @@ drawio-png-cli library search lambda --library @drawio/aws4-compute
 </mxfile>
 ```
 
-**CLI がない場合の XML**（[no-cli.xml](examples/a-builtin-shape/no-cli.xml)）
+**CLI がない場合の XML**（[no-cli.xml](examples/a-drawio-shape/no-cli.xml)）
 
 ```xml
 <mxfile>
@@ -105,8 +106,8 @@ drawio-png-cli library search lambda --library @drawio/aws4-compute
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="fn" value="Handler" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
-          <mxGeometry x="40" y="40" width="78" height="78" as="geometry"/>
+        <mxCell id="orders" value="注文 DB" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="60" height="80" as="geometry"/>
         </mxCell>
       </root>
     </mxGraphModel>
@@ -114,7 +115,7 @@ drawio-png-cli library search lambda --library @drawio/aws4-compute
 </mxfile>
 ```
 
-**比較:** CLI がない場合は、draw.io のサイドバーにある style を一字一句写す必要がある。`shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;` だけを推測で書いても、色・接続点・ラベル位置が異なる図形になる。CLI では参照文字列が style の代わりになる。
+**比較:** CLI がない場合は、ライブラリの圧縮された `xml` を展開し、style を一字一句写す必要がある。`shape=cylinder3;` だけを推測で書くと、ラベルの範囲（`boundedLbl`）や上面の高さ（`size`）が draw.io で置いた円柱と違う図形になる。AWS などの図形集では style が数百文字になる。CLI では参照文字列が style の代わりになる。
 
 ## 4. B: 利用者ライブラリの XML 図形を追加する
 
@@ -360,7 +361,7 @@ drawio-png-cli library show components/branch --json   # kind: set
 
 ```sh
 drawio-png-cli library search curve --kind edge
-# @drawio/general/curve	edge	50x50	Curve
+# shapes/curve	edge	50x50	Curve
 ```
 
 種類 `edge` は `source`・`target` を書ける。両方を書くと、エントリーの端点・経由点は使わず、書いた経由点を使う。
@@ -380,7 +381,7 @@ drawio-png-cli library search curve --kind edge
         <mxCell id="b" value="終了" style="rounded=1;" vertex="1" parent="1">
           <mxGeometry x="240" y="400" width="120" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="connection" parent="1" source="a" target="b" libref="@drawio/general/curve">
+        <mxCell id="connection" parent="1" source="a" target="b" libref="shapes/curve">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="200" y="480"/>
@@ -488,13 +489,13 @@ PNG に保存されている XML は [before.xml](examples/g-keep-images/before.
 
 ## 10. H: 新しい図面を 1 回の標準入力で作る
 
-**依頼例:**「決済 API の構成図を新しく作ってください。利用者 → API Gateway → Lambda → PostgreSQL の流れで、左上に会社ロゴを入れてください」
+**依頼例:**「決済 API の構成図を新しく作ってください。利用者 → 決済 API（社内の Service 部品、担当 payments）→ PostgreSQL の流れで、左上に会社ロゴを入れてください」
 
 ```sh
-drawio-png-cli library search users --library @drawio/aws4-general-resources
-drawio-png-cli library search "api gateway" --library @drawio/aws4-network-content-delivery
-drawio-png-cli library search lambda --library @drawio/aws4-compute
+drawio-png-cli library search actor
+drawio-png-cli library search service --library components
 drawio-png-cli library search postgres
+drawio-png-cli library search logo --kind image
 ```
 
 部品は参照で、タイトルの文字と接続線は普通の XML で書き、そのまま標準入力に渡す。
@@ -518,25 +519,21 @@ drawio-png-cli write -o payments.drawio.png --json < payments.xml
         <mxCell id="title" value="決済 API 構成図" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="140" y="20" width="300" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="users" value="利用者" parent="1" libref="@drawio/aws4-general-resources/users">
-          <mxGeometry x="40" y="120" as="geometry"/>
+        <mxCell id="users" value="利用者" parent="1" libref="shapes/actor">
+          <mxGeometry x="55" y="110" as="geometry"/>
         </mxCell>
-        <mxCell id="api" value="API Gateway" parent="1" libref="@drawio/aws4-network-content-delivery/api-gateway">
-          <mxGeometry x="200" y="120" as="geometry"/>
-        </mxCell>
-        <mxCell id="handler" value="決済ハンドラー" parent="1" libref="@drawio/aws4-compute/lambda">
-          <mxGeometry x="360" y="120" as="geometry"/>
-        </mxCell>
+        <object id="api" label="決済 API" owner="payments" libref="components/service">
+          <mxCell parent="1">
+            <mxGeometry x="180" y="110" as="geometry"/>
+          </mxCell>
+        </object>
         <mxCell id="db" value="決済 DB" parent="1" libref="simple-icons/postgresql">
-          <mxGeometry x="535" y="135" width="48" as="geometry"/>
+          <mxGeometry x="380" y="116" width="48" as="geometry"/>
         </mxCell>
         <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="users" target="api">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="handler">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="e3" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="db">
+        <mxCell id="e2" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>
@@ -560,25 +557,21 @@ drawio-png-cli write -o payments.drawio.png --json < payments.xml
         <mxCell id="title" value="決済 API 構成図" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="140" y="20" width="300" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="users" value="利用者" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.users;" vertex="1" parent="1">
-          <mxGeometry x="40" y="120" width="78" height="78" as="geometry"/>
+        <mxCell id="users" value="利用者" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="55" y="110" width="30" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="api" value="API Gateway" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;" vertex="1" parent="1">
-          <mxGeometry x="200" y="120" width="78" height="78" as="geometry"/>
-        </mxCell>
-        <mxCell id="handler" value="決済ハンドラー" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
-          <mxGeometry x="360" y="120" width="78" height="78" as="geometry"/>
-        </mxCell>
+        <object id="api" label="決済 API" owner="payments" note="keep">
+          <mxCell style="rounded=1;" vertex="1" parent="1">
+            <mxGeometry x="180" y="110" width="120" height="60" as="geometry"/>
+          </mxCell>
+        </object>
         <mxCell id="db" value="決済 DB" style="shape=image;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;image=data:image/svg+xml,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PHBhdGggZmlsbD0iIzMzNjc5MSIgZD0iTTAgMGg0OHY0OEgweiIvPjwvc3ZnPg==;" vertex="1" parent="1">
-          <mxGeometry x="535" y="135" width="48" height="48" as="geometry"/>
+          <mxGeometry x="380" y="116" width="48" height="48" as="geometry"/>
         </mxCell>
         <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="users" target="api">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="handler">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="e3" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="db">
+        <mxCell id="e2" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>
@@ -594,27 +587,27 @@ drawio-png-cli write -o payments.drawio.png --json < payments.xml
   "output": "payments.drawio.png", "renderer": "vscode", "page": 1, "pages": 1,
   "expanded": [
     {"page": 1, "cell": "logo", "ref": "@acme/brand/logo", "type": "image"},
-    {"page": 1, "cell": "users", "ref": "@drawio/aws4-general-resources/users", "type": "cells", "ids": ["users"]},
-    {"page": 1, "cell": "api", "ref": "@drawio/aws4-network-content-delivery/api-gateway", "type": "cells", "ids": ["api"]},
-    {"page": 1, "cell": "handler", "ref": "@drawio/aws4-compute/lambda", "type": "cells", "ids": ["handler"]},
+    {"page": 1, "cell": "users", "ref": "shapes/actor", "type": "cells", "ids": ["users"]},
+    {"page": 1, "cell": "api", "ref": "components/service", "type": "cells", "ids": ["api"]},
     {"page": 1, "cell": "db", "ref": "simple-icons/postgresql", "type": "cells", "ids": ["db"]}
   ],
   "warnings": []
 }
 ```
 
-**比較:** 参照を使わない部分（タイトル・接続線）は両者で同じで、エージェントは普通の draw.io XML の知識をそのまま使える。違いは部品の部分だけで、CLI がない場合は 3 種類の AWS の style（250〜430 文字）と 2 つの画像を写す。実物の PostgreSQL アイコンなら、CLI がない場合の XML はさらに約 6.8 KB 増える。
+**比較:** 参照を使わない部分（タイトル・接続線）は両者で同じで、エージェントは普通の draw.io XML の知識をそのまま使える。違いは部品の部分だけで、CLI がない場合は人型の style、Service の style と独自データ（`note="keep"`）、2 つの画像を写す。実物の PostgreSQL アイコンなら、CLI がない場合の XML はさらに約 6.8 KB 増える。
 
 描画結果: [expected.drawio.png](examples/h-new-diagram/expected.drawio.png)
 
 ## 11. I: ライブラリを登録・取り込み、VS Code でも使う
 
-**依頼例:**「Simple Icons とこのリポジトリの部品集を登録し、社内の共有ロゴも取り込んで、エージェントと VS Code の両方で使えるようにしてください」
+**依頼例:**「Simple Icons・このリポジトリの部品集・draw.io で作った図形のライブラリを登録し、社内の共有ロゴも取り込んで、エージェントと VS Code の両方で使えるようにしてください」
 
 ```sh
 drawio-png-cli init
 drawio-png-cli library add ./sources/simple-icons.xml
 drawio-png-cli library add ./sources/components.xml --title Components
+drawio-png-cli library add ./sources/shapes.xml --title Shapes
 # .drawio-png/config.toml の [scopes] に acme の取得元を書く（下記）
 drawio-png-cli library install @acme/brand
 drawio-png-cli library vscode --write
@@ -625,7 +618,7 @@ git add .drawio-png .vscode/settings.json   # 取り込んだ libraries/@acme/ �
 
 | ライブラリ | 種類 | 理由 |
 | --- | --- | --- |
-| `simple-icons`・`components` | プロジェクト専用（スコープなし。`library add`） | このリポジトリで配布ファイルを登録して使う |
+| `simple-icons`・`components`・`shapes` | プロジェクト専用（スコープなし。`library add`） | 配布されたファイルや draw.io で作ったファイルを、このリポジトリで登録して使う |
 | `@acme/brand` | 取り込み（スコープ `acme`。`library install`） | 会社ロゴは社内の全リポジトリで同じものを使い、版を揃える |
 
 `library add` の出力例:
@@ -687,6 +680,27 @@ hint: run `drawio-png-cli library vscode --write` to use it in VS Code
 ]</mxlibrary>
 ```
 
+### draw.io の図形をライブラリにする
+
+CLI は draw.io のサイドバーの図形を同梱していない。AWS・Azure・UML などの図形をエージェントに使わせる場合は、利用者が使う図形をライブラリのファイルにして登録する。
+
+1. draw.io（Desktop・Web）で「File → New Library」を選び、ライブラリを作る。
+2. 使う図形を図面に置き、選んでライブラリ欄へドラッグする。各図形にタイトルを付けて保存する。タイトルは検索語とエントリー ID の元になる（タイトルがなければ ID は `entry`・`entry-2`… になる）。
+3. 保存したファイルを `library add` で登録する。
+
+[examples/sources/shapes.xml](examples/sources/shapes.xml) は、この手順で General の円柱・人型・曲線を入れたファイルの例（`xml` は draw.io の圧縮形式）である。
+
+```
+added shapes (project, 3 entries) -> .drawio-png/libraries/shapes.xml
+  shapes/cylinder	shape	60x80	Cylinder
+  shapes/actor	shape	30x60	Actor
+  shapes/curve	edge	50x50	Curve
+```
+
+- 登録したファイルは VS Code 拡張にも出るので、人も同じ図形をライブラリ欄から置ける。
+- `shape=mxgraph.*` の図形（AWS など）の描画には、draw.io の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要である。この例の基本図形は同梱の資材で描ける。
+- 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認する。
+
 ### 共有ライブラリを取り込む
 
 **CLI に渡す設定**（[examples/project/.drawio-png/config.toml](examples/project/.drawio-png/config.toml)）。実際のチームでは `acme` に Git の取得元（`git+https://github.com/acme/drawio-libraries.git`）を書く。この例では、同じ構成のディレクトリ [examples/acme-drawio-libraries/](examples/acme-drawio-libraries/) を `file:` で指している。
@@ -747,6 +761,11 @@ drawio-png-cli library install --frozen   # lock.json と違う版を選ばな�
       "entryId": "drawio-png-cli",
       "libName": "Components",
       "file": "${workspaceFolder}/.drawio-png/libraries/components.xml"
+    },
+    {
+      "entryId": "drawio-png-cli",
+      "libName": "Shapes",
+      "file": "${workspaceFolder}/.drawio-png/libraries/shapes.xml"
     },
     {
       "entryId": "drawio-png-cli",
@@ -853,7 +872,7 @@ drawio-png-cli validate diagram.drawio.png                        # 保存され
 | エラー・状況 | エージェントが行うこと |
 | --- | --- |
 | `REF_NOT_FOUND` | `candidates` を確認し、`library search` で正しい参照文字列を探す。参照文字列を推測で作らない |
-| 検索で見つからない | 語を短くする・英語名で探す。`library list` で登録状況を確認する。必要な部品がなければ利用者に登録（`library add`）か取り込み（`library install`）を依頼する |
+| 検索で見つからない | 語を短くする・英語名で探す。`library list` で登録状況を確認する。必要な部品がなければ利用者に登録（`library add`）か取り込み（`library install`）を依頼する。draw.io の図形も、登録したものだけが使える |
 | `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 取り込んだライブラリがない・壊れている。`library install` を実行して復元する（clone 直後に多い）。取り込んだファイルを手で直さない |
 | `SCOPE_UNKNOWN` | 参照のスコープに取得元が設定されていない。スコープの綴りを `library list` で確かめ、正しければ利用者に `[scopes]` の設定を依頼する。参照からスコープを外して別のライブラリで代用しない |
 | `REF_KIND` | `image=lib:` を種類 `image` 以外に使っていないか、`vertex`・`edge` の指定が合っているか確認する。迷ったら `vertex`・`edge` を省略する |

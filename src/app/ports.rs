@@ -29,7 +29,7 @@ pub struct LibraryInfo {
 }
 
 /// Read access to the libraries of one namespace: the project's unscoped
-/// libraries, the installed ones, or the built-in ones.
+/// libraries or the installed ones.
 pub trait LibraryRepository {
     fn origin(&self) -> Origin;
 

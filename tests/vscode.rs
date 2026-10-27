@@ -12,7 +12,7 @@ fn examples() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/v0.2.0_claude/examples")
 }
 
-/// The example project of use case I: two project libraries and @acme/brand
+/// The example project of use case I: three project libraries and @acme/brand
 /// installed from the example source.
 fn example_project() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -40,6 +40,9 @@ fn example_project() -> tempfile::TempDir {
     stdout(&mut add);
     let mut add = command(dir.path(), &["library", "add", "--title", "Components"]);
     add.arg(examples().join("sources/components.xml"));
+    stdout(&mut add);
+    let mut add = command(dir.path(), &["library", "add", "--title", "Shapes"]);
+    add.arg(examples().join("sources/shapes.xml"));
     stdout(&mut add);
     run(dir.path(), &["library", "install"]);
     dir
@@ -70,7 +73,7 @@ fn the_example_settings_are_written() {
     assert!(!settings(dir.path()).exists());
     assert_eq!(
         run(dir.path(), &["library", "vscode", "--write"]),
-        "wrote 3 libraries to .vscode/settings.json\n"
+        "wrote 4 libraries to .vscode/settings.json\n"
     );
     let written = fs::read_to_string(settings(dir.path())).unwrap();
     assert_eq!(
@@ -100,7 +103,7 @@ fn the_users_settings_and_items_stay() {
     );
     assert!(written.contains(r#"{"entryId": "team", "libName": "Team", "file": "/team.xml"}"#));
     assert!(!written.contains("Stale"));
-    assert_eq!(written.matches("\"entryId\"").count(), 4);
+    assert_eq!(written.matches("\"entryId\"").count(), 5);
     // Settings that cannot be read are left alone.
     fs::write(settings(dir.path()), "{ \"broken\": ").unwrap();
     let error = stderr(

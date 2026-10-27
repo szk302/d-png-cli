@@ -1,13 +1,10 @@
 //! Reference strings (spec 4.2): `<library>/<entry>` for a project library and
-//! `@<scope>/<library>/<entry>` for an installed or built-in one, plus the
+//! `@<scope>/<library>/<entry>` for an installed one, plus the
 //! fingerprinted image references that `read` writes.
 use sha2::{Digest, Sha256};
 use std::fmt;
 
 use crate::domain::diagnostic::{Code, Diagnostic};
-
-/// The scope of the built-in libraries.
-pub const BUILTIN_SCOPE: &str = "drawio";
 
 /// Hex digits of a fingerprint.
 pub const FINGERPRINT_LEN: usize = 12;
@@ -75,10 +72,6 @@ impl LibraryName {
 
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    pub fn is_builtin(&self) -> bool {
-        self.scope.as_deref() == Some(BUILTIN_SCOPE)
     }
 }
 
@@ -272,12 +265,6 @@ mod tests {
         let r = Ref::parse("@acme/brand/logo").unwrap();
         assert_eq!(r.library.scope(), Some("acme"));
         assert_eq!(r.to_string(), "@acme/brand/logo");
-        assert!(
-            Ref::parse("@drawio/aws4-compute/lambda")
-                .unwrap()
-                .library
-                .is_builtin()
-        );
         for bad in [
             "",
             "postgresql",

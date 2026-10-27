@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+        <mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
           <mxGeometry x="40" y="40" as="geometry"/>
         </mxCell>
       </root>

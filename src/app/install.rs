@@ -64,9 +64,6 @@ fn installable(name: &LibraryName) -> Result<(), Diagnostic> {
             "{name} has no scope: project libraries are registered with `library add`"
         )));
     }
-    if name.is_builtin() {
-        return Err(usage(format!("{name} is built in; it needs no installing")));
-    }
     Ok(())
 }
 

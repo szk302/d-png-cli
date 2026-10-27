@@ -7,6 +7,11 @@
     },
     {
       "entryId": "drawio-png-cli",
+      "libName": "Shapes",
+      "file": "${workspaceFolder}/.drawio-png/libraries/shapes.xml"
+    },
+    {
+      "entryId": "drawio-png-cli",
       "libName": "Simple Icons",
       "file": "${workspaceFolder}/.drawio-png/libraries/simple-icons.xml"
     },

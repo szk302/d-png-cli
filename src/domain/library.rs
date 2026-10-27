@@ -20,8 +20,6 @@ pub enum Origin {
     Project,
     /// Installed from the source of its scope.
     Installed,
-    /// Bundled with drawio-png-cli, scope `@drawio`.
-    Builtin,
 }
 
 impl Origin {
@@ -29,18 +27,16 @@ impl Origin {
         match self {
             Origin::Project => "project",
             Origin::Installed => "installed",
-            Origin::Builtin => "builtin",
         }
     }
 }
 
 impl LibraryName {
     /// The origin a name belongs to: unscoped names are the project's,
-    /// `@drawio` is built in, other scopes are installed.
+    /// scoped ones are installed.
     pub fn origin(&self) -> Origin {
         match self.scope() {
             None => Origin::Project,
-            Some(_) if self.is_builtin() => Origin::Builtin,
             Some(_) => Origin::Installed,
         }
     }

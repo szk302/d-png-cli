@@ -10,7 +10,7 @@
         <mxCell id="b" value="終了" style="rounded=1;" vertex="1" parent="1">
           <mxGeometry x="240" y="400" width="120" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="connection" parent="1" source="a" target="b" libref="@drawio/general/curve">
+        <mxCell id="connection" parent="1" source="a" target="b" libref="shapes/curve">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="200" y="480"/>

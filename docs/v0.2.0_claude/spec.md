@@ -5,8 +5,8 @@
 ## 1. 設計方針
 
 1. **XML を標準入力で渡すと PNG ができる。** エージェントは図面全体の draw.io XML を書き、`drawio-png-cli write -o out.drawio.png` に渡す。1 図形ずつ挿入する `insert` は廃止する。
-2. **ライブラリは登録し、参照文字列で使う。** 図形・アイコンは `<ライブラリ>/<エントリー ID>` で指定し、長い style や Base64 を書き写さない。参照できるのは登録済みのライブラリと組み込みライブラリだけとする。
-3. **ライブラリ名に名前空間を持たせる。** npm のスコープと同じく、共有するライブラリは `@acme/brand` のようにスコープを付け、スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定して `library install` で取り込む。版はロックファイルで固定する。スコープのない名前はそのプロジェクト専用のライブラリ、`@drawio` は組み込みライブラリとする。
+2. **ライブラリは登録し、参照文字列で使う。** 図形・アイコンは `<ライブラリ>/<エントリー ID>` で指定し、長い style や Base64 を書き写さない。参照できるのは登録・取り込み済みのライブラリだけとする。draw.io のサイドバーの図形も同梱せず、使う図形は利用者がライブラリにして登録する。
+3. **ライブラリ名に名前空間を持たせる。** npm のスコープと同じく、共有するライブラリは `@acme/brand` のようにスコープを付け、スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定して `library install` で取り込む。版はロックファイルで固定する。スコープのない名前はそのプロジェクト専用のライブラリとする。
 4. **登録したライブラリは VS Code 拡張でもそのまま使える。** 登録先は、VS Code 拡張と draw.io の両方が読めるライブラリファイルとし、拡張の設定も CLI が生成する。
 5. **保存される図面は普通の draw.io XML。** PNG に埋め込む XML には参照を残さない。VS Code・draw.io で開くときに CLI もライブラリも不要。
 6. **操作は一貫させる。** すべてのコマンドが同じ入出力・出力形式・終了コード・エラー形式に従う（[2 章](#2-共通の規約)）。
@@ -63,14 +63,14 @@ drawio-png-cli library <操作> [引数] [オプション]
 テキスト表示（標準エラー）:
 
 ```
-error[REF_NOT_FOUND] page 1 "構成図", cell "fn": @drawio/aws4-compute/lamda は見つかりません
-  候補: @drawio/aws4-compute/lambda, @drawio/aws4-compute/lambda-function
+error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder は見つかりません
+  候補: shapes/cylinder
 ```
 
 `--json` 指定時（標準エラーに 1 行）:
 
 ```json
-{"errors":[{"code":"REF_NOT_FOUND","message":"@drawio/aws4-compute/lamda は見つかりません","page":1,"pageName":"構成図","cell":"fn","ref":"@drawio/aws4-compute/lamda","candidates":["@drawio/aws4-compute/lambda","@drawio/aws4-compute/lambda-function"]}],"warnings":[]}
+{"errors":[{"code":"REF_NOT_FOUND","message":"shapes/cylnder は見つかりません","page":1,"pageName":"構成図","cell":"db","ref":"shapes/cylnder","candidates":["shapes/cylinder"]}],"warnings":[]}
 ```
 
 | コード | 内容 |
@@ -198,7 +198,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
 | --- | --- |
 | `simple-icons/postgresql` | プロジェクトに登録したライブラリ `simple-icons` のエントリー `postgresql` |
 | `@acme/brand/logo` | スコープ `acme` の取得元から取り込んだライブラリ `@acme/brand` のエントリー `logo` |
-| `@drawio/aws4-compute/lambda` | 組み込みライブラリ `@drawio/aws4-compute` のエントリー `lambda` |
+| `shapes/cylinder` | プロジェクトに登録したライブラリ `shapes`（draw.io の図形を利用者がまとめたもの）のエントリー `cylinder` |
 
 - `@` で始まれば `@<スコープ>/<ライブラリ名>/<エントリー ID>` の 3 つ、そうでなければ `<ライブラリ名>/<エントリー ID>` の 2 つに `/` で分ける。数が合わなければ `REF_SYNTAX`。
 - 版は書かない。取り込んだライブラリのどの版を使うかは、プロジェクトのロックファイルで決まる（[9.6](#96-依存関係とロックファイル)）。
@@ -219,16 +219,16 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
 `libref` を持つセル（プレースホルダー）を、エントリーのセル群に置き換える。
 
 ```xml
-<mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+<mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
   <mxGeometry x="40" y="40" as="geometry"/>
 </mxCell>
 ```
 
-展開後（style の途中を `…` で省略。全体は [usecase.md の A](usecase.md#3-a-組み込みライブラリの図形を追加する)）:
+展開後（[usecase.md の A](usecase.md#3-a-drawio-の図形を登録したライブラリから追加する)）:
 
 ```xml
-<mxCell id="fn" value="Handler" style="sketch=0;points=[[0,0,0],…];shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
-  <mxGeometry x="40" y="40" width="78" height="78" as="geometry"/>
+<mxCell id="orders" value="注文 DB" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+  <mxGeometry x="40" y="40" width="60" height="80" as="geometry"/>
 </mxCell>
 ```
 
@@ -325,7 +325,7 @@ v0.1.0 の `--renderer` と `--chromium-mode` を 1 つにまとめ、無効な�
   "width": 512, "height": 330,
   "renderer": "vscode", "page": 1, "pages": 1,
   "expanded": [
-    {"page": 1, "cell": "fn", "ref": "@drawio/aws4-compute/lambda", "type": "cells", "ids": ["fn"]},
+    {"page": 1, "cell": "orders", "ref": "shapes/cylinder", "type": "cells", "ids": ["orders"]},
     {"page": 1, "cell": "branch", "ref": "components/branch", "type": "cells", "ids": ["branch-1", "branch-2", "branch-3"]},
     {"page": 1, "cell": "logo", "ref": "@acme/brand/logo", "type": "image"}
   ],
@@ -382,26 +382,25 @@ drawio-png-cli validate [INPUT] [--json]
 
 ### 9.1 種類と探索順
 
-ライブラリは名前空間（スコープ）の有無で 3 種類に分かれる。npm のパッケージと同じく、スコープのない名前はプロジェクトの中だけのもの、スコープ付きの名前は取得元から取り込むものとする。
+ライブラリは名前空間（スコープ）の有無で 2 種類に分かれる。npm のパッケージと同じく、スコープのない名前はプロジェクトの中だけのもの、スコープ付きの名前は取得元から取り込むものとする。
 
 | 種類（JSON の `origin`） | 名前 | 場所 | 追加の方法 |
 | --- | --- | --- | --- |
 | プロジェクト（`project`） | `<名前>` | `.drawio-png/libraries/<名前>.xml` | `library add`。ファイルを Git で共有する |
 | 取り込み（`installed`） | `@<スコープ>/<名前>` | `.drawio-png/libraries/@<スコープ>/<名前>.xml` | `library install`。取得元は `[scopes]`、版はロックファイルで決まる |
-| 組み込み（`builtin`） | `@drawio/<図形集>` | CLI に同梱 | 不要。draw.io 26.0.2 のサイドバーの図形（v0.1.0 と同じ約 440 図形集） |
 
 - 名前空間が違えば別のライブラリである。`components` と `@acme/components` は共存でき、参照も別になる。
-- 参照はプロジェクト領域のライブラリと組み込みライブラリだけを解決する。ユーザー領域・任意のパスのライブラリファイルを直接参照する手段は設けない（同じ XML がどこでも同じ部品になるようにし、ファイルを VS Code 拡張と共有するため）。
-- プロジェクト領域がなくても組み込みライブラリは使える。
+- 参照はプロジェクト領域のライブラリだけを解決する。ユーザー領域・任意のパスのライブラリファイルを直接参照する手段は設けない（同じ XML がどこでも同じ部品になるようにし、ファイルを VS Code 拡張と共有するため）。
+- CLI はライブラリを同梱しない。draw.io のサイドバーの図形（AWS・Azure・UML など）を使う場合は、利用者が draw.io で使う図形をライブラリのファイルにし、`library add` で登録する（手順は [usecase.md の I](usecase.md#drawio-の図形をライブラリにする)）。図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認する。
+- プロジェクト領域がなければ、参照は解決できない（`REF_NOT_FOUND` で `init` を案内する）。`library list`・`library search` は何も出さない。
 
 ### 9.2 名前とエントリー ID
 
-- ライブラリ名・スコープ名: `^[a-z0-9][a-z0-9-]{0,62}$`。スコープ `drawio` は組み込みライブラリに予約する。
+- ライブラリ名・スコープ名: `^[a-z0-9][a-z0-9-]{0,62}$`。
 - 完全なライブラリ名は、スコープなしが `<名前>`（例 `components`）、スコープ付きが `@<スコープ>/<名前>`（例 `@acme/brand`）。コマンドの引数・出力・JSON では常に完全な名前を使う。
 - エントリー ID: 小文字の英字・数字・その他の文字（日本語など）とハイフン。先頭はハイフン以外。`/`・`;`・`=`・`@`・`#`・空白・大文字は含まない。
 - エントリーに `id` フィールドがあり、規則に合い重複しなければそれを使う。なければタイトルから導く: NFKC 正規化 → 小文字化 → 英数字・文字以外の連続を `-` に置換 → 前後の `-` を除去 → 空なら `entry` → 同じライブラリ内で重複すれば文書順に `-2`、`-3`… を付ける。
 - 例: `PostgreSQL` → `postgresql`、`Lambda Function` → `lambda-function`、`会社ロゴ` → `会社ロゴ`、`Group⏎B` → `group-b`、`007` → `007`、空 → `entry`。
-- 組み込みライブラリの ID は同じ規則で CLI の版ごとに固定する。タイトルのない図形は v0.1.0 のカタログと同じくラベルや図形名をタイトルにしてから導く。
 - `library add`・`library sync`・`library pack` は導いた ID を `id` フィールドに書き込み、以後タイトルが変わっても ID を変えない。
 
 ### 9.3 登録ファイルの書式
@@ -522,7 +521,7 @@ drawio-png-cli validate [INPUT] [--json]
 drawio-png-cli library list [--scope SCOPE] [--json]
 ```
 
-テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクト → 取り込み → 組み込みの順で、それぞれ名前順。`--scope drawio` で組み込みだけを出す。
+テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクト → 取り込みの順で、それぞれ名前順。`--scope acme` でそのスコープのライブラリだけを出す。
 
 ```json
 [{"name":"simple-icons","origin":"project","title":"Simple Icons","entries":3466,"file":".drawio-png/libraries/simple-icons.xml","normalized":true},
@@ -538,7 +537,7 @@ drawio-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kin
 ```
 
 - 語を空白で区切り、すべての語がタイトルか ID に含まれる（大文字小文字を区別しない）エントリーを出す。語を省略すると全エントリー。
-- 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位はプロジェクト → 取り込み → 組み込み、ライブラリ名順、エントリー順。
+- 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位はプロジェクト → 取り込み、ライブラリ名順、エントリー順。
 - `--limit` の既定は `50`（`0` で無制限）。打ち切った場合は全件数を標準エラーに出す。
 - テキスト: `参照<TAB>種類<TAB>幅x高さ<TAB>タイトル`（タイトルの改行・タブは空白にして表示）。先頭の列をそのまま XML に写せる。
 
@@ -620,7 +619,7 @@ drawio-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json
 - `--frozen`: `config.toml`・`lock.json` を変えない。依存と `lock.json` が合わなければ `LOCK_OUTDATED` で何もしない（CI 用。npm の `npm ci`）。
 - `--offline`: 取得元に接続せず、キャッシュ（2.2）だけを使う。
 - 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.drawio-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
-- 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）、`@drawio/*` は取り込み不要として `USAGE`。
+- 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）。
 - 出力: 追加・更新・削除したライブラリの名前・版・エントリー数。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
 
 ```
@@ -690,7 +689,7 @@ VS Code 拡張の `hediet.vscode-drawio.customLibraries` の値を出力する�
 
 - プロジェクト専用のライブラリと取り込んだライブラリを出す。`file` は `${workspaceFolder}/<プロジェクトからの相対パス>`。ワークスペースのフォルダーはプロジェクト領域の親ディレクトリとみなす。
 - `entryId` は、プロジェクト専用のライブラリが `drawio-png-cli`、取り込んだライブラリが `drawio-png-cli @<スコープ>`。拡張はこの値を見出しにしてライブラリをまとめ、見出しごとに表示・非表示を切り替えられる。`--entry-id` で `drawio-png-cli` の部分を変えられる。
-- `libName` はライブラリの表示名。組み込みライブラリは出さない（拡張の「その他の図形」で有効にする）。
+- `libName` はライブラリの表示名。
 - `--write`: `<プロジェクト>/.vscode/settings.json` の `hediet.vscode-drawio.customLibraries` のうち、`entryId` が `drawio-png-cli` か `drawio-png-cli @` で始まる項目だけを置き換える。他の項目・設定・コメントは保持する。ファイルがなければ作る。JSONC として解析できなければ何も書かずにエラーにする。
 
 ## 10. `init`
@@ -720,7 +719,7 @@ drawio-png-cli init [DIR] [--json]
 | `library style LIB INDEX` | `library show REF` の `style` |
 | `library search` の番号 | 参照文字列 |
 | `DRAWIO_PNG_LIBRARY_PATH`・`--library-file`・`--no-builtin` | 廃止。プロジェクト専用は `library add`、共有するものはスコープを付けて `library install` で取り込む。検索は `--library`・`--scope` で絞る |
-| 組み込みライブラリの名前 `drawio/aws4-compute`（`aws4-compute` も可） | `@drawio/aws4-compute` だけ |
+| 組み込みライブラリ（`drawio/aws4-compute` など） | 廃止。使う図形を draw.io でライブラリにして `library add` で登録する |
 | `DRAWIO_PNG_CHROMIUM_MODE` | `DRAWIO_PNG_RENDERER` |
 | `skill --full` | `skill` |
 

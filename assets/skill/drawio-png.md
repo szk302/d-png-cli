@@ -67,21 +67,22 @@ drawio-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
 
 ## アイコン・図形はライブラリの参照で書く
 
-AWS などの draw.io の図形、ロゴやアイコンは、style や Base64 を推測で書かず、ライブラリの**参照文字列**で書く。
+draw.io の図形（AWS など）、ロゴやアイコンは、style や Base64 を推測で書かず、プロジェクトに登録されたライブラリの**参照文字列**で書く。
+CLI はライブラリを同梱していない。必要な図形が見つからなければ、ユーザーに登録（`library add`）を依頼する。
 
 ```sh
-drawio-png-cli library search lambda               # 参照・種類・サイズ・タイトル。先頭の列が参照文字列
-#   @drawio/aws4-compute/lambda	shape	78x78	Lambda
-drawio-png-cli library show @drawio/aws4-compute/lambda   # style、展開後のセルと ID、配置例
-drawio-png-cli library preview lambda -o "$tmp/candidates.png"   # 候補を並べた画像（目で選ぶとき）
+drawio-png-cli library search cylinder             # 参照・種類・サイズ・タイトル。先頭の列が参照文字列
+#   shapes/cylinder	shape	60x80	Cylinder
+drawio-png-cli library show shapes/cylinder        # style、展開後のセルと ID、配置例
+drawio-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べた画像（目で選ぶとき）
 ```
 
 参照文字列は `<ライブラリ>/<エントリー>`（プロジェクトのライブラリ）か `@<スコープ>/<ライブラリ>/<エントリー>`
-（`@drawio/…` は組み込みの図形）。検索結果からそのまま写し、推測で作ったりスコープを補ったりしない。
+（取り込んだ共有ライブラリ）。検索結果からそのまま写し、推測で作ったりスコープを補ったりしない。
 
 ```xml
 <!-- エントリーのセルごと置く。位置・ラベル・style（キー単位で上書き）・サイズを指定できる -->
-<mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+<mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
   <mxGeometry x="40" y="40" as="geometry"/>
 </mxCell>
 <!-- 画像だけを使う。style とサイズは自分で書く -->

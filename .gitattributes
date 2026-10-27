@@ -2,7 +2,6 @@
 # keep them byte-identical on every platform, including Windows checkouts.
 assets/skill/*.md text eol=lf
 skills/**/SKILL.md text eol=lf
-assets/shapes/*.gz binary
 # The v0.2.0 examples record the byte sizes and SHA-256 integrity values of these files.
 docs/v0.2.0_claude/examples/**/*.xml text eol=lf
 docs/v0.2.0_claude/examples/**/*.json text eol=lf

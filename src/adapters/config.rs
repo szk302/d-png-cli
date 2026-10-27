@@ -13,7 +13,7 @@ use crate::{
     domain::{
         diagnostic::{Code, Diagnostic},
         fonts,
-        reference::{BUILTIN_SCOPE, LibraryName, is_name},
+        reference::{LibraryName, is_name},
         settings::{Layer, RenderSettings, Scope, Settings},
         source::Source,
         version::Range,
@@ -96,7 +96,7 @@ impl ConfigFile {
                 "render" => settings.render = self.render(table)?,
                 "scopes" => {
                     for (scope, value) in table.iter() {
-                        if !is_name(scope) || scope == BUILTIN_SCOPE {
+                        if !is_name(scope) {
                             return Err(self.invalid(format!(
                                 "[scopes] {scope:?} is not a scope name that can have a source"
                             )));
@@ -120,7 +120,7 @@ impl ConfigFile {
                     for (name, value) in table.iter() {
                         let name = LibraryName::parse(name)
                             .ok()
-                            .filter(|n| n.scope().is_some() && !n.is_builtin())
+                            .filter(|n| n.scope().is_some())
                             .ok_or_else(|| {
                                 self.invalid(format!(
                                     "[dependencies] {name:?} is not a scoped library name such as \"@acme/brand\""
@@ -368,7 +368,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_TOKEN
             ("[render]\ncolour = \"red\"\n", Layer::Project),
             ("[other]\n", Layer::Project),
             ("top = 1\n", Layer::Project),
-            ("[scopes]\ndrawio = \"file:x\"\n", Layer::Project),
+            ("[scopes]\nAcme = \"file:x\"\n", Layer::Project),
             ("[scopes]\nacme = \"http://x/\"\n", Layer::Project),
             (
                 "[scopes]\nacme = { url = \"https://x/\", token = \"t\" }\n",

@@ -24,7 +24,7 @@ const CANDIDATES: usize = 5;
 type ImageIndex = HashMap<String, (Ref, String)>;
 
 pub struct Libraries<'a> {
-    /// In search order: project, installed, built-in.
+    /// In search order: project, installed.
     repositories: Vec<&'a dyn LibraryRepository>,
     cache: RefCell<HashMap<LibraryName, Option<Rc<Library>>>>,
     index: RefCell<Option<Rc<ImageIndex>>>,
@@ -47,7 +47,6 @@ impl<'a> Libraries<'a> {
         let order = |r: &&dyn LibraryRepository| match r.origin() {
             Origin::Project => 0,
             Origin::Installed => 1,
-            Origin::Builtin => 2,
         };
         let mut repositories = repositories;
         repositories.sort_by_key(order);
@@ -184,10 +183,7 @@ impl<'a> Libraries<'a> {
             return Ok(index.clone());
         }
         let mut index = HashMap::new();
-        for (origin, info) in self.list()? {
-            if origin == Origin::Builtin {
-                continue;
-            }
+        for (_, info) in self.list()? {
             let Some(library) = self.load(&info.name)? else {
                 continue;
             };
@@ -218,7 +214,7 @@ impl<'a> Libraries<'a> {
     /// REF_NOT_FOUND with close references that exist.
     fn not_found(&self, reference: &Ref, text: &str) -> Diagnostic {
         let message = match reference.library.origin() {
-            Origin::Project if self.repository(Origin::Project).is_none() => format!(
+            origin if self.repository(origin).is_none() => format!(
                 "{reference} is not found: no project (.drawio-png/) here; run `drawio-png-cli init`"
             ),
             Origin::Installed if matches!(self.load(&reference.library), Ok(None)) => format!(

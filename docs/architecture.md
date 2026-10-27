@@ -14,7 +14,7 @@ adapters ──▶ app ──▶ domain
 | --- | --- | --- | --- |
 | ドメイン | `src/domain/` | 図面 XML の検査・展開、`.drawio.png` の読み書き、参照文字列、ライブラリとエントリー、参照の展開・圧縮、フォント指定、診断（エラーコード） | 標準ライブラリ、XML・JSON・圧縮・ハッシュなどの計算用クレート |
 | アプリケーション | `src/app/` | ユースケース（`read`・`write`・`expand`・`validate`・`library …`）と、外部に求める機能のポート（トレイト） | ドメイン |
-| アダプター | `src/adapters/` | CLI（引数・出力・終了コード）、ファイル入出力、プロジェクト領域のライブラリ、組み込みライブラリ、レンダラー（Chromium・Desktop） | アプリケーション、ドメイン、OS・プロセス・ファイル・ネットワーク |
+| アダプター | `src/adapters/` | CLI（引数・出力・終了コード）、ファイル入出力、プロジェクト領域のライブラリ、取得元、エディターの設定、レンダラー（Chromium・Desktop） | アプリケーション、ドメイン、OS・プロセス・ファイル・ネットワーク |
 
 - 依存は外から内への一方向だけとする。`domain` は `app`・`adapters` を、`app` は `adapters` を参照しない。`tests/architecture.rs` がソースの `use` を調べてこれを検査する。
 - `src/main.rs` は CLI アダプターを呼ぶだけとする。アダプターの組み立て（プロジェクトの探索、リポジトリ・レンダラーの選択）は、引数を解釈した後に CLI アダプターの `Context` が行い、ユースケースに渡す。
@@ -26,7 +26,7 @@ adapters ──▶ app ──▶ domain
 
 | ポート | 役割 | 実装（アダプター） |
 | --- | --- | --- |
-| `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`InstalledLibraries`（取り込み）、`BuiltinLibraries`（`@drawio`） |
+| `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`InstalledLibraries`（スコープ付き） |
 | `LibraryStore` | `LibraryRepository` に加えてライブラリを保存・削除する | `ProjectLibraries` |
 | `Renderer` | 図面 XML の 1 ページを PNG の画素にする | `ChromiumRenderer`（`vscode`・`desktop-compat`・`raw`）、`DesktopAppRenderer` |
 | `Registry` | スコープの取得元から `versions.json` と版のファイルを得る。ネットワークを使う唯一のポート | `Sources`（`file:`・Git・HTTPS とキャッシュ） |
@@ -47,7 +47,7 @@ adapters ──▶ app ──▶ domain
 
 - 入力はドメインの値（図面のバイト列、参照、オプションの構造体）で受け取り、結果は構造体で返す。標準出力への表示、終了コード、環境変数の読み取りはしない。表示形式（テキスト・`--json`）は CLI アダプターが決める。
 - 1 件目で止めずに集めた問題は `Diagnostics`（複数の `Diagnostic`）として返す。
-- 参照の解決は `Libraries`（`src/app/libraries.rs`）が行う。参照のスコープからリポジトリを選び（スコープなし → プロジェクト、`@drawio` → 組み込み）、エントリーをドメインの展開処理に渡す。展開処理自体はリポジトリを知らない。
+- 参照の解決は `Libraries`（`src/app/libraries.rs`）が行う。参照のスコープからリポジトリを選び（スコープなし → プロジェクト、スコープ付き → 取り込み）、エントリーをドメインの展開処理に渡す。展開処理自体はリポジトリを知らない。
 
 ## 4. ドメイン（`src/domain/`）
 
@@ -80,7 +80,6 @@ adapters ──▶ app ──▶ domain
 | `config` | `config.toml`（プロジェクト・ユーザー）の読み込みと、コメントを保った `[dependencies]` の書き換え |
 | `sources` | 取得元（`file:`・`git` コマンド・`curl` コマンド）、取得したファイルのキャッシュ、`library pack` の書き込み先 |
 | `vscode` | `.vscode/settings.json`（コメント・末尾のカンマを含む JSON）の `customLibraries` の書き換え |
-| `builtin` | 同梱の図形カタログを読む `BuiltinLibraries` |
 | `render` | Chromium・Desktop の起動と描画、同梱資材、縮小処理、シグナル処理 |
 
 ## 6. テスト

@@ -4,7 +4,7 @@ v0.2.0 では、CLI に登録したライブラリを VS Code の draw.io 拡張
 
 ## 1. 対象
 
-- 拡張: [`hediet.vscode-drawio`](https://github.com/hediet/vscode-drawio)（Draw.io Integration）安定版 1.9.0（タグ `v1.9.0`、コミット `132921f1c189d1b6239e2b0246ebd8190ca23ba5`）。同梱の draw.io は 26.0.2（`96a916a337d13fc8bf622c8a67d422bd284eabe5`）。`write --renderer vscode` と組み込みライブラリはこの版に合わせている。
+- 拡張: [`hediet.vscode-drawio`](https://github.com/hediet/vscode-drawio)（Draw.io Integration）安定版 1.9.0（タグ `v1.9.0`、コミット `132921f1c189d1b6239e2b0246ebd8190ca23ba5`）。同梱の draw.io は 26.0.2（`96a916a337d13fc8bf622c8a67d422bd284eabe5`）。`write --renderer vscode` はこの版に合わせている。
 - 以下の拡張の動作は、ローカルの拡張・draw.io のソースを読んで確認したものである。VS Code 上で拡張を操作した確認は含まない。ライブラリ書式の読み込みは、拡張と同じパーサー（`xml-parser-xo` 3.1.0）と同じ手順で試した（[3 章](#3-ライブラリファイルの書式の制約)）。
 
 ## 2. 役割の分担
@@ -111,11 +111,11 @@ flowchart LR
 - `write` の既定のレンダラー `vscode` は、拡張 1.9.0 が表示倍率 100% で保存した PNG に合わせる。フォント・OS の違いによる画素の差は残る（v0.1.0 の [描画互換性](../rendering.md) と同じ）。
 - 拡張で保存した PNG を `write` で作り直さなくても、`read` → 編集 → `write` の流れはそのまま使える。
 
-## 6. 組み込みライブラリと拡張の「その他の図形」
+## 6. draw.io の図形と拡張の「その他の図形」
 
-組み込みライブラリ（`@drawio/*`）は、拡張 1.9.0 と同じ draw.io 26.0.2 のサイドバーから作った図形の一覧である。人は拡張の「+ その他の図形」で同じ図形集（AWS・Azure・Kubernetes など）を有効にすれば、エージェントが `libref="@drawio/aws4-compute/lambda"` で置いた図形と同じものをライブラリ欄から置ける。組み込みライブラリは `customLibraries` には出さない。
+CLI は draw.io のサイドバーの図形を同梱しない。エージェントに AWS・Azure・Kubernetes などの図形を使わせる場合は、利用者が使う図形を draw.io でライブラリにして `library add` で登録する（[usecase.md の I](usecase.md#drawio-の図形をライブラリにする)）。登録したライブラリは `customLibraries` に出るので、人も拡張のライブラリ欄から同じ図形を置ける。人は拡張の「+ その他の図形」で図形集を有効にして使ってもよいが、エージェントが参照できるのは登録した図形だけである。
 
-AWS などの `mxgraph.*` の図形の描画には、v0.1.0 と同じく `DRAWIO_PNG_DRAWIO_WEB_PATH` の資材が必要である。拡張は自身の資材で描画するため、人の側の準備は不要。
+AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0 と同じく `DRAWIO_PNG_DRAWIO_WEB_PATH` の資材が必要である。拡張は自身の資材で描画するため、人の側の準備は不要。
 
 ## 7. 注意と未検証の事項
 

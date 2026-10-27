@@ -435,7 +435,7 @@ impl LibraryRepository for InstalledLibraries {
     }
 
     fn load(&self, name: &LibraryName) -> Result<Option<Library>, Diagnostic> {
-        if name.scope().is_none() || name.is_builtin() {
+        if name.scope().is_none() {
             return Ok(None);
         }
         Ok(self.checked(name)?.map(|(library, _)| library))

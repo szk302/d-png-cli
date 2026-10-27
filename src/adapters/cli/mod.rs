@@ -12,7 +12,6 @@ use std::{
 
 use crate::{
     adapters::{
-        builtin::BuiltinLibraries,
         config::{self, Configuration},
         fs,
         project::{self, Project, ProjectLibraries},
@@ -252,7 +251,7 @@ enum LibraryCommand {
     },
     /// List libraries: name, version, entries and title
     List {
-        /// Only libraries of this scope (drawio for the built-in ones)
+        /// Only libraries of this scope
         #[arg(long)]
         scope: Option<String>,
         #[arg(long)]
@@ -298,7 +297,7 @@ struct Filter {
     /// Only this library
     #[arg(long, value_name = "NAME")]
     library: Option<String>,
-    /// Only libraries of this scope (drawio for the built-in ones)
+    /// Only libraries of this scope
     #[arg(long)]
     scope: Option<String>,
     /// Only entries of this kind: image, shape, edge, group, set or invalid
@@ -390,7 +389,6 @@ impl Command {
 /// The adapters a command works with.
 struct Context {
     project: Option<Project>,
-    builtin: BuiltinLibraries,
 }
 
 impl Context {
@@ -400,7 +398,6 @@ impl Context {
             .map_err(|e| Diagnostic::new(Code::InputRead, format!("no current directory: {e}")))?;
         Ok(Self {
             project: Project::discover(explicit.as_deref(), &current)?,
-            builtin: BuiltinLibraries::default(),
         })
     }
 
@@ -489,7 +486,7 @@ impl Context {
     fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
         let project: Option<ProjectLibraries> = self.project.as_ref().map(Project::libraries);
         let installed = self.project.as_ref().map(Project::installed);
-        let mut repositories: Vec<&dyn LibraryRepository> = vec![&self.builtin];
+        let mut repositories: Vec<&dyn LibraryRepository> = Vec::new();
         if let Some(project) = &project {
             repositories.push(project);
         }

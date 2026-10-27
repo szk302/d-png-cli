@@ -271,14 +271,12 @@ fn packing_keeps_published_versions_and_ids() {
     let output = pack.assert().success().get_output().clone();
     assert!(String::from_utf8_lossy(&output.stderr).contains("warning[ENTRY_REMOVED]"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("removed: logo"));
-    // Unscoped or built-in names are not packed.
-    for name in ["brand", "@drawio/brand"] {
-        let mut pack = w.command(&["library", "pack"]);
-        pack.arg(logo())
-            .args(["--name", name, "--version", "1.0.0", "--to"])
-            .arg(w.root().join("acme-drawio-libraries"));
-        stderr(&mut pack, 2);
-    }
+    // Unscoped names are not packed.
+    let mut pack = w.command(&["library", "pack"]);
+    pack.arg(logo())
+        .args(["--name", "brand", "--version", "1.0.0", "--to"])
+        .arg(w.root().join("acme-drawio-libraries"));
+    stderr(&mut pack, 2);
 }
 
 #[test]
@@ -303,7 +301,6 @@ fn install_problems_change_nothing() {
             "SOURCE_FETCH",
         ),
         (vec!["library", "install", "brand"], 2, "USAGE"),
-        (vec!["library", "install", "@drawio/general"], 2, "USAGE"),
         (vec!["library", "install", "@acme/brand@latest"], 2, "USAGE"),
         (
             vec!["library", "install", "--offline", "@acme/brand"],

@@ -12,7 +12,7 @@ license requirements. `drawio-png-cli licenses` prints this file and the license
 
 ## Chromium-compatible image resizing
 
-The Chromium `desktop` output mode uses `src/resample.rs`, which adapts the Hamming1 filter generation and fixed-point channel
+The Chromium `desktop-compat` renderer uses `src/adapters/render/resample.rs`, which adapts the Hamming1 filter generation and fixed-point channel
 rounding used by Chromium's `skia/ext/image_operations.cc` (Copyright 2012 The
 Chromium Authors) and `skia/ext/convolver.{cc,h}` (Copyright 2011 The Chromium
 Authors), reviewed at Chromium `152.0.7977.76`. The Rust implementation is limited
@@ -147,23 +147,21 @@ Source and binary archives must retain this file, `LICENSE`,
 (including the generated Cargo dependency notices). No runtime or build-time
 asset download is performed.
 
-## Built-in shape catalog
+## Shape libraries
 
-`assets/shapes/catalog.json.gz`, embedded into drawio-png-cli as the built-in `drawio/*`
-libraries of `drawio-png-cli library` and `drawio-png-cli insert`, lists the titles, sizes, cells and style strings of
-draw.io sidebar entries. `scripts/shape_catalog.py` generates it by running the
-sidebar code of draw.io revision `96a916a337d13fc8bf622c8a67d422bd284eabe5`
-(26.0.2, Apache-2.0) in headless Chrome; the full license text is
-`assets/drawio/licenses/drawio-Apache-2.0.txt`. The catalog is a derived
-listing, not a copy of upstream files. Entries whose cells embed image data
-(`data:image/...`) are excluded, so no icon artwork is distributed; styles only
-name shapes (`shape=mxgraph.*`) or image paths (`image=img/lib/...`) that render
-from the user's own draw.io web assets through `DRAWIO_PNG_DRAWIO_WEB_PATH`. Product
-names and logos the shapes depict are trademarks of their respective owners.
+drawio-png-cli bundles no shape or icon libraries. draw.io's sidebar shapes,
+icon sets and stencil libraries are not included; users register the
+libraries they choose (`library add`, `library install`) and are responsible
+for the license and trademark terms of what they register. The libraries in
+`docs/v0.2.0_claude/examples/` are original test material: their images are
+plain colored rectangles, and the `shapes` example names draw.io's basic
+shapes by style only.
 
-The headless export integration calls draw.io's `Editor.exportToCanvas()` in
-`vscode` mode, matching the extension's `xmlpng` save path. The `raw` and
-`desktop` modes use draw.io's `render` / `LoadingComplete` capture protocol.
+## Rendering integration
+
+The headless export integration calls draw.io's `Editor.exportToCanvas()` for
+the `vscode` renderer, matching the extension's `xmlpng` save path. The `raw` and
+`desktop-compat` renderers use draw.io's `render` / `LoadingComplete` capture protocol.
 The VS Code extension reference is described above. Chromium and Electron runtimes
 are not bundled. The Desktop-compatible resizing
 code described above is included in drawio-png-cli.

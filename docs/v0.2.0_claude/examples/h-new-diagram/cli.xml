@@ -10,25 +10,21 @@
         <mxCell id="title" value="決済 API 構成図" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="140" y="20" width="300" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="users" value="利用者" parent="1" libref="@drawio/aws4-general-resources/users">
-          <mxGeometry x="40" y="120" as="geometry"/>
+        <mxCell id="users" value="利用者" parent="1" libref="shapes/actor">
+          <mxGeometry x="55" y="110" as="geometry"/>
         </mxCell>
-        <mxCell id="api" value="API Gateway" parent="1" libref="@drawio/aws4-network-content-delivery/api-gateway">
-          <mxGeometry x="200" y="120" as="geometry"/>
-        </mxCell>
-        <mxCell id="handler" value="決済ハンドラー" parent="1" libref="@drawio/aws4-compute/lambda">
-          <mxGeometry x="360" y="120" as="geometry"/>
-        </mxCell>
+        <object id="api" label="決済 API" owner="payments" libref="components/service">
+          <mxCell parent="1">
+            <mxGeometry x="180" y="110" as="geometry"/>
+          </mxCell>
+        </object>
         <mxCell id="db" value="決済 DB" parent="1" libref="simple-icons/postgresql">
-          <mxGeometry x="535" y="135" width="48" as="geometry"/>
+          <mxGeometry x="380" y="116" width="48" as="geometry"/>
         </mxCell>
         <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="users" target="api">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="handler">
-          <mxGeometry relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="e3" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="db">
+        <mxCell id="e2" value="SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="api" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>

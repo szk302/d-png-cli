@@ -51,7 +51,6 @@ impl EntryIds {
 }
 
 /// The items for the project's and the installed libraries, in that order.
-/// Built-in libraries come from the extension's own shape palettes.
 pub fn custom_libraries(
     libraries: &Libraries<'_>,
     ids: &EntryIds,
@@ -59,7 +58,6 @@ pub fn custom_libraries(
     let mut items = Vec::new();
     for (origin, info) in libraries.list()? {
         let entry_id = match origin {
-            Origin::Builtin => continue,
             Origin::Project => ids.base.clone(),
             Origin::Installed => format!("{} @{}", ids.base, info.name.scope().unwrap_or("")),
         };

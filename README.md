@@ -42,6 +42,7 @@ Rust を直接管理している場合は `cargo install --path . --locked` で�
 # プロジェクトを用意し、ライブラリを登録・取り込む（初回のみ）
 drawio-png-cli init                                   # .drawio-png/ を作る
 drawio-png-cli library add ./simple-icons.xml         # プロジェクト専用のライブラリを登録する
+drawio-png-cli library add ./shapes.xml               # draw.io の図形も、ライブラリにして登録する
 drawio-png-cli library install @acme/brand            # 社内の共有ライブラリを取り込む（取得元は .drawio-png/config.toml）
 drawio-png-cli library vscode --write                 # VS Code 拡張でも同じライブラリを使う
 
@@ -73,13 +74,13 @@ drawio-png-cli write -o arch.drawio.png <<'EOF'
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="fn" value="Handler" parent="1" libref="@drawio/aws4-compute/lambda">
+        <mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
           <mxGeometry x="40" y="40" as="geometry"/>
         </mxCell>
         <mxCell id="db" value="DB" parent="1" libref="simple-icons/postgresql">
-          <mxGeometry x="200" y="55" width="48" as="geometry"/>
+          <mxGeometry x="200" y="56" width="48" as="geometry"/>
         </mxCell>
-        <mxCell id="e" style="endArrow=block;html=1;" edge="1" parent="1" source="fn" target="db">
+        <mxCell id="e" style="endArrow=block;html=1;" edge="1" parent="1" source="orders" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>
@@ -162,7 +163,7 @@ EOF
 | --- | --- |
 | `components/service` | プロジェクトに登録したライブラリ `components` のエントリー `service` |
 | `@acme/brand/logo` | スコープ `acme` の取得元から取り込んだライブラリ `@acme/brand` のエントリー `logo` |
-| `@drawio/aws4-compute/lambda` | 組み込みライブラリ `@drawio/aws4-compute` のエントリー `lambda` |
+| `shapes/cylinder` | draw.io の図形を利用者がまとめ、プロジェクトに登録したライブラリ `shapes` のエントリー `cylinder` |
 
 | 書き方 | 展開されるもの |
 | --- | --- |
@@ -177,7 +178,7 @@ EOF
 
 ## ライブラリ
 
-ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリと組み込みライブラリだけで、任意のパスのファイルや環境変数で指したファイルは使いません。同じ XML が、どの環境でも同じ部品に展開されるようにするためです。
+ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリだけで、任意のパスのファイルや環境変数で指したファイルは使いません。同じ XML が、どの環境でも同じ部品に展開されるようにするためです。drawio-png-cli はライブラリを同梱しません（[draw.io の図形を使う](#drawio-の図形を使う)）。
 
 ライブラリ名には npm と同じ名前空間（スコープ）があります。
 
@@ -185,7 +186,6 @@ EOF
 | --- | --- | --- | --- |
 | プロジェクト専用 | `components` | `library add` | `.drawio-png/libraries/components.xml`（Git にコミットする） |
 | 取り込み | `@acme/brand` | `library install` | `.drawio-png/libraries/@acme/brand.xml`（Git から除外し、`lock.json` から復元する） |
-| 組み込み | `@drawio/aws4-compute` | 不要 | drawio-png-cli に同梱 |
 
 ```sh
 drawio-png-cli init
@@ -253,20 +253,26 @@ drawio-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to .
 
 拡張は CDATA や実体参照で書かれたライブラリを読めないため、CLI は登録時に書式を変換します。拡張の読み込みの制約と、人とエージェントの往復の流れは [VS Code 拡張との連携](docs/v0.2.0_claude/vscode.md) を参照してください。
 
-## draw.io の組み込み図形（組み込みライブラリ）
+## draw.io の図形を使う
 
-AWS・Azure・Google Cloud（GCP2）・Kubernetes・UML など、draw.io のサイドバーにある図形（`shape=mxgraph.*` など）を、style を推測せずに参照できます。drawio-png-cli は、VS Code 拡張 1.9.0 と同じ draw.io 26.0.2 のサイドバーから作った図形の一覧（約 440 の図形集、約 12,700 図形）を同梱しています。各図形集は `@drawio/aws4-compute` のような名前の組み込みライブラリで、登録は要りません。
+drawio-png-cli は draw.io のサイドバーの図形（AWS・Azure・Google Cloud・Kubernetes・UML など）を同梱していません。エージェントに使わせる図形は、利用者が draw.io でライブラリにして登録します。
+
+1. draw.io（Desktop・Web）で「File → New Library」を選び、ライブラリを作ります。
+2. 使う図形を図面に置き、選んでライブラリ欄へドラッグします。各図形にタイトルを付けて保存します。タイトルは検索語とエントリー ID の元になります。
+3. 保存したファイルを `library add` で登録します。
 
 ```sh
-drawio-png-cli library search lambda --scope drawio     # 参照文字列・種類・サイズ・タイトル（style は出さない）
-drawio-png-cli library show @drawio/aws4-compute/lambda # style・セル構成・配置例
-drawio-png-cli library preview lambda --scope drawio -o shapes.png
+drawio-png-cli library add ./shapes.xml --title Shapes
+drawio-png-cli library search cylinder
+#   shapes/cylinder	shape	60x80	Cylinder
+drawio-png-cli library vscode --write          # VS Code 拡張のライブラリ欄にも出す
 ```
 
-- 旧版の図形集（`@drawio/aws3-*` など）も含みます。サイドバーにタイトルが無い図形（AWS のグループなど）は、ラベルや図形名をタイトルにしています。
-- 一覧には、図形のセルと style だけが入っています。アイコンの画像データ（`data:image/...`）を含む図形（GCP2 の製品別アイコンなど）は収録していません。それらのアイコンはカスタムライブラリから参照してください。上流の資材に画像やステンシルが無く描画できない5図形も除いています。
-- AWS などの draw.io 図形名（`mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要です。
-- 一覧は `python3 scripts/shape_catalog.py /path/to/drawio-checkout` で作り直せます（開発用。Chrome が必要）。
+- 複数のリポジトリで同じ図形を使う場合は、スコープを付けて取得元から配布できます（[スコープと取得元](#スコープと取得元)）。
+- AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`DRAWIO_PNG_DRAWIO_WEB_PATH`）が必要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
+- 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認してください。
+
+手順の例は [usecase.md の I](docs/v0.2.0_claude/usecase.md#drawio-の図形をライブラリにする) にあります。
 
 ## レンダラーの選択
 

@@ -1,14 +1,9 @@
-//! Library commands (spec 9.7-9.10) over a project area and the built-in
-//! `@drawio` libraries.
+//! Library commands (spec 9.7-9.10) over a project area.
 mod support;
 
-use drawio_png_cli::{
-    adapters::builtin::BuiltinLibraries,
-    app::{libraries::Libraries, ports::LibraryRepository},
-    domain::{
-        diagram, library, preview,
-        reference::{LibraryName, Ref},
-    },
+use drawio_png_cli::domain::{
+    diagram, library, preview,
+    reference::{LibraryName, Ref},
 };
 use std::{fs, path::Path};
 use support::{cli, compress, library_file, stderr, stdout};
@@ -65,23 +60,16 @@ fn init_creates_the_project_area_once() {
 }
 
 #[test]
-fn list_shows_project_libraries_before_built_in_ones() {
+fn list_shows_the_project_libraries() {
     let dir = project();
     let list = run(dir.path(), &["library", "list"]);
-    assert!(list.starts_with("icons\t-\t5\tIcons\n"), "{list}");
-    assert!(list.contains("@drawio/aws4-compute\t-\t139\tAWS / Compute\n"));
-    assert!(!list.contains("Bad Name") && !list.contains("notes"));
+    assert_eq!(list, "icons\t-\t5\tIcons\n");
     let json: serde_json::Value =
         serde_json::from_str(&run(dir.path(), &["library", "list", "--json"])).unwrap();
     assert_eq!(json[0]["name"], "icons");
     assert_eq!(json[0]["origin"], "project");
     assert_eq!(json[0]["file"], ".drawio-png/libraries/icons.xml");
-    assert_eq!(json[1]["origin"], "builtin");
-    let builtin = run(dir.path(), &["library", "list", "--scope", "drawio"]);
-    assert!(
-        builtin.lines().all(|l| l.starts_with("@drawio/")),
-        "{builtin}"
-    );
+    assert_eq!(run(dir.path(), &["library", "list", "--scope", "acme"]), "");
     // A subdirectory finds the project above it; --project names it.
     let sub = dir.path().join("docs/deep");
     fs::create_dir_all(&sub).unwrap();
@@ -96,8 +84,8 @@ fn list_shows_project_libraries_before_built_in_ones() {
         )
         .starts_with("icons\t")
     );
-    // Without a project, only the built-in libraries are there.
-    assert!(run(elsewhere.path(), &["library", "list"]).starts_with("@drawio/"));
+    // Without a project, there are no libraries.
+    assert_eq!(run(elsewhere.path(), &["library", "list"]), "");
     let missing = stderr(
         cli()
             .current_dir(elsewhere.path())
@@ -118,15 +106,27 @@ fn search_prints_references_without_content() {
     );
     assert!(!all.contains("data:"));
     // Exact matches first, then prefixes, then the rest; every word must match.
-    let found = run(
-        dir.path(),
-        &["library", "search", "lambda", "--scope", "drawio"],
-    );
-    assert!(
-        found.starts_with("@drawio/aws3-compute/lambda\t"),
-        "{found}"
-    );
+    fs::write(
+        dir.path().join(".drawio-png/libraries/more.xml"),
+        library_file(serde_json::json!([
+            {"xml": CARD, "w": 100, "h": 40, "title": "Scorecard"},
+            {"xml": CARD, "w": 100, "h": 40, "title": "Cards"},
+        ])),
+    )
+    .unwrap();
+    let found: Vec<String> = run(dir.path(), &["library", "search", "card"])
+        .lines()
+        .map(|l| l.split('\t').next().unwrap().to_owned())
+        .collect();
+    assert_eq!(found, ["icons/card", "more/cards", "more/scorecard"]);
     assert!(run(dir.path(), &["library", "search", "icon", "a"]).starts_with("icons/icon-a\t"));
+    assert_eq!(
+        run(
+            dir.path(),
+            &["library", "search", "card", "--scope", "acme"]
+        ),
+        ""
+    );
     let groups = run(
         dir.path(),
         &["library", "search", "--library", "icons", "--kind", "group"],
@@ -194,26 +194,17 @@ fn show_describes_libraries_and_entries() {
         text.contains("name: icons\ntitle: Icons\norigin: project\nentries: 5\n"),
         "{text}"
     );
-    let lambda = run(
-        dir.path(),
-        &["library", "show", "@drawio/aws4-compute/lambda"],
-    );
-    assert!(lambda.contains("kind: shape"), "{lambda}");
-    assert!(lambda.contains("resIcon=mxgraph.aws4.lambda"), "{lambda}");
+    let icon = run(dir.path(), &["library", "show", "icons/icon-a"]);
+    assert!(icon.contains("kind: image"), "{icon}");
     // Close references are suggested for mistakes.
     let error = stderr(
         cli()
             .current_dir(dir.path())
-            .args(["library", "show", "@drawio/aws4-compute/lamda"]),
+            .args(["library", "show", "icons/cart"]),
         1,
     );
     assert!(error.contains("error[REF_NOT_FOUND]"), "{error}");
-    assert!(
-        error.contains(
-            "candidates: @drawio/aws4-compute/lambda, @drawio/aws4-compute/lambda-function"
-        ),
-        "{error}"
-    );
+    assert!(error.contains("candidates: icons/card\n"), "{error}");
     let json = stderr(
         cli()
             .current_dir(dir.path())
@@ -226,12 +217,12 @@ fn show_describes_libraries_and_entries() {
 }
 
 #[test]
-fn diagrams_use_project_and_built_in_libraries() {
+fn diagrams_use_project_libraries() {
     let dir = project();
-    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" libref="icons/icon-a"><mxGeometry width="48" as="geometry"/></mxCell><mxCell id="fn" parent="1" libref="@drawio/aws4-compute/lambda"/></root></mxGraphModel>"#;
+    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" libref="icons/icon-a"><mxGeometry width="48" as="geometry"/></mxCell><mxCell id="c" parent="1" libref="icons/card"/></root></mxGraphModel>"#;
     let out = stdout(cli().current_dir(dir.path()).arg("expand").write_stdin(xml));
     diagram::validate(&out).unwrap();
-    assert!(out.contains("resIcon=mxgraph.aws4.lambda"));
+    assert!(out.contains("owner=\"team\""));
     assert!(!out.contains("libref"));
     // Project references need a project.
     let elsewhere = tempdir().unwrap();
@@ -243,64 +234,6 @@ fn diagrams_use_project_and_built_in_libraries() {
         1,
     );
     assert!(error.contains("no project (.drawio-png/) here"), "{error}");
-}
-
-#[test]
-fn built_in_catalog_holds_cells_and_styles_but_no_images() {
-    let catalog = include_bytes!("../assets/shapes/catalog.json.gz");
-    let mut text = String::new();
-    std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(&catalog[..]), &mut text)
-        .unwrap();
-    // The catalog only names shapes and image paths; icon artwork is never redistributed.
-    assert!(!text.contains("data:image"));
-    assert!(text.contains("96a916a337d13fc8bf622c8a67d422bd284eabe5"));
-    let builtin = BuiltinLibraries::default();
-    let infos = builtin.list().unwrap();
-    assert!(infos.len() > 300);
-    assert!(infos.iter().all(|i| i.name.is_builtin()));
-    // Palettes initPalettes passes arguments to or registers itself.
-    for name in [
-        "aws4-compute",
-        "aws4-groups",
-        "azure2-compute",
-        "gcp2-zones",
-        "kubernetes",
-        "general",
-        "arrows",
-        "cisco-routers",
-        "signs-safety",
-        "rack-cisco",
-        "pid-pumps",
-    ] {
-        let name = LibraryName::parse(&format!("@drawio/{name}")).unwrap();
-        assert!(infos.iter().any(|i| i.name == name), "{name}");
-    }
-    // childLayout ran as when draw.io adds the cells: the List's items are stacked.
-    let libraries = Libraries::new(vec![&builtin]);
-    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="list" parent="1" libref="@drawio/general/list"/></root></mxGraphModel>"#;
-    let expanded = drawio_png_cli::app::diagram::expand(xml.as_bytes(), None, &libraries).unwrap();
-    let doc = roxmltree::Document::parse(&expanded.xml).unwrap();
-    let rows: Vec<_> = doc
-        .descendants()
-        .filter(|n| n.attribute("value").is_some_and(|v| v.starts_with("Item ")))
-        .map(|n| {
-            n.first_element_child()
-                .unwrap()
-                .attribute("y")
-                .unwrap_or("0")
-                .to_owned()
-        })
-        .collect();
-    assert_eq!(rows, ["30", "60", "90"]);
-    // Entry IDs are unique within each library.
-    for info in infos {
-        let library = builtin.load(&info.name).unwrap().unwrap();
-        let mut ids: Vec<_> = library.entries.iter().map(|e| e.id.as_str()).collect();
-        ids.sort();
-        let count = ids.len();
-        ids.dedup();
-        assert_eq!(ids.len(), count, "{}", info.name);
-    }
 }
 
 /// Fails when an entry of a preview overlaps a label or another entry.
@@ -384,62 +317,107 @@ fn assert_separate(xml: &str) {
     }
 }
 
+/// Entries of every kind and shape a preview lays out: wide, tall and
+/// round shapes, a group, a pool with lanes, an edge and a set.
+const VARIED: &[(&str, &str, f64, f64)] = &[
+    (
+        "Box",
+        r#"<mxCell id="2" style="rounded=1;" vertex="1" parent="1"><mxGeometry width="120" height="60" as="geometry"/></mxCell>"#,
+        120.0,
+        60.0,
+    ),
+    (
+        "Wide Bar",
+        r#"<mxCell id="2" value="Bar" style="" vertex="1" parent="1"><mxGeometry width="400" height="20" as="geometry"/></mxCell>"#,
+        400.0,
+        20.0,
+    ),
+    (
+        "Tall Bar",
+        r#"<mxCell id="2" style="" vertex="1" parent="1"><mxGeometry width="20" height="300" as="geometry"/></mxCell>"#,
+        20.0,
+        300.0,
+    ),
+    (
+        "Circle",
+        r#"<mxCell id="2" style="ellipse;" vertex="1" parent="1"><mxGeometry width="80" height="80" as="geometry"/></mxCell>"#,
+        80.0,
+        80.0,
+    ),
+    (
+        "Card",
+        r#"<object id="g" label="Card" owner="team"><mxCell style="group;" vertex="1" parent="1"><mxGeometry width="100" height="40" as="geometry"/></mxCell></object><mxCell id="a" value="Title" vertex="1" parent="g"><mxGeometry width="40" height="40" as="geometry"/></mxCell>"#,
+        100.0,
+        40.0,
+    ),
+    (
+        "Pool",
+        r#"<mxCell id="2" value="Pool" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="1"><mxGeometry width="320" height="240" as="geometry"/></mxCell><mxCell id="3" value="Lane 1" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="2"><mxGeometry x="20" width="300" height="120" as="geometry"/></mxCell><mxCell id="4" value="Lane 2" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="2"><mxGeometry x="20" y="120" width="300" height="120" as="geometry"/></mxCell>"#,
+        320.0,
+        240.0,
+    ),
+    (
+        "Curve",
+        r#"<mxCell id="2" style="curved=1;endArrow=classic;html=1;" edge="1" parent="1"><mxGeometry width="50" height="50" relative="1" as="geometry"><mxPoint y="50" as="sourcePoint"/><mxPoint x="50" as="targetPoint"/><Array as="points"><mxPoint x="50" y="50"/><mxPoint/></Array></mxGeometry></mxCell>"#,
+        50.0,
+        50.0,
+    ),
+    (
+        "Labelled Connector",
+        r#"<mxCell id="2" value="Label" style="endArrow=classic;html=1;" edge="1" parent="1"><mxGeometry width="160" relative="1" as="geometry"><mxPoint y="100" as="sourcePoint"/><mxPoint x="160" y="100" as="targetPoint"/></mxGeometry></mxCell>"#,
+        160.0,
+        0.0,
+    ),
+    (
+        "Branch",
+        r#"<mxCell id="2" value="A" style="rhombus;" vertex="1" parent="1"><mxGeometry width="80" height="60" as="geometry"/></mxCell><mxCell id="3" value="B" style="rounded=1;" vertex="1" parent="1"><mxGeometry x="140" width="120" height="60" as="geometry"/></mxCell><mxCell id="4" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry"/></mxCell>"#,
+        260.0,
+        60.0,
+    ),
+];
+
+fn varied() -> library::Library {
+    let entries: Vec<_> = VARIED
+        .iter()
+        .map(|(title, cells, w, h)| {
+            let xml = format!(
+                r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>{cells}</root></mxGraphModel>"#
+            );
+            serde_json::json!({"xml": compress(&xml), "w": w, "h": h, "title": title})
+        })
+        .collect();
+    library::parse(
+        LibraryName::parse("varied").unwrap(),
+        library_file(serde_json::Value::Array(entries)).as_bytes(),
+    )
+    .unwrap()
+}
+
 #[test]
 fn preview_lays_out_labelled_entries_and_limits_their_number() {
-    let builtin = BuiltinLibraries::default();
-    let load = |name: &str| {
-        builtin
-            .load(&LibraryName::parse(name).unwrap())
-            .unwrap()
-            .unwrap()
-    };
-    let kubernetes = load("@drawio/kubernetes");
-    let chosen: Vec<_> = kubernetes.entries[..12]
+    let varied = varied();
+    let all: Vec<_> = varied
+        .entries
         .iter()
         .map(|e| {
             (
                 Ref {
-                    library: kubernetes.name.clone(),
+                    library: varied.name.clone(),
                     entry: e.id.clone(),
                 },
                 e,
             )
         })
         .collect();
-    let xml = preview::preview(&chosen).unwrap();
+    let xml = preview::preview(&all).unwrap();
     diagram::validate(&xml).unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
-    let first = format!("@drawio/kubernetes/{}\n", kubernetes.entries[0].id);
-    assert!(
-        doc.descendants()
-            .any(|n| n.attribute("value").is_some_and(|v| v.starts_with(&first)))
-    );
+    assert!(doc.descendants().any(|n| {
+        n.attribute("value")
+            .is_some_and(|v| v.starts_with("varied/box\n"))
+    }));
     // Groups, pools and connectors keep their size and must not reach a neighbour.
-    for name in [
-        "@drawio/advanced",
-        "@drawio/bootstrap",
-        "@drawio/sysml-activities",
-        "@drawio/gcp2-product-cards",
-        "@drawio/mockup-misc",
-    ] {
-        let library = load(name);
-        let all: Vec<_> = library
-            .entries
-            .iter()
-            .map(|e| {
-                (
-                    Ref {
-                        library: library.name.clone(),
-                        entry: e.id.clone(),
-                    },
-                    e,
-                )
-            })
-            .collect();
-        for chunk in all.chunks(preview::PREVIEW_LIMIT) {
-            assert_separate(&preview::preview(chunk).unwrap());
-        }
-    }
+    assert_separate(&xml);
     // A rotated custom image keeps its turn although its style is not printed.
     let rotated = library::parse(
         LibraryName::parse("rotated").unwrap(),
@@ -458,7 +436,16 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
         .unwrap(),
     );
 
-    let directory = tempdir().unwrap();
+    // More entries than one preview shows.
+    let directory = project();
+    let many: Vec<_> = (0..preview::PREVIEW_LIMIT + 1)
+        .map(|i| serde_json::json!({"xml": CARD, "w": 100, "h": 40, "title": format!("Card {i}")}))
+        .collect();
+    fs::write(
+        directory.path().join(".drawio-png/libraries/many.xml"),
+        library_file(serde_json::Value::Array(many)),
+    )
+    .unwrap();
     let output = directory.path().join("preview.png");
     let preview = |args: &[&str]| {
         let mut command = cli();
@@ -470,8 +457,8 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
             .arg(&output);
         command
     };
-    let many = stderr(&mut preview(&["--library", "@drawio/aws4-compute"]), 2);
-    assert!(many.contains("139 entries match"), "{many}");
+    let many = stderr(&mut preview(&["--library", "many"]), 2);
+    assert!(many.contains("61 entries match"), "{many}");
     let none = stderr(&mut preview(&["no such shape"]), 1);
     assert!(none.contains("no entries match"), "{none}");
     stderr(&mut preview(&[]), 2);
@@ -480,12 +467,22 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
 
 #[test]
 #[ignore = "requires Chromium and draw.io 26.0.2 web assets; set DRAWIO_PNG_TEST_CHROME_PATH and DRAWIO_PNG_TEST_DRAWIO_WEB_PATH"]
-fn preview_and_write_render_built_in_shapes_with_web_assets() {
+fn preview_and_write_render_stencil_shapes_with_web_assets() {
     let chrome =
         std::env::var_os("DRAWIO_PNG_TEST_CHROME_PATH").expect("set DRAWIO_PNG_TEST_CHROME_PATH");
     let web = std::env::var_os("DRAWIO_PNG_TEST_DRAWIO_WEB_PATH")
         .expect("set DRAWIO_PNG_TEST_DRAWIO_WEB_PATH");
+    // A library of draw.io shapes that need the web assets' stencils.
     let directory = tempdir().unwrap();
+    cli().arg("init").arg(directory.path()).assert().success();
+    let database = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="" style="shape=mxgraph.flowchart.database;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry width="60" height="60" as="geometry"/></mxCell></root></mxGraphModel>"#;
+    fs::write(
+        directory.path().join(".drawio-png/libraries/flowchart.xml"),
+        library_file(serde_json::json!([
+            {"xml": compress(database), "w": 60, "h": 60, "title": "Database"},
+        ])),
+    )
+    .unwrap();
     let render = |args: &[&str], output: &Path, input: Option<&str>| {
         let mut command = cli();
         command
@@ -506,20 +503,20 @@ fn preview_and_write_render_built_in_shapes_with_web_assets() {
         fs::read(output).unwrap()
     };
     let preview = render(
-        &["library", "preview", "lambda", "--scope", "drawio"],
+        &["library", "preview", "database"],
         &directory.path().join("preview.png"),
         None,
     );
     assert!(preview.starts_with(drawio_png_cli::domain::drawio_png::SIGNATURE));
-    // A built-in shape written by reference, on the second page.
-    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="fn" parent="1" libref="@drawio/aws4-compute/lambda"/></root></mxGraphModel></diagram></mxfile>"#;
+    // A stencil shape written by reference, on the second page.
+    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" libref="flowchart/database"/></root></mxGraphModel></diagram></mxfile>"#;
     let png = render(
         &["write", "--page", "2"],
-        &directory.path().join("lambda.png"),
+        &directory.path().join("database.png"),
         Some(two),
     );
     let (width, height) = drawio_png_cli::domain::drawio_png::dimensions(&png).unwrap();
-    assert_eq!((width, height), (79, 79));
+    assert_eq!((width, height), (61, 61));
     let xml = drawio_png_cli::domain::drawio_png::extract(&png).unwrap();
-    assert!(xml.contains("resIcon=mxgraph.aws4.lambda") && !xml.contains("libref"));
+    assert!(xml.contains("shape=mxgraph.flowchart.database") && !xml.contains("libref"));
 }
