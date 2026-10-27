@@ -35,9 +35,9 @@ return JSON.parse(parsedXml.root.children[0].content); // 最初の子のテキ�
 
 | ファイル | 形式 | 結果 |
 | --- | --- | --- |
-| `examples/sources/components.xml` | CDATA で JSON を包む（v0.1.0 の文書の例と同じ形） | 失敗（`children[0]` がない） |
+| `examples/sources/components.xml` | CDATA で JSON を包む（配布されているライブラリにある形） | 失敗（`children[0]` がない） |
 | `examples/sources/simple-icons.xml` | `<mxlibrary>` 直下に JSON、`xml` は圧縮 | 成功 |
-| `examples/project/.d-png/libraries/*.xml` | [spec.md 9.3](spec.md#93-登録ファイルの書式) の書式（非圧縮の `xml` を含む） | 成功（非圧縮の `xml` も先頭が `<` の文字列として得られる）。`@acme/brand` の版のファイルは、このとき確かめた `brand-images.xml` と表示名だけが違う |
+| `examples/project/.d-png/libraries/*.xml` | [spec.md 9.3](spec.md#93-登録ファイルの書式) の書式（非圧縮の `xml` を含む） | 成功（非圧縮の `xml` も先頭が `<` の文字列として得られる）。取得元の `@acme/brand/1.0.0.xml` も同じ書式 |
 | 実際の Simple Icons for draw.io 16.35.0（3,466 エントリー） | `<mxlibrary>` 直下に JSON、`xml` は圧縮 | 成功 |
 
 実体参照を使ったファイルは、パーサーのソースから次のように読まれると判断した（実行はしていない）: JSON の外側に `&quot;` があれば `JSON.parse` が失敗し、文字列の中の `&lt;` はそのまま残るため、非圧縮の `xml` が `&lt;mxGraphModel…` となって図形を作れない。draw.io 31.4.6 のソースでは、既定設定でライブラリを保存すると `xml` を非圧縮にし、DOM の直列化で `<` を `&lt;` にする（`EditorUi.createLibraryDataFromImages`）。draw.io Desktop でライブラリを編集・保存した後は、`library sync` で書式を戻す。
@@ -50,6 +50,7 @@ CLI の書式（spec.md 9.3）は、JSON の `\u003c` などで `<`・`>`・`&` 
 d-png-cli init
 d-png-cli library add ./vendor/simple-icons.xml --title "Simple Icons"
 d-png-cli library add ./design/components.xml --title "Components"
+d-png-cli library add ./design/shapes.xml --title "Shapes"     # draw.io の図形をまとめたライブラリ（6 章）
 d-png-cli library install @acme/brand        # config.toml の [scopes] に acme の取得元を書いておく
 d-png-cli library vscode --write
 ```
@@ -63,6 +64,11 @@ d-png-cli library vscode --write
       "entryId": "d-png-cli",
       "libName": "Components",
       "file": "${workspaceFolder}/.d-png/libraries/components.xml"
+    },
+    {
+      "entryId": "d-png-cli",
+      "libName": "Shapes",
+      "file": "${workspaceFolder}/.d-png/libraries/shapes.xml"
     },
     {
       "entryId": "d-png-cli",
@@ -108,7 +114,7 @@ flowchart LR
 
 - 人が拡張のライブラリ欄から部品を置くと、`xml` のエントリーはそのセル（style の `image` を含む）が、`data` のエントリーは `convertDataUri` で変換した `image` の値を持つ画像セルが入る（`data` の変換は draw.io 26.0.2 の `app.min.js`、`xml` のセルの挿入は 31.4.6 の `EditorUi.addLibraryEntries` のソースで確認）。CLI の展開も同じ値を作るため、人が置いたアイコンもエージェントが置いたアイコンも、次の `read` で同じ `image=lib:` の参照に縮まる。
 - 人が別の画像に差し替えた場合は、その画像の指紋で照合し直す。登録ライブラリにない画像は実データのまま残る。
-- `write` の既定のレンダラー `vscode` は、拡張 1.9.0 が表示倍率 100% で保存した PNG に合わせる。フォント・OS の違いによる画素の差は残る（v0.1.0 の [描画互換性](rendering.md) と同じ）。
+- `write` の既定のレンダラー `vscode` は、拡張 1.9.0 が表示倍率 100% で保存した PNG に合わせる。フォント・OS の違いによる画素の差は残る（[描画互換性](rendering.md)）。
 - 拡張で保存した PNG を `write` で作り直さなくても、`read` → 編集 → `write` の流れはそのまま使える。
 
 ## 6. draw.io の図形と拡張の「その他の図形」

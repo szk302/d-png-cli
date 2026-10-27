@@ -1,6 +1,6 @@
 # 初回実装の検証記録
 
-この記録は v0.1.0 の実装時のもので、コマンド・オプション名は当時のもの（`extract`・`embed`・`--no-render`・`--chromium-mode` など）である。当時の実行ファイル名は `dip`、環境変数は `DIP_*` で、ここでは実行ファイル名と残っている環境変数を現在の名前（`d-png-cli`・`D_PNG_*`）で記す。v0.2.0 での対応は [仕様の 12 章](spec.md#12-v010-からの変更) を参照。
+この記録は v0.1.0 の実装時のもので、コマンド・オプション名は当時のもの（`extract`・`embed`・`--no-render`・`--chromium-mode` など）である。当時の実行ファイル名は `dip`、環境変数は `DIP_*` で、ここでは実行ファイル名と残っている環境変数を現在の名前（`d-png-cli`・`D_PNG_*`）で記す。v0.2.0 での対応は [仕様の 12 章](../spec.md#12-v010-からの変更) を参照。
 
 2026-09-19、Linux ARM64（Debian 13）、Rust 1.98.1 で検証。
 
@@ -95,7 +95,7 @@ Desktopの既存通常テストは成功したが、今回の変更でDesktop実
 
 ## 既定フォント・代替フォントの指定
 
-2026-09-20、`--default-font` と `--fallback-font` を追加した。仕様は [fonts.md](fonts.md) に記載している。
+2026-09-20、`--default-font` と `--fallback-font` を追加した。仕様は [fonts.md](../fonts.md) に記載している。
 
 - 通常テスト48件が成功。複数ページとユーザーオブジェクト、明示フォントの優先、代替候補の順序・重複除去、HTML・Webフォント・未知要素の保持、XMLサイズ制限、保存失敗時の保護を確認した。
 - Desktopに渡すXMLとPNGに保存するXMLが一致し、全ページに設定が残ることを確認した。
@@ -116,7 +116,7 @@ D_PNG_TEST_DRAWIO_PATH=/absolute/path/to/drawio-wrapper \
 
 ## 描画解像度と縮小処理の統一
 
-2026-09-20、ChromiumをDPR 2で描画し、Hamming1方式で縦横それぞれ半分へ縮小するよう変更した。比較対象はDesktop 31.4.5 / Electron 44.2.0 / Chromium 152と、CLI側のChromium 153.0.8010.47。Linux ARM64、1倍表示のXvfbで検証した。方式選定の実測と上流参照は [rendering.md](rendering.md) に記載している。
+2026-09-20、ChromiumをDPR 2で描画し、Hamming1方式で縦横それぞれ半分へ縮小するよう変更した。比較対象はDesktop 31.4.5 / Electron 44.2.0 / Chromium 152と、CLI側のChromium 153.0.8010.47。Linux ARM64、1倍表示のXvfbで検証した。方式選定の実測と上流参照は [rendering.md](../rendering.md) に記載している。
 
 同じ入力で再比較した結果は次のとおり。「共通フォント」は `--default-font 'Noto Sans CJK JP' --fallback-font 'Noto Sans CJK JP'` を両方に指定した結果。異なる寸法の画像では画素差を集計していない。
 
@@ -170,7 +170,7 @@ CLI生成PNGを拡張経路で再読み込み・再保存する18件も成功し
 - 外部画像は既定で接続せず、ネットワーク許可＋CORS許可時に埋め込み画像と同じ画素となる。配信元のCORS許可がない場合はエラーにする。
 - 旧Rust縮小処理・旧fixtureとChromium由来のBSD-3-Clause表記を削除した。現在の描画処理にChromiumから移植したコードは含まない。
 
-現在の仕様とサイズ制限は [描画互換性](rendering.md) を参照。
+現在の仕様とサイズ制限は [描画互換性](../rendering.md) を参照。
 
 通常テスト48件、Chromium実機4件、Desktop・Chromiumを使う共通フォント実機1件が成功した。format・clippy・releaseビルド・同梱資材のハッシュ検証も成功した。
 
@@ -184,7 +184,7 @@ CLI生成PNGを拡張経路で再読み込み・再保存する18件も成功し
 - 不明なモード、no-renderとの併用、Desktopレンダラーとの併用を拒否し、既存出力が保持されることを確認した。
 - Chromium実機5件が成功。vscodeの既存の画像・CORS・透明背景・倍率／余白・タイムアウトの検証も維持した。
 
-Desktop互換は参照したDesktop環境の処理に合わせたモードであり、別OS・フォント・ブラウザーバージョンでの完全一致を保証しない。仕様は [描画互換性](rendering.md) を参照。
+Desktop互換は参照したDesktop環境の処理に合わせたモードであり、別OS・フォント・ブラウザーバージョンでの完全一致を保証しない。仕様は [描画互換性](../rendering.md) を参照。
 
 通常テスト52件、format・clippy・releaseビルド・資材ハッシュ検証が成功した。autoでDesktopが選ばれる場合のモード指定も、両エンジンを起動する前に拒否することをテストした。
 

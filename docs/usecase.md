@@ -59,7 +59,7 @@ d-png-cli write -o diagram.drawio.png <<'EOF'
 EOF
 ```
 
-レンダラーの既定は VS Code 拡張互換の `vscode`。プロジェクトの `config.toml` でフォントなどを固定していれば、オプションは不要である。参照の誤りはまとめて報告され、既存の出力は変わらない（[13 章](#14-途中で困った場合の行動)）。
+レンダラーの既定は VS Code 拡張互換の `vscode`。プロジェクトの `config.toml` でフォントなどを固定していれば、オプションは不要である。参照の誤りはまとめて報告され、既存の出力は変わらない（[14 章](#14-途中で困った場合の行動)）。
 
 ### 以下の XML について
 
@@ -430,7 +430,7 @@ d-png-cli library search curve --kind edge
 
 ```sh
 d-png-cli read diagram.drawio.png -o edit.xml
-# 1 個の画像を lib: 参照にしました（画像を残すには expand を使います）
+# 1 image(s) replaced with library references, 0 kept; use `d-png-cli expand` for the image data
 # edit.xml の db の x を 240 → 400 に変更
 d-png-cli write edit.xml -o diagram.drawio.png
 ```
@@ -584,12 +584,14 @@ d-png-cli write -o payments.drawio.png --json < payments.xml
 
 ```json
 {
-  "output": "payments.drawio.png", "renderer": "vscode", "page": 1, "pages": 1,
+  "output": "payments.drawio.png",
+  "width": 400, "height": 171,
+  "renderer": "vscode", "page": 1, "pages": 1,
   "expanded": [
-    {"page": 1, "cell": "logo", "ref": "@acme/brand/logo", "type": "image"},
-    {"page": 1, "cell": "users", "ref": "shapes/actor", "type": "cells", "ids": ["users"]},
-    {"page": 1, "cell": "api", "ref": "components/service", "type": "cells", "ids": ["api"]},
-    {"page": 1, "cell": "db", "ref": "simple-icons/postgresql", "type": "cells", "ids": ["db"]}
+    {"page": 1, "pageName": "決済 API", "cell": "logo", "ref": "@acme/brand/logo", "type": "image"},
+    {"page": 1, "pageName": "決済 API", "cell": "users", "ref": "shapes/actor", "type": "cells", "ids": ["users"]},
+    {"page": 1, "pageName": "決済 API", "cell": "api", "ref": "components/service", "type": "cells", "ids": ["api"]},
+    {"page": 1, "pageName": "決済 API", "cell": "db", "ref": "simple-icons/postgresql", "type": "cells", "ids": ["db"]}
   ],
   "warnings": []
 }
@@ -882,4 +884,4 @@ d-png-cli validate diagram.drawio.png                        # 保存された�
 | `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す。報告は全件まとめて出るので一度に直す |
 | `IMAGE_CHANGED` | ライブラリの画像が抽出後に変わった。元の画像を保つなら `expand` で元の PNG から実画像を取り出して戻す。最新の画像でよいなら `@…` を消す |
 | `ASSET_MISSING`・`RENDERER_NOT_FOUND` | 報告された資材・レンダラーを用意する。別の部品への置き換えや `--metadata-only` で完了扱いにしない |
-| VS Code でライブラリが表示されない | `library list` の `normalized` と `library sync --check` を確認し、図面を開き直す（[vscode.md](vscode.md#7-注意と未検証の事項)） |
+| VS Code でライブラリが表示されない | `library list --json` の `normalized` と `library sync --check` を確認し、図面を開き直す（[vscode.md](vscode.md#7-注意と未検証の事項)） |

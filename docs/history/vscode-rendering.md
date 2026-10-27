@@ -1,6 +1,6 @@
 # VS Code draw.io拡張とのPNG互換性（変更前の調査）
 
-以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](rendering.md) を参照。コマンド・オプション名は当時（v0.1.0）のもので（実行ファイル名は現在の `d-png-cli` で記す）、`--renderer desktop` は v0.2.0 の `desktop-app`、`--renderer chromium` の Desktop 互換処理は `desktop-compat` に当たる。
+以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](../rendering.md) を参照。コマンド・オプション名は当時（v0.1.0）のもので（実行ファイル名は現在の `d-png-cli` で記す）、`--renderer desktop` は v0.2.0 の `desktop-app`、`--renderer chromium` の Desktop 互換処理は `desktop-compat` に当たる。
 
 注: ここで調査した拡張のコミット `79500e6` はプレリリース相当で、draw.io 31.4.5を固定している。安定版1.9.0（タグ `v1.9.0`）はdraw.io 26.0.2を固定しており、現在のvscodeモードはこちらに合わせている。
 
@@ -60,7 +60,7 @@ SVGの書き出しと画面キャプチャでは、切り出し範囲、描画�
 
 VS Code拡張で保存するPNGを基準にするなら、CLIにも同じSVG → Canvasの書き出し経路を用意し、`scale`・`border` の解釈とdraw.io資材を揃える必要がある。寸法計算や縮小フィルターだけの変更では足りない。Desktopと拡張自体の出力が異なるため、両方の既存出力へ同時に完全一致する単一の結果は作れない。
 
-この調査ではCLIの描画実装は変更していない。既存のDesktop互換の仕様は [rendering.md](rendering.md) を参照。
+この調査ではCLIの描画実装は変更していない。既存のDesktop互換の仕様は [rendering.md](../rendering.md) を参照。
 
 ## ローカルの検証資料
 

@@ -19,9 +19,9 @@
 4. **ライブラリ名に npm と同じ名前空間を入れる。** スコープのない名前（`components`）はそのプロジェクト専用、スコープ付きの名前（`@acme/brand`）は取得元から取り込む共有ライブラリとする。スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定し、`library install` で取り込んで版を `lock.json` に固定する。同じ名前の部品集が社内・個人にあっても参照が衝突せず、版を上げるまで部品が変わらない。公開・認証を扱うレジストリーサーバーは作らず、Git などの既存の手段で配布する（[9.5](#95-スコープと取得元)）。
 5. **登録ファイルは VS Code 拡張が読める書式で書く。** 拡張 1.9.0 は `<mxlibrary>` の中身を実体参照を解かずに `JSON.parse` するため、CDATA や `&lt;` を使ったライブラリは draw.io で読めても拡張では読めない。CLI は XML の特殊文字を JSON 側のエスケープ（`\u003c` など）で書き、draw.io と拡張の両方で同じ内容になるようにする（[vscode.md](vscode.md#3-ライブラリファイルの書式の制約)）。
 6. **保存する XML には参照を残さない。** PNG の中は普通の draw.io XML なので、VS Code・draw.io で開くのに CLI もライブラリも要らない。
-7. **`read` と `expand` を逆向きの対にする。** `read` は登録済みの画像を指紋付きの `image=lib:` に縮めてエージェントのコンテキストを節約し、`expand` は参照を展開した単体の XML を出す。v0.1.0 の `--keep-images` のようなオプションは要らない。
+7. **`read` と `expand` を逆向きの対にする。** `read` は登録済みの画像を指紋付きの `image=lib:` に縮めてエージェントのコンテキストを節約し、`expand` は参照を展開した単体の XML を出す。画像を残すかどうかを切り替えるオプションは要らない。
 8. **既定のレンダラーを VS Code 互換にする。** `--renderer` と `--chromium-mode` を 1 つにまとめ、既定を `vscode` にした。draw.io Desktop が入っているかどうかで結果が変わらない。
-9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** ツール名と合わせて「d-png を読む・書く」と読め、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
+9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** `.drawio.png` を読む・書く動詞で、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
 10. **入出力・出力形式・エラーを全コマンドで揃える。** 入力は位置引数か標準入力、出力は `-o`、機械向けは `--json`、エラーはコード付きで全件をまとめて報告する（[2 章](#2-共通の規約)）。
 
 ## 2. 共通の規約
@@ -38,13 +38,13 @@ d-png-cli library <操作> [引数] [オプション]
 | 図面の入力 | 位置引数 `INPUT` を 1 つ取る。省略または `-` で標準入力。XML（`<mxfile>`・`<mxGraphModel>`）と `.drawio.png` のどちらも受け付け、拡張子ではなく内容（PNG シグネチャ）で判別する |
 | 出力先 | `-o`, `--output`。テキスト（XML・JSON・表）は省略時に標準出力。PNG は必須で、`-o -` を明示した場合だけ標準出力に書く |
 | 上書き | 出力先は入力と同じパスでもよい。同じディレクトリの一時ファイルに書き、同期後にアトミックに置き換える。失敗時は既存の出力を変更しない。出力先ディレクトリは作成しない |
-| 機械向け出力 | `--json` は全コマンド共通で、標準出力に JSON 値を 1 つだけ出す。主出力（XML）を標準出力に出すコマンドで `--json` を使う場合は `-o` を必須にする。標準出力には主出力か JSON のどちらか 1 つしか出さない |
+| 機械向け出力 | `--json` は `skill`・`licenses` を除く全コマンド共通で、標準出力に JSON 値を 1 つだけ出す。主出力（XML）を標準出力に出すコマンドで `--json` を使う場合は `-o` を必須にする。標準出力には主出力か JSON のどちらか 1 つしか出さない |
 | 診断 | 警告・エラーは標準エラー。`--json` 指定時は [2.3](#23-エラーと警告) の JSON |
 | 終了コード | `0` 成功、`1` 入力・参照・描画・保存のエラー、`2` 引数のエラー |
 | 参照文字列 | `[@<スコープ>/]<ライブラリ名>/<エントリー ID>`。XML の中でもコマンドの引数でも同じ書式（[4.2](#42-参照文字列)） |
 | 対話 | 確認の問い合わせはしない。端末でない出力には色や進捗表示を付けない |
 
-`--library NAME`・`--scope SCOPE` は検索・一覧の絞り込みだけに使う。XML の参照は常に完全な参照文字列で書くため、検索時の指定で参照先が変わることはない。`--scope` は名前空間（`acme`・`drawio` など）を指し、ライブラリを置く領域（2.2）を指すことはない。
+`--library NAME`・`--scope SCOPE` は検索・一覧の絞り込みだけに使う。XML の参照は常に完全な参照文字列で書くため、検索時の指定で参照先が変わることはない。`--scope` は名前空間（`acme`・`partner` など）を指し、ライブラリを置く領域（2.2）を指すことはない。
 
 ### 2.2 プロジェクト領域とユーザー領域
 
@@ -67,7 +67,7 @@ d-png-cli library <操作> [引数] [オプション]
 
 ユーザー領域にライブラリを置かないのは、同じ XML がどの環境でも同じ部品に展開されるようにするためである。個人のライブラリも、`file:` の取得元（[9.5](#95-スコープと取得元)）から各プロジェクトに取り込む。
 
-検索の高速化のための索引と、取得元から取得したファイルは、プロジェクト内には置かず、OS のキャッシュディレクトリに置く（索引はライブラリファイルのパス・サイズ・更新時刻・ハッシュを、取得したファイルは完全性をキーにする）。
+取得元から取得したファイルは、プロジェクト内には置かず、キャッシュ（`D_PNG_CACHE`、未設定なら OS のキャッシュディレクトリ）に完全性をキーにして置く。`library install --offline` はこのキャッシュだけを使う。
 
 ### 2.3 エラーと警告
 
@@ -99,6 +99,7 @@ error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
 | `REF_ID_CONFLICT` | 展開で作る ID が既存の ID と重なる、消える ID を参照している |
 | `IMAGE_CHANGED` | 指紋付きの画像参照に一致する画像が登録ライブラリにない |
 | `LIBRARY_EXISTS`・`LIBRARY_INVALID` | 同名のライブラリがある、ライブラリ・エントリーを解析できない |
+| `CONFIG_INVALID` | `config.toml` を解析できない・未知のキーや不正な値がある、`.vscode/settings.json` を JSONC として解析できない |
 | `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（登録・取り込み・取り込んだライブラリの参照）で、`.d-png/` が見つからない |
 | `SCOPE_UNKNOWN`・`SOURCE_FETCH` | スコープに取得元が設定されていない、取得元から取得できない |
 | `VERSION_NOT_FOUND`・`VERSION_EXISTS` | 範囲に合う版がない、`library pack` で同じ版が既にある |
@@ -110,6 +111,11 @@ error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
 | `OUTPUT_WRITE` | 出力を書けない |
 
 警告も同じ形式で `warnings` に入れる。警告だけなら終了コードは `0`。
+
+| 警告のコード | 内容 |
+| --- | --- |
+| `METADATA_ONLY` | `write --metadata-only` で、PNG の画素がこの図面から描画されていない |
+| `ENTRY_REMOVED` | `library pack` で前の版にあったエントリーがなくなったのに、メジャー版を上げていない |
 
 ### 2.4 設定ファイル
 
@@ -187,7 +193,7 @@ v0.1.0 の環境変数は `DIP_` で始まる。描画の 5 つは接頭辞を�
                 validate（write の描画前までを実行し、何も書かない）
 ```
 
-- `read`・`write` は、ツール名の対象である `.drawio.png`（d-png）を読む・書く動詞とした。`d-png-cli read` は PNG を読んで XML を標準出力へ、`d-png-cli write` は標準入力の XML から PNG を書く。
+- `read`・`write` は、`.drawio.png` を読む・書く動詞とした。`d-png-cli read` は PNG を読んで XML を標準出力へ、`d-png-cli write` は標準入力の XML から PNG を書く。
 - `write` は名前に描画を含まないが、既定で XML を検証・描画してから書く。描画には Chrome / Chromium（`desktop-app` では draw.io Desktop）が必要で、数秒かかる。ヘルプと `skill` の手順書ではこの点を明記する。
 - `read` と `expand` は逆向きの処理で、どちらも XML と PNG の両方を受け付ける。
 
@@ -338,9 +344,9 @@ v0.1.0 の `--renderer` と `--chromium-mode` を 1 つにまとめ、無効な�
   "width": 512, "height": 330,
   "renderer": "vscode", "page": 1, "pages": 1,
   "expanded": [
-    {"page": 1, "cell": "orders", "ref": "shapes/cylinder", "type": "cells", "ids": ["orders"]},
-    {"page": 1, "cell": "branch", "ref": "components/branch", "type": "cells", "ids": ["branch-1", "branch-2", "branch-3"]},
-    {"page": 1, "cell": "logo", "ref": "@acme/brand/logo", "type": "image"}
+    {"page": 1, "pageName": "構成図", "cell": "orders", "ref": "shapes/cylinder", "type": "cells", "ids": ["orders"]},
+    {"page": 1, "pageName": "構成図", "cell": "branch", "ref": "components/branch", "type": "cells", "ids": ["branch-1", "branch-2", "branch-3"]},
+    {"page": 1, "pageName": "構成図", "cell": "logo", "ref": "@acme/brand/logo", "type": "image"}
   ],
   "warnings": []
 }
@@ -374,7 +380,7 @@ d-png-cli read [INPUT] [-o OUTPUT] [--raw] [--json]
 - `--json` には `-o` が必要。
 
 ```json
-{"output":"edit.xml","pages":1,"compacted":[{"page":1,"cell":"db","ref":"simple-icons/postgresql@224afa6bb926","replacedChars":167}],"keptImages":[]}
+{"output":"edit.xml","pages":1,"compacted":[{"page":1,"pageName":"既存図面","cell":"db","ref":"simple-icons/postgresql@224afa6bb926","replacedChars":167}],"keptImages":[]}
 ```
 
 ## 8. `validate`
@@ -489,7 +495,7 @@ d-png-cli validate [INPUT] [--json]
 - 取得元への公開（ファイルの配置・`git push`・Web サーバーへのアップロード）は、それぞれの手段で行う。CLI は公開・認証・権限の管理を扱わない。
 - 取得元に接続するのは `library install`・`library update` だけである。`write` などの他のコマンドはネットワークに接続しない。
 - トークンは、`https:` 以外の URL と、設定したホストと別のホストへのリダイレクト先には送らない。
-- スコープ `drawio` には取得元を設定できない。参照・取り込みで使ったスコープに取得元がなければ `SCOPE_UNKNOWN`。
+- 参照・取り込みで使ったスコープに取得元がなければ `SCOPE_UNKNOWN`。
 
 ### 9.6 依存関係とロックファイル
 
@@ -584,7 +590,7 @@ d-png-cli library show REF [--json]
 ```
 
 - `cells` は展開後の ID の付き方（`<ID>` はプレースホルダーの ID）と各セルの種類・ラベル・親を示す。
-- `style` は最上位のセルが 1 つのときだけ出す（v0.1.0 の `library style` の代わり）。最上位のセルがラッパーで包まれていれば、その独自データを `data`（例 `{"owner":"library","note":"keep"}`）に出す。
+- `style` は最上位のセルが 1 つのときだけ出す（開発版の `library style` の代わり）。最上位のセルがラッパーで包まれていれば、その独自データを `data`（例 `{"owner":"library","note":"keep"}`）に出す。
 - 種類 `image` には `"image":{"fingerprint":"224afa6bb926","mediaType":"image/svg+xml","bytes":109}` を付ける（`bytes` はデコードした画像の大きさ）。画像データは出さない。
 - 取り込んだライブラリのエントリーには `version` を付ける。
 - `example` は種類に合わせたプレースホルダーの例（`image`・`shape` は幅・高さ付き、`edge` は `source`・`target` 付き）。
@@ -617,7 +623,7 @@ d-png-cli library add SOURCE... [--name NAME] [--title TEXT]
 - 同名のライブラリがあれば `LIBRARY_EXISTS`。`--replace` で全体を置き換え、`--merge` で同じ ID のエントリーを置き換えて新しいエントリーを末尾に追加する。
 - エントリーを検査し、`xml` が `<mxGraphModel>` でない、`data` が画像の URI でないなど解析できないものがあれば `LIBRARY_INVALID` で何も書かない。`--skip-invalid` で除外して登録する。
 - URL を SOURCE に取らない。ネットワークからは取得しない。
-- 出力: 名前・ファイル・エントリー数・各エントリーの参照文字列と種類。`--json` では配列で出す。最後に `library vscode --write` を案内する。
+- 出力: 名前・ファイル・エントリー数・各エントリーの参照文字列と種類。`--json` では同じ内容を 1 つのオブジェクト（`entries` に各エントリー）で出す。最後に `library vscode --write` を案内する。
 
 ### 9.12 `library install`
 
@@ -730,12 +736,18 @@ d-png-cli init [DIR] [--json]
 | `extract`（画像を残す） | `expand`（画像を残す）。登録画像を `image=lib:` に縮めて取り出すのは `read` |
 | `validate`（構造のみ） | `validate`（参照・ID・接続先も検査） |
 | `insert` | 廃止。XML の `libref` で書く |
-| `library style LIB INDEX` | `library show REF` の `style` |
 | `library search` の番号 | 参照文字列 |
-| `DIP_LIBRARY_PATH`・`--library-file`・`--no-builtin` | 廃止。プロジェクト専用は `library add`、共有するものはスコープを付けて `library install` で取り込む。検索は `--library`・`--scope` で絞る |
-| 組み込みライブラリ（`drawio/aws4-compute` など） | 廃止。使う図形を draw.io でライブラリにして `library add` で登録する |
+| `DIP_LIBRARY_PATH`・`--library-file` | 廃止。プロジェクト専用は `library add`、共有するものはスコープを付けて `library install` で取り込む。検索は `--library`・`--scope` で絞る |
 | `DIP_CHROMIUM_MODE` | `D_PNG_RENDERER` |
 | `skill --full` | `skill` |
+
+v0.1.0 の後に開発版（`main` ブランチ）に入り、リリースしなかったものは次のとおり変わる。
+
+| 開発版 | v0.2.0 |
+| --- | --- |
+| 名前 `drawio-png-cli`、環境変数 `DRAWIO_PNG_*` | `d-png-cli`、`D_PNG_*` |
+| 組み込みライブラリ（`drawio/aws4-compute` など）・`--no-builtin` | 廃止。使う図形を draw.io でライブラリにして `library add` で登録する |
+| `library style LIB INDEX` | `library show REF` の `style` |
 
 計画中だった PRD 4.2 の `drawioPng*` 属性・`image=drawio-png`・画像ハッシュによる参照は、`libref`・`image=lib:` に置き換える。登録により ID が安定するため、タイトル・番号・ハッシュを組み合わせた指定は不要になる。
 
@@ -757,4 +769,6 @@ d-png-cli init [DIR] [--json]
 - draw.io 26.0.2 の `app.min.js` と 31.4.6 のソースで、`data` エントリーの画像の変換（`convertDataUri`）とライブラリの保存処理を確認した。
 - B〜E・G の「CLI がない場合の XML」は、0.1.0 系の CLI で `validate` を通し、Chrome の vscode モード（draw.io 26.0.2 の Web 資材）で描画した（`expected.drawio.png`）。利用者ライブラリの部品は 0.1.0 系の `insert` でも展開し、ID・位置・サイズ・画像の値が一致することを確かめた。A・F・H は v0.2.0 の CLI の `write`（vscode、同梱資材のみ）で描画した。全ケースの展開結果は `tests/acceptance.rs` で検査している。
 - 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.d-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
-- テキストの出力例（`library search`・`add`・`install`・`pack`・`update`、エラー表示）は実行結果と照合した。`--json` の例（9.7〜9.9 など）は仕様から作ったもので、キーの順序・数値の書き方・一部の項目が実行結果と異なる。VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。
+- テキストの出力例と `--json` の例は、例のプロジェクトで実行した結果と照合した。実際の `--json` はキーをアルファベット順に並べ、幅・高さを `48.0` の形で出す。
+- 次の点は実装がこの仕様に追いついていない: 9.7 の `range` と取り込まれていない依存の `"installed":false`、9.8・9.9 の取り込んだライブラリの `version`、9.9 で種類 `image` の `style` から画像データを除くこと（今は `style` に画像の値がそのまま入る）。
+- VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。

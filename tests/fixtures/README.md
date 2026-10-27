@@ -25,7 +25,7 @@ with its pinned draw.io 26.0.2 assets (`96a916a337d13fc8bf622c8a67d422bd284eabe5
 in Google Chrome 154.0.8037.97 on Linux ARM64 with the editor at 100% zoom. A test bridge supplied the VS Code message API; VS Code itself was not
 running. DPR 1 and 2 produced identical pixels. Both fixtures retain the PNG's
 embedded XML, but tests compare decoded RGBA only. See the
-[comparison record](../../docs/vscode-rendering.md) for details.
+[comparison record](../../docs/history/vscode-rendering.md) for details.
 
 ## Rendering and resizing reference images
 

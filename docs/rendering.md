@@ -16,7 +16,7 @@ Chromiumの3方式とも指定ページ（既定は先頭）を描画し、全�
 
 ## raw・desktop-compatの画面キャプチャ
 
-draw.ioの `render()` に `format:png, scale:1, border:0, theme:light` を渡し、先頭ページと資材の読み込みを待つ。XMLの `scale`・`border` はこの2方式では使わない。
+draw.ioの `render()` に `format:png, scale:1, border:0, theme:light` と描画するページを渡し、そのページと資材の読み込みを待つ。XMLの `scale`・`border` はこの2方式では使わない。
 
 `raw` は `ceil(bounds.size + bounds.offset)` の寸法でDPR 1のPNGを取得する。RustでPNGを検証し、画像データを再エンコードせずXMLを埋め込む。
 
@@ -30,7 +30,7 @@ rawの取得画像はRGBAで64 MiB（16,777,216画素）以下。desktop-compat�
 
 基準はVS Code拡張 `hediet.vscode-drawio` の安定版1.9.0（タグ `v1.9.0`、`132921f1c189d1b6239e2b0246ebd8190ca23ba5`、2025-02-19）。同梱するvscode用Web資材は、このタグが固定するdraw.ioサブモジュール `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）である。raw・desktop-compat用の資材（31.4.5）とは別に同梱する。
 
-拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、d-png-cliの `vscode` レンダラーはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](vscode-rendering.md) に残している。
+拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、d-png-cliの `vscode` レンダラーはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](history/vscode-rendering.md) に残している。
 
 拡張v1.9.0のWebview HTMLとメッセージ送受信をGoogle Chrome 154.0.8037.97 / Linux ARM64上で再現し、エディターの表示倍率100%で保存したPNGを基準にする。VS Code本体での実機検証ではない。拡張側はlightテーマ、`simpleLabels=false`、追加プラグイン・カスタムスタイルなし。
 
@@ -45,9 +45,9 @@ Desktop互換の方式選定時の実測詳細はコミット `24dd930` の `doc
 
 ## vscodeの描画と保存
 
-1. 参照の展開を含めて全ページを検証・展開し、描画するページ（既定は先頭）の `mxGraphModel` を描画する。ページ間のセルID重複が干渉しないよう、描画用には先頭ページを独立したXML文書へ移す。
+1. 参照の展開を含めて全ページを検証・展開し、描画するページ（既定は先頭）の `mxGraphModel` を描画する。ページ間のセルID重複が干渉しないよう、描画するページを独立したXML文書へ移す。
 2. draw.ioの `Editor.setGraphXml()` で背景・図形・ラベル等を読み込む。フォントの読み込み完了を待って再描画する。
-   ラベルの `%page%`・`%pagenumber%`・`%pagecount%` は、拡張の `EditorUi` と同じくページ名・1・全ページ数に置換する。`mxfile` で囲まれていない単独の `mxGraphModel` のページ名は、拡張が英語UIで作るページと同じ `Page-1` とする。draw.io 26.0.2 は `%pagecount+1%` などの計算式を解釈しないため、そのまま表示する。`raw`・`desktop-compat` は上流 `export3.html` の処理に従い、Desktopと同様に `%pagecount%` を置換しない。
+   ラベルの `%page%`・`%pagenumber%`・`%pagecount%` は、拡張の `EditorUi` と同じくページ名・ページ番号（1から）・全ページ数に置換する。`mxfile` で囲まれていない単独の `mxGraphModel` のページ名は、拡張が英語UIで作るページと同じ `Page-1` とする。draw.io 26.0.2 は `%pagecount+1%` などの計算式を解釈しないため、そのまま表示する。`raw`・`desktop-compat` は上流 `export3.html` の処理に従い、Desktopと同様に `%pagecount%` を置換しない。
 3. `mxfile` の `scale`（既定1）・`border`（既定0）を `exportToCanvas()` に渡す。倍率と余白の適用順もdraw.ioに従う。
 4. SVG内の画像・フォントを埋め込み、Canvasの `toDataURL('image/png')` からPNGを取得する。
 5. RustでPNGを検証し、全ページのXMLを埋め込んでアトミックに保存する。XMLはCLIの正規化結果を使い、拡張が再保存するXML文字列との完全一致は求めない。

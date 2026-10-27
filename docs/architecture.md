@@ -59,7 +59,7 @@ adapters ──▶ app ──▶ domain
 | `diagram` | 図面 XML の解析・圧縮ページの展開・構造の検査 |
 | `drawio_png` | `.drawio.png` の PNG チャンクの検査、XML の取り出し・埋め込み |
 | `reference` | `LibraryName`・`EntryId`・参照文字列・指紋付きの画像参照 |
-| `library` | ライブラリ・エントリー、`<mxlibrary>` の読み込みと正規化した書式（仕様 9.3）、エントリー ID の導出 |
+| `library` | ライブラリ・エントリー、エントリーの種類（仕様 9.4）、エントリーの説明（`library show`）、ID の重複の回避 |
 | `expand` | `libref`・`image=lib:` の展開 |
 | `compact` | `read` の画像の参照への置き換え |
 | `check` | 展開後の検査（ID・親子・接続先・残った参照） |
