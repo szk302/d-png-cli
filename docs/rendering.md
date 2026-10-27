@@ -1,36 +1,36 @@
-# Chromiumの出力モードと描画互換性
+# レンダラーと描画互換性
 
-`drawio-png-cli embed --renderer chromium --chromium-mode raw|desktop|vscode` で出力方式を選ぶ。CLI指定がなければ `DRAWIO_PNG_CHROMIUM_MODE` を読み、両方未指定なら `vscode`。モードを指定しても実行エンジンの選択は変わらない。`--renderer auto` はDesktopを優先し、Desktopが選ばれた場合の `--chromium-mode` 指定はエラーにする。
+`drawio-png-cli write --renderer vscode|desktop-compat|raw|desktop-app` で描画方式を選ぶ。CLI指定がなければ `DRAWIO_PNG_RENDERER`、プロジェクトの `config.toml`、ユーザーの `config.toml` の `[render] renderer` の順に読み、いずれも未指定なら `vscode`。指定したレンダラーが見つからない・描画に失敗した場合に、別の方式へは切り替えない。`vscode`・`desktop-compat`・`raw` はChromiumで描画し、`desktop-app` はDesktopアプリのCLIを呼ぶ。
 
-`DRAWIO_PNG_CHROMIUM_MODE` はChromiumが選ばれたときだけ参照し、CLIの明示モードを優先する。値は小文字の `raw`・`desktop`・`vscode` の完全一致とし、空文字・未知値・非Unicode値は描画前に拒否する。Desktop選択時、no-render、XML抽出・検証では参照しない。
+`DRAWIO_PNG_RENDERER` と `renderer` の値は小文字の `vscode`・`desktop-compat`・`raw`・`desktop-app` の完全一致とし、空文字・未知値・非Unicode値は描画前に拒否する。描画しない処理（`read`・`expand`・`validate`・`write --metadata-only`）では参照しない。v0.1.0 の `--renderer auto|desktop|chromium`・`--chromium-mode`・`DRAWIO_PNG_CHROMIUM_MODE` はこの指定にまとめた（Chromiumの `raw`→`raw`、`desktop`→`desktop-compat`、`vscode`→`vscode`、Desktopアプリ→`desktop-app`）。
 
-| モード | 描画・PNG取得 | 100×40矩形の検証寸法 |
+| レンダラー | 描画・PNG取得 | 100×40矩形の検証寸法 |
 | --- | --- | --- |
 | `raw` | draw.ioエクスポーターをDPR 1で描画し、画面キャプチャをそのまま使用 | 103×43 |
-| `desktop` | DPR 2の画面キャプチャをHamming1で半分に縮小 | 104×44 |
+| `desktop-compat` | DPR 2の画面キャプチャをHamming1で半分に縮小 | 104×44 |
 | `vscode`（既定） | VS Code拡張1.9.0と同じdraw.io 26.0.2の `Editor.exportToCanvas()` でSVGを画像化しCanvasからPNGを取得 | 101×41 |
 
-全モードで先頭ページを描画し、全ページの編集用XMLを埋め込む。`raw` の「そのまま」はPNGの画素を縮小・再加工しないという意味で、XMLメタデータは追加する。
+Chromiumの3方式とも指定ページ（既定は先頭）を描画し、全ページの編集用XMLを埋め込む。`raw` の「そのまま」はPNGの画素を縮小・再加工しないという意味で、XMLメタデータは追加する。
 
-`--renderer desktop` はDesktopアプリのCLIを呼ぶ。一方、`--renderer chromium --chromium-mode desktop` はDesktopアプリなしで互換処理を行う。
+`--renderer desktop-app` はDesktopアプリのCLIを呼ぶ。一方、`--renderer desktop-compat` はDesktopアプリなしで互換処理を行う。
 
-## raw・desktopの画面キャプチャ
+## raw・desktop-compatの画面キャプチャ
 
-draw.ioの `render()` に `format:png, scale:1, border:0, theme:light` を渡し、先頭ページと資材の読み込みを待つ。XMLの `scale`・`border` はこの2モードでは使わない。
+draw.ioの `render()` に `format:png, scale:1, border:0, theme:light` を渡し、先頭ページと資材の読み込みを待つ。XMLの `scale`・`border` はこの2方式では使わない。
 
 `raw` は `ceil(bounds.size + bounds.offset)` の寸法でDPR 1のPNGを取得する。RustでPNGを検証し、画像データを再エンコードせずXMLを埋め込む。
 
-`desktop` は上記寸法に縦横各1pxを追加し、DPR 2で取得してHamming1で半分に縮小する。Desktop 31.4.5 / Electron 44.2.0 / Linux ARM64 / Xvfbの1倍表示を参照した処理であり、文字なし矩形のRGBA一致を固定fixtureで確認する。文字・フォント・ブラウザー・Desktop側の表示倍率によって差は残る。
+`desktop-compat` は上記寸法に縦横各1pxを追加し、DPR 2で取得してHamming1で半分に縮小する。Desktop 31.4.5 / Electron 44.2.0 / Linux ARM64 / Xvfbの1倍表示を参照した処理であり、文字なし矩形のRGBA一致を固定fixtureで確認する。文字・フォント・ブラウザー・Desktop側の表示倍率によって差は残る。
 
-Hamming1処理はChromiumのフィルター係数・固定小数点丸めに合わせたRust移植で、半透明と画像端も独立したElectron生成fixtureで検証する。このコードはBSD-3-Clauseのため、モード選択にかかわらず配布物にはライセンス表示を保持する。
+Hamming1処理はChromiumのフィルター係数・固定小数点丸めに合わせたRust移植で、半透明と画像端も独立したElectron生成fixtureで検証する。このコードはBSD-3-Clauseのため、レンダラーの選択にかかわらず配布物にはライセンス表示を保持する。
 
-rawの取得画像はRGBAで64 MiB（16,777,216画素）以下。desktopは2倍取得にも64 MiB制限を適用するため、最終画像は4,194,304画素以下。上限は取得前に検査し、desktopの縮小・PNG再エンコードも描画期限内で行う。
+rawの取得画像はRGBAで64 MiB（16,777,216画素）以下。desktop-compatは2倍取得にも64 MiB制限を適用するため、最終画像は4,194,304画素以下。上限は取得前に検査し、desktop-compatの縮小・PNG再エンコードも描画期限内で行う。
 
 ## vscodeの比較対象
 
-基準はVS Code拡張 `hediet.vscode-drawio` の安定版1.9.0（タグ `v1.9.0`、`132921f1c189d1b6239e2b0246ebd8190ca23ba5`、2025-02-19）。同梱するvscode用Web資材は、このタグが固定するdraw.ioサブモジュール `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）である。raw・desktop用の資材（31.4.5）とは別に同梱する。
+基準はVS Code拡張 `hediet.vscode-drawio` の安定版1.9.0（タグ `v1.9.0`、`132921f1c189d1b6239e2b0246ebd8190ca23ba5`、2025-02-19）。同梱するvscode用Web資材は、このタグが固定するdraw.ioサブモジュール `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）である。raw・desktop-compat用の資材（31.4.5）とは別に同梱する。
 
-拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、drawio-png-cliのvscodeモードはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](vscode-rendering.md) に残している。
+拡張の2026-06以降のプレリリース（`v1.9.2606…` 以降のタグ）は31.x系のdraw.ioを固定しているが、`package.json` の版数は1.9.0のままである。draw.io 31.x では線幅の描画位置に合わせて出力範囲を広げる処理（jgraph/drawio#4938）が加わり、100×40の矩形は102×42になる。安定版1.9.0では101×41で、drawio-png-cliの `vscode` レンダラーはこちらに合わせる。以前の基準（31.4.5）での比較は [調査記録](vscode-rendering.md) に残している。
 
 拡張v1.9.0のWebview HTMLとメッセージ送受信をGoogle Chrome 154.0.8037.97 / Linux ARM64上で再現し、エディターの表示倍率100%で保存したPNGを基準にする。VS Code本体での実機検証ではない。拡張側はlightテーマ、`simpleLabels=false`、追加プラグイン・カスタムスタイルなし。
 
@@ -45,9 +45,9 @@ Desktop互換の方式選定時の実測詳細はコミット `24dd930` の `doc
 
 ## vscodeの描画と保存
 
-1. 全ページを検証・展開し、先頭ページの `mxGraphModel` を描画する。ページ間のセルID重複が干渉しないよう、描画用には先頭ページを独立したXML文書へ移す。
+1. 参照の展開を含めて全ページを検証・展開し、描画するページ（既定は先頭）の `mxGraphModel` を描画する。ページ間のセルID重複が干渉しないよう、描画用には先頭ページを独立したXML文書へ移す。
 2. draw.ioの `Editor.setGraphXml()` で背景・図形・ラベル等を読み込む。フォントの読み込み完了を待って再描画する。
-   ラベルの `%page%`・`%pagenumber%`・`%pagecount%` は、拡張の `EditorUi` と同じくページ名・1・全ページ数に置換する。`mxfile` で囲まれていない単独の `mxGraphModel` のページ名は、拡張が英語UIで作るページと同じ `Page-1` とする。draw.io 26.0.2 は `%pagecount+1%` などの計算式を解釈しないため、そのまま表示する。`raw`・`desktop` は上流 `export3.html` の処理に従い、Desktopと同様に `%pagecount%` を置換しない。
+   ラベルの `%page%`・`%pagenumber%`・`%pagecount%` は、拡張の `EditorUi` と同じくページ名・1・全ページ数に置換する。`mxfile` で囲まれていない単独の `mxGraphModel` のページ名は、拡張が英語UIで作るページと同じ `Page-1` とする。draw.io 26.0.2 は `%pagecount+1%` などの計算式を解釈しないため、そのまま表示する。`raw`・`desktop-compat` は上流 `export3.html` の処理に従い、Desktopと同様に `%pagecount%` を置換しない。
 3. `mxfile` の `scale`（既定1）・`border`（既定0）を `exportToCanvas()` に渡す。倍率と余白の適用順もdraw.ioに従う。
 4. SVG内の画像・フォントを埋め込み、Canvasの `toDataURL('image/png')` からPNGを取得する。
 5. RustでPNGを検証し、全ページのXMLを埋め込んでアトミックに保存する。XMLはCLIの正規化結果を使い、拡張が再保存するXML文字列との完全一致は求めない。
@@ -62,9 +62,9 @@ VS Code側の大画像に対する自動縮小は適用しない。CLIは上限�
 
 ## 外部資材
 
-外部画像・Webフォントのネットワーク取得は既定で禁止する。`vscode` モードでは `--allow-network` 使用時も、Canvasへ埋め込むには配信元のCORS許可が必要。draw.ioの公開画像プロキシへは転送しない。取得・デコードに失敗した資材を検出した場合はエラーにする。
+外部画像・Webフォントのネットワーク取得は既定で禁止する。`vscode` では `--allow-network` 使用時も、Canvasへ埋め込むには配信元のCORS許可が必要。draw.ioの公開画像プロキシへは転送しない。取得・デコードに失敗した資材を検出した場合はエラーにする。
 
-同梱資材で扱えない図形等には `DRAWIO_PNG_DRAWIO_WEB_PATH` を利用できる。vscodeモードでは、拡張と同じく指定先の `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込み、`shapes/*.js` は取得しない。draw.io 26.0.2には `shapes/` がなく、AWS等の図形はこれらのファイルから読み込む。図形・アイコン（AWS図形の `resIcon`・`grIcon`、ステンシルの `include-shape` 等）が見つからない場合、上流は空白のまま描画を続けるが、drawio-png-cliはエラーにして既存出力を保持する。ただし、draw.io 26.0.2のサイドバー自身が書き出すのにどの版にも登録されていない図形名（`rect`・`text`・`mxgraph.android.rect` など8種類）は、セルの図形名に指定された場合に限り、上流と同じく既定の四角形として描画する。同じ名前をアイコン（`resIcon`・`grIcon` 等）に指定した場合は、上流が何も描かないため、従来どおりエラーにする。指定先の `export3.html` が、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop` では `render()`・`LoadingComplete` を提供する必要がある。確認済みの資材は、vscodeが `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）、raw・desktopが `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）。別コミットの資材は互換性の検証対象外。
+同梱資材で扱えない図形等には `DRAWIO_PNG_DRAWIO_WEB_PATH` を利用できる。`vscode` では、拡張と同じく指定先の `js/shapes-14-6-5.min.js`・`js/stencils.min.js` があれば描画前に読み込み、`shapes/*.js` は取得しない。draw.io 26.0.2には `shapes/` がなく、AWS等の図形はこれらのファイルから読み込む。図形・アイコン（AWS図形の `resIcon`・`grIcon`、ステンシルの `include-shape` 等）が見つからない場合、上流は空白のまま描画を続けるが、drawio-png-cliはエラーにして既存出力を保持する。ただし、draw.io 26.0.2のサイドバー自身が書き出すのにどの版にも登録されていない図形名（`rect`・`text`・`mxgraph.android.rect` など8種類）は、セルの図形名に指定された場合に限り、上流と同じく既定の四角形として描画する。同じ名前をアイコン（`resIcon`・`grIcon` 等）に指定した場合は、上流が何も描かないため、従来どおりエラーにする。指定先の `export3.html` が、`vscode` では `Graph`・`Editor`・`Editor.exportToCanvas()`、`raw`・`desktop-compat` では `render()`・`LoadingComplete` を提供する必要がある。確認済みの資材は、vscodeが `96a916a337d13fc8bf622c8a67d422bd284eabe5`（26.0.2）、raw・desktop-compatが `f3abfe0f082c18f7b4fee8a34c2d07b1987687fd`（31.4.5）。別コミットの資材は互換性の検証対象外。
 
 ## 回帰テスト
 

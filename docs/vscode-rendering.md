@@ -1,6 +1,6 @@
 # VS Code draw.io拡張とのPNG互換性（変更前の調査）
 
-以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](rendering.md) を参照。
+以下はSVG→Canvasへの変更前（コミット `24dd930`）の記録。現在の方式は [rendering.md](rendering.md) を参照。コマンド・オプション名は当時（v0.1.0）のもので、`--renderer desktop` は v0.2.0 の `desktop-app`、`--renderer chromium` の Desktop 互換処理は `desktop-compat` に当たる。
 
 注: ここで調査した拡張のコミット `79500e6` はプレリリース相当で、draw.io 31.4.5を固定している。安定版1.9.0（タグ `v1.9.0`）はdraw.io 26.0.2を固定しており、現在のvscodeモードはこちらに合わせている。
 
