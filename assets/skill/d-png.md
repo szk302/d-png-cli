@@ -5,12 +5,21 @@
 既存の `.drawio.png` からは編集用の XML を取り出せる（read）。
 PNG を Python などで直接いじると、圧縮形式の違いや画像との同期を取り違えやすい。必ず d-png-cli を経由する。
 
-描画は既定で **VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる（`vscode` レンダラー。Chrome / Chromium を使う）。
-ユーザーが求めない限り `--renderer` は変えない。
+描画方式（レンダラー）は、環境変数 `D_PNG_RENDERER`、プロジェクトの `.d-png/config.toml`、ユーザーの `config.toml` の
+`[render] renderer` の順に決まり、どれもなければ **VS Code の draw.io 拡張（1.9.0）で保存したのと同じ見た目**になる `vscode`。
+ユーザーが求めない限り `--renderer` は付けない。どの方式で描いたかは `write --json` の `renderer` で分かる。
 
 ## 準備
 
-描画には Chrome（無ければ Chromium）が必要。見つからない場合は、導入または `D_PNG_CHROME_PATH` の設定をユーザーに案内する。
+描画方式ごとに、次のものが必要になる。
+
+| 方式 | 描画に必要なもの | AWS などの図形（`shape=mxgraph.*`） |
+| --- | --- | --- |
+| `vscode`（既定） | Chrome / Chromium | draw.io 26.0.2 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`） |
+| `raw`・`desktop-compat` | Chrome / Chromium | draw.io 31.4.5 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`） |
+| `desktop-app` | draw.io Desktop 27.0.2 以降（画面のない Linux では Xvfb なども） | 追加の資材は不要（Desktop の資材で描く） |
+
+Chrome や Desktop が見つからない場合は、導入または `D_PNG_CHROME_PATH`・`D_PNG_DRAWIO_PATH` の設定をユーザーに案内する。
 この手順は `d-png-cli --version` の d-png-cli に対応している。
 
 ## 基本の流れ
@@ -97,7 +106,7 @@ d-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べ�
   最上位が複数（`set`）なら全セルが `<ID>-1`… になり、`<ID>` 自体は残らない。中のセルへ接続するときは
   `library show <参照>` の `cells` で ID を確かめる。
 - 保存される XML には参照は残らず、普通の draw.io XML になる。
-- AWS などの `mxgraph.*` の図形の描画には、draw.io 26.0.2 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要。
+- AWS などの `mxgraph.*` の図形の描画には、Chrome で描く方式では draw.io の Web 資材が要る（[準備](#準備)の表）。
   `ASSET_MISSING` になったらユーザーに用意を依頼する。
 - 必要な部品がライブラリにない場合は、ユーザーにライブラリの登録を依頼する（ライブラリのファイルや画像を渡されたら `d-png-cli library add <ファイル>` で登録できる）。勝手に別の部品で代用しない。
 
@@ -112,7 +121,7 @@ d-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べ�
 | `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す（全件まとめて報告される） |
 | `IMAGE_CHANGED` | read の後でライブラリの画像が変わった。元の画像が必要ならユーザーに相談する |
 | `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 名前空間付きのライブラリが取り込まれていない・変わっている（clone 直後に多い）。`d-png-cli library install` を実行する |
-| `RENDERER_NOT_FOUND`・`ASSET_MISSING` | Chrome や描画資材の用意をユーザーに依頼する。別の部品に置き換えない |
+| `RENDERER_NOT_FOUND`・`ASSET_MISSING` | [準備](#準備)の表で、使っている方式に足りないもの（Chrome・Desktop・Web 資材）を確かめ、用意をユーザーに依頼する。`--renderer` を変えたり、別の部品に置き換えたりしない |
 
 ## 完了の確認
 
