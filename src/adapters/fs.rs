@@ -25,9 +25,13 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let mut file = tempfile::Builder::new()
-        .prefix(".d-png-cli-")
-        .suffix(".tmp")
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".d-png-cli-").suffix(".tmp");
+    // A new file gets the mode any program would give it (0666 less the
+    // umask), not the 0600 of a temporary file.
+    #[cfg(unix)]
+    builder.permissions(std::os::unix::fs::PermissionsExt::from_mode(0o666));
+    let mut file = builder
         .tempfile_in(parent)
         .with_context(|| format!("cannot stage output in {}", parent.display()))?;
     file.write_all(bytes)?;
