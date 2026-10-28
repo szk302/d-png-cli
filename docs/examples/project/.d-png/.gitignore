@@ -1,0 +1,2 @@
+# library install で取り込んだライブラリ（lock.json から復元する）
+/libraries/@*/

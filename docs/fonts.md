@@ -1,21 +1,23 @@
 # フォント指定の仕様
 
-DesktopとChromiumに同じセル単位のフォント候補を渡せるようにする。既存の図面が指定しているフォントを優先し、特定の日本語フォントを一律には強制しない。
+どのレンダラー（Chromiumの `vscode`・`desktop-compat`・`raw`、Desktopアプリの `desktop-app`）にも同じセル単位のフォント候補を渡せるようにする。既存の図面が指定しているフォントを優先し、特定の日本語フォントを一律には強制しない。
 
 ## CLI
 
 | オプション | 意味 |
 | --- | --- |
-| `embed --default-font FAMILY` | セルの `fontFamily` がない、空、または `none` のときのフォント |
-| `embed --fallback-font FAMILY` | 代替候補。繰り返し指定でき、指定順に優先。`--default-font` が必須 |
+| `write --default-font FAMILY` | セルの `fontFamily` がない、空、または `none` のときのフォント |
+| `write --fallback-font FAMILY` | 代替候補。繰り返し指定でき、指定順に優先。`--default-font` が必須 |
 
-省略時は従来の動作を保持する。フォント指定は `--no-render` と併用でき、`--no-validate` とは併用できない。CLIで不正な指定を受けた場合は終了コード2とし、描画・保存を開始しない。
+`expand` も同じオプションを受け付け、`write` が埋め込むものと同じ XML を出す。`config.toml` の `[render]` の `default-font`・`fallback-fonts` でも指定でき、優先順位はコマンドのオプション → プロジェクトの `config.toml` → ユーザーの `config.toml`。
+
+省略時は従来の動作を保持する。フォント指定は `--metadata-only` と併用できる。CLIで不正な指定を受けた場合は終了コード2とし、描画・保存を開始しない。
 
 1オプションにつき1ファミリー名を受け付ける。前後の空白を取り除き、空の名前、制御文字、`;`・`,`・`=` を含む名前は拒否する。シェルの引用符は空白を含む引数をまとめるためのもので、CSSのリストを直接入力する方式ではない。
 
 ## 適用と保存
 
-1. 通常のXML検証と圧縮ページの展開を行う。
+1. 通常のXML検証、圧縮ページの展開、参照（`dpng-ref`・`image=lib:`）の展開を行う。
 2. 全ページの図形・接続線の `mxCell` に適用する。`object` などのユーザーオブジェクト内のセルも対象とする。基盤セル、ラベル文字列、未知の拡張要素には適用しない。
 3. 既存の `fontFamily` があればその候補順を保持する。なければ `--default-font` を第一候補にする。
 4. 代替候補を追加する。既存リスト内の `serif`、`sans-serif`、`monospace` などの一般名より前に挿入する。これらの一般名は環境により実フォントが変わるため、統一したい場合は具体的なファミリー名を指定する。
@@ -35,7 +37,7 @@ HTMLラベル内の `<font face>`、`style="font-family: ..."`、`font` 短縮�
 
 ## 保証する範囲
 
-両レンダラーに渡すセルのフォント候補と順序を同一にする。フォントの配布・取得・インストール・存在確認はこの機能では行わない。環境変数やOSのフォント設定を変更しない。
+すべてのレンダラーに渡すセルのフォント候補と順序を同一にする。フォントの配布・取得・インストール・存在確認はこの機能では行わない。環境変数やOSのフォント設定を変更しない。
 
 実際のフォント選択を揃えるには、両環境に同じファミリー・同じバージョンのフォントを用意する。候補が未インストール、または文字の字形が含まれない場合は後続候補を使用し、候補で解決できない場合はブラウザーの通常の代替処理になる。別名の解決が異なる場合は、実フォントの具体的な名前をXMLまたはCLIで指定する。
 
@@ -45,12 +47,12 @@ HTMLラベル内の `<font face>`、`style="font-family: ..."`、`font` 短縮�
 
 通常テストでは複数ページ、既存フォントの優先、代替候補の順序、重複除去、HTML・拡張要素の保持、CLIの入出力と保存失敗時の保護、Desktopに渡すXMLと保存XMLの一致を確認する。
 
-両レンダラーを使う実機テストは通常実行から除外する。共通フォントをインストールした環境で、次を明示実行する。
+Desktop と Chromium の両方を使う実機テストは通常実行から除外する。共通フォントをインストールした環境で、次を明示実行する。
 
 ```sh
-DRAWIO_PNG_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
-  DRAWIO_PNG_TEST_CHROME_PATH=/path/to/chromium \
-  DRAWIO_PNG_TEST_FONT='Noto Sans CJK JP' \
+D_PNG_TEST_DRAWIO_PATH=/path/to/drawio-or-wrapper \
+  D_PNG_TEST_CHROME_PATH=/path/to/chromium \
+  D_PNG_TEST_FONT='Noto Sans CJK JP' \
   mise exec -- cargo test --locked --test fonts -- --ignored --nocapture
 ```
 

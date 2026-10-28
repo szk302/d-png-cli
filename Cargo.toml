@@ -1,13 +1,13 @@
 [package]
-name = "drawio-png-cli"
-version = "0.1.0"
+name = "d-png-cli"
+version = "0.2.0"
 edition = "2024"
-description = "Extract, validate, and embed editable draw.io diagrams in PNG files"
+description = "Write draw.io diagrams, given as XML, into .drawio.png files that VS Code's draw.io extension can edit"
 license = "MIT AND Apache-2.0 AND Zlib AND BSD-3-Clause"
-repository = "https://github.com/szk302/drawio-png-cli"
+repository = "https://github.com/szk302/d-png-cli"
 
 [[bin]]
-name = "drawio-png-cli"
+name = "d-png-cli"
 path = "src/main.rs"
 
 [dependencies]
@@ -18,15 +18,20 @@ crc32fast = "1"
 flate2 = "1"
 png = "0.18"
 roxmltree = "0.21"
+serde = { version = "1.0.229", default-features = false, features = ["std"] }
 serde_json = "1"
+sha2 = "0.11"
 shell-words = "1"
 tempfile = "3"
 tiny_http = "0.12.0"
+toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 tungstenite = "0.30.0"
+unicode-normalization = "0.1"
 urlencoding = "2"
 
 [dev-dependencies]
 assert_cmd = "2"
+predicates = { version = "3.1.4", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

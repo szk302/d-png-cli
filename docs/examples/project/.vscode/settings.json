@@ -1,0 +1,24 @@
+{
+  "hediet.vscode-drawio.customLibraries": [
+    {
+      "entryId": "d-png-cli",
+      "libName": "Components",
+      "file": "${workspaceFolder}/.d-png/libraries/components.xml"
+    },
+    {
+      "entryId": "d-png-cli",
+      "libName": "Shapes",
+      "file": "${workspaceFolder}/.d-png/libraries/shapes.xml"
+    },
+    {
+      "entryId": "d-png-cli",
+      "libName": "Simple Icons",
+      "file": "${workspaceFolder}/.d-png/libraries/simple-icons.xml"
+    },
+    {
+      "entryId": "d-png-cli @acme",
+      "libName": "ACME Brand",
+      "file": "${workspaceFolder}/.d-png/libraries/@acme/brand.xml"
+    }
+  ]
+}

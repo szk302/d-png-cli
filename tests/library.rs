@@ -1,655 +1,539 @@
-use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use base64::{Engine, engine::general_purpose::STANDARD};
-use drawio_png_cli::{document, library};
-use std::{fs, io::Write};
+//! Library commands (spec 9.7-9.10) over a project area.
+mod support;
+
+use d_png_cli::domain::{
+    diagram, library, preview,
+    reference::{LibraryName, Ref},
+};
+use std::{fs, path::Path};
+use support::{cli, compress, library_file, stderr, stdout};
 use tempfile::tempdir;
 
-const MODEL: &str = include_str!("fixtures/model.xml");
-const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
-
-fn cli() -> Command {
-    cargo_bin_cmd!("drawio-png-cli")
-}
-
-/// Compresses a model the way draw.io stores library entries.
-fn compress(xml: &str) -> String {
-    let mut encoder =
-        flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
-    encoder
-        .write_all(urlencoding::encode(xml).as_bytes())
-        .unwrap();
-    STANDARD.encode(encoder.finish().unwrap())
-}
-
 const ICON: &str = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" style="shape=image;image=data:image/svg+xml,PHN2Zy8+" vertex="1" parent="1"><mxGeometry width="144" height="72" as="geometry"/></mxCell></root></mxGraphModel>"#;
+const CARD: &str = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><object id="g" label="Card" owner="team"><mxCell style="group;" vertex="1" parent="1"><mxGeometry width="100" height="40" as="geometry"/></mxCell></object><mxCell id="a" value="Title" vertex="1" parent="g"><mxGeometry width="40" height="40" as="geometry"/></mxCell></root></mxGraphModel>"#;
 
-// A group with a child, a labelled object and an edge between the two vertices.
-const GROUP: &str = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="g" value="" style="group" vertex="1" connectable="0" parent="1"><mxGeometry x="10" y="20" width="100" height="40" as="geometry"/></mxCell><mxCell id="c" value="child" style="rounded=1;" vertex="1" parent="g"><mxGeometry x="5" y="5" width="30" height="30" as="geometry"/></mxCell><object id="o" label="object" note="kept"><mxCell style="ellipse;" vertex="1" parent="1"><mxGeometry x="150" y="20" width="40" height="40" as="geometry"/></mxCell></object><mxCell id="e" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="g" target="o"><mxGeometry relative="1" as="geometry"><mxPoint x="12" y="80" as="sourcePoint"/><Array as="points"><mxPoint x="120" y="90"/></Array><mxPoint x="5" y="6" as="offset"/></mxGeometry></mxCell></root></mxGraphModel>"#;
-
-fn library_xml() -> String {
-    let entries = serde_json::json!([
-        {"xml": compress(ICON), "w": 144, "h": 72, "title": "Icon A"},
-        {"xml": GROUP, "w": 200, "h": 80, "title": "Group\nB"},
-        {"data": "data:image/png;base64,iVBORw0KGgo=", "w": 16, "h": 8, "title": "Raw", "aspect": "fixed"},
-        {"data": "https://example.com/icon.svg", "w": 32, "h": 32, "title": "Linked"},
-        {"xml": compress(ICON), "w": 10, "h": 10, "title": "Dup"},
-        {"xml": compress(ICON), "w": 20, "h": 20, "title": "Dup"},
-    ]);
-    // draw.io escapes the JSON as element text.
-    let text = entries
-        .to_string()
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    format!("<mxlibrary title=\"test\">{text}</mxlibrary>")
+/// A project with one library, `icons`.
+fn project() -> tempfile::TempDir {
+    let dir = tempdir().unwrap();
+    cli().arg("init").arg(dir.path()).assert().success();
+    fs::write(
+        dir.path().join(".d-png/libraries/icons.xml"),
+        library_file(serde_json::json!([
+            {"xml": compress(ICON), "w": 144, "h": 72, "title": "Icon A"},
+            {"xml": CARD, "w": 100, "h": 40, "title": "Card"},
+            {"data": "data:image/png;base64,iVBORw0KGgo=", "w": 16, "h": 8, "title": "Raw"},
+            {"xml": compress(ICON), "w": 10, "h": 10, "title": "Dup"},
+            {"xml": compress(ICON), "w": 20, "h": 20, "title": "Dup"},
+        ]))
+        .replacen("<mxlibrary>", "<mxlibrary title=\"Icons\">", 1),
+    )
+    .unwrap();
+    // Not library files: other extensions and invalid names.
+    fs::write(dir.path().join(".d-png/libraries/notes.txt"), "x").unwrap();
+    fs::write(dir.path().join(".d-png/libraries/Bad Name.xml"), "x").unwrap();
+    dir
 }
 
-/// A library of the given entries, escaped as draw.io writes it.
-fn library_of(entries: serde_json::Value) -> String {
-    let text = entries
-        .to_string()
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    format!("<mxlibrary>{text}</mxlibrary>")
-}
-
-fn library_named(name: &str, entries: serde_json::Value) -> Vec<library::Library> {
-    vec![library::Library {
-        name: name.into(),
-        title: None,
-        path: "lib.xml".into(),
-        entries: library::parse(library_of(entries).as_bytes()).unwrap(),
-    }]
-}
-
-fn entries() -> Vec<library::Library> {
-    vec![library::Library {
-        name: "test".into(),
-        title: Some("test".into()),
-        path: "lib.xml".into(),
-        entries: library::parse(library_xml().as_bytes()).unwrap(),
-    }]
-}
-
-fn placement(x: f64, y: f64) -> library::Placement<'static> {
-    library::Placement {
-        page: 1,
-        x,
-        y,
-        width: None,
-        height: None,
-        id: None,
-        label: None,
-    }
-}
-
-fn cell<'a>(doc: &'a roxmltree::Document<'a>, id: &str) -> roxmltree::Node<'a, 'a> {
-    doc.descendants()
-        .find(|n| n.attribute("id") == Some(id))
-        .unwrap_or_else(|| panic!("no cell {id}"))
-}
-
-fn geometry<'a>(node: roxmltree::Node<'a, 'a>) -> roxmltree::Node<'a, 'a> {
-    let inner = if node.has_tag_name("mxCell") {
-        node
-    } else {
-        node.children().find(|n| n.has_tag_name("mxCell")).unwrap()
-    };
-    inner
-        .children()
-        .find(|n| n.has_tag_name("mxGeometry"))
-        .unwrap()
+fn run(dir: &Path, args: &[&str]) -> String {
+    stdout(cli().current_dir(dir).args(args))
 }
 
 #[test]
-fn library_commands_print_libraries_details_and_entries() {
+fn init_creates_the_project_area_once() {
     let dir = tempdir().unwrap();
-    let path = dir.path().join("lib.xml");
-    fs::write(&path, library_xml()).unwrap();
-    let run = |args: &[&str]| {
-        let output = cli()
-            .env_remove("DRAWIO_PNG_LIBRARY_PATH")
-            .args(args)
-            .arg("--library-file")
-            .arg(&path)
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
-        String::from_utf8(output).unwrap()
-    };
-    // Libraries: name, entry count and the <mxlibrary> title.
-    assert_eq!(run(&["library", "list"]), "lib\t6\ttest\n");
-    assert_eq!(run(&["library", "ls"]), "lib\t6\ttest\n");
+    let out = stdout(cli().arg("init").arg(dir.path()));
+    assert!(out.starts_with("created "), "{out}");
+    let area = dir.path().join(".d-png");
+    assert!(area.join("libraries").is_dir());
+    assert!(area.join("config.toml").is_file());
     assert_eq!(
-        run(&["library", "show", "lib"]),
-        format!(
-            "name: lib\ntitle: test\nfile: {}\nentries: 6\n",
-            path.display()
-        )
+        fs::read_to_string(area.join(".gitignore")).unwrap(),
+        "# Libraries installed with `library install`; restored from lock.json\n/libraries/@*/\n"
     );
-    // Entries: library, index, title and size; never the content.
-    let all = run(&["library", "search"]);
+    fs::write(area.join("config.toml"), "# mine\n").unwrap();
+    let again = stdout(cli().args(["init", "--json"]).arg(dir.path()));
+    assert!(again.contains("\"created\":false"), "{again}");
+    assert_eq!(
+        fs::read_to_string(area.join("config.toml")).unwrap(),
+        "# mine\n"
+    );
+}
+
+#[test]
+fn list_shows_the_project_libraries() {
+    let dir = project();
+    let list = run(dir.path(), &["library", "list"]);
+    assert_eq!(list, "icons\t-\t5\tIcons\n");
+    let json: serde_json::Value =
+        serde_json::from_str(&run(dir.path(), &["library", "list", "--json"])).unwrap();
+    assert_eq!(json[0]["name"], "icons");
+    assert_eq!(json[0]["origin"], "project");
+    assert_eq!(json[0]["file"], ".d-png/libraries/icons.xml");
+    assert_eq!(run(dir.path(), &["library", "list", "--scope", "acme"]), "");
+    // A subdirectory finds the project above it; --project names it.
+    let sub = dir.path().join("docs/deep");
+    fs::create_dir_all(&sub).unwrap();
+    assert!(run(&sub, &["library", "list"]).starts_with("icons\t"));
+    let elsewhere = tempdir().unwrap();
+    assert!(
+        stdout(
+            cli()
+                .current_dir(elsewhere.path())
+                .args(["library", "list", "--project"])
+                .arg(dir.path())
+        )
+        .starts_with("icons\t")
+    );
+    // Without a project, there are no libraries.
+    assert_eq!(run(elsewhere.path(), &["library", "list"]), "");
+    let missing = stderr(
+        cli()
+            .current_dir(elsewhere.path())
+            .env("D_PNG_PROJECT", elsewhere.path())
+            .args(["library", "list"]),
+        1,
+    );
+    assert!(missing.contains("PROJECT_NOT_FOUND"), "{missing}");
+}
+
+#[test]
+fn search_prints_references_without_content() {
+    let dir = project();
+    let all = run(dir.path(), &["library", "search", "--library", "icons"]);
     assert_eq!(
         all,
-        "lib\t1\tIcon A\t144x72\nlib\t2\tGroup B\t200x80\nlib\t3\tRaw\t16x8\nlib\t4\tLinked\t32x32\nlib\t5\tDup\t10x10\nlib\t6\tDup\t20x20\n"
+        "icons/icon-a\timage\t144x72\tIcon A\nicons/card\tgroup\t100x40\tCard\nicons/raw\timage\t16x8\tRaw\nicons/dup\timage\t10x10\tDup\nicons/dup-2\timage\t20x20\tDup\n"
     );
     assert!(!all.contains("data:"));
-    assert_eq!(
-        run(&["library", "search", "ICON"]),
-        "lib\t1\tIcon A\t144x72\n"
-    );
-}
-
-#[test]
-fn insert_places_resizes_and_labels_a_single_cell() {
-    let entries = entries();
-    let entry = library::find(&entries, "icon a").unwrap().1;
-    let mut options = placement(200.0, 30.0);
-    options.width = Some(48.0);
-    options.id = Some("icon");
-    options.label = Some("Label & <b>");
-    let (xml, ids) = library::insert(MODEL, entry, &options).unwrap();
-    assert_eq!(ids, ["icon"]);
-    document::validate(&xml).unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let icon = cell(&doc, "icon");
-    assert_eq!(icon.attribute("value"), Some("Label & <b>"));
-    assert_eq!(icon.attribute("parent"), Some("1"));
-    assert!(
-        icon.attribute("style")
-            .unwrap()
-            .contains("image=data:image/svg+xml,PHN2Zy8+")
-    );
-    let g = geometry(icon);
-    // The aspect ratio is kept when only the width is given.
-    let size = |n: &str| g.attribute(n).unwrap();
-    assert_eq!(
-        (size("x"), size("y"), size("width"), size("height")),
-        ("200", "30", "48", "24")
-    );
-    // Existing cells are untouched.
-    assert!(xml.starts_with(&MODEL[..MODEL.find("</root>").unwrap()]));
-}
-
-#[test]
-fn insert_remaps_ids_parents_and_edges_of_multi_cell_entries() {
-    let entries = entries();
-    let entry = library::find(&entries, "Group\nB").unwrap().1;
-    let (xml, ids) = library::insert(MODEL, entry, &placement(100.0, 200.0)).unwrap();
-    document::validate(&xml).unwrap();
-    // Top-level cells first: the group, the object and the edge.
-    assert_eq!(ids, ["lib-1", "lib-3", "lib-4", "lib-2"]);
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let group = cell(&doc, "lib-1");
-    let child = cell(&doc, "lib-2");
-    let object = cell(&doc, "lib-3");
-    let edge = cell(&doc, "lib-4");
-    assert_eq!(child.attribute("parent"), Some("lib-1"));
-    assert_eq!(group.attribute("parent"), Some("1"));
-    assert_eq!(object.attribute("label"), Some("object"));
-    assert_eq!(object.attribute("note"), Some("kept"));
-    assert_eq!(
-        geometry(object).parent().unwrap().attribute("parent"),
-        Some("1")
-    );
-    assert_eq!(edge.attribute("source"), Some("lib-1"));
-    assert_eq!(edge.attribute("target"), Some("lib-3"));
-    // The entry's top-left corner (10, 20) moves to (100, 200); child
-    // coordinates are relative to the group and stay.
-    let xy = |n: roxmltree::Node<'_, '_>| {
-        (
-            n.attribute("x").unwrap().to_owned(),
-            n.attribute("y").unwrap().to_owned(),
-        )
-    };
-    assert_eq!(xy(geometry(group)), ("100".into(), "200".into()));
-    assert_eq!(xy(geometry(object)), ("240".into(), "200".into()));
-    assert_eq!(xy(geometry(child)), ("5".into(), "5".into()));
-    let points: Vec<_> = geometry(edge)
-        .descendants()
-        .filter(|n| n.has_tag_name("mxPoint"))
-        .map(xy)
+    // Exact matches first, then prefixes, then the rest; every word must match.
+    fs::write(
+        dir.path().join(".d-png/libraries/more.xml"),
+        library_file(serde_json::json!([
+            {"xml": CARD, "w": 100, "h": 40, "title": "Scorecard"},
+            {"xml": CARD, "w": 100, "h": 40, "title": "Cards"},
+        ])),
+    )
+    .unwrap();
+    let found: Vec<String> = run(dir.path(), &["library", "search", "card"])
+        .lines()
+        .map(|l| l.split('\t').next().unwrap().to_owned())
         .collect();
+    assert_eq!(found, ["icons/card", "more/cards", "more/scorecard"]);
+    assert!(run(dir.path(), &["library", "search", "icon", "a"]).starts_with("icons/icon-a\t"));
     assert_eq!(
-        points,
-        [
-            ("102".into(), "260".into()),
-            ("210".into(), "270".into()),
-            ("5".into(), "6".into()) // the label offset is relative
-        ]
+        run(
+            dir.path(),
+            &["library", "search", "card", "--scope", "acme"]
+        ),
+        ""
     );
-    // A second add gets fresh IDs.
-    let (again, ids) = library::insert(&xml, entry, &placement(0.0, 0.0)).unwrap();
-    document::validate(&again).unwrap();
-    assert_eq!(ids, ["lib-5", "lib-7", "lib-8", "lib-6"]);
-    // Labels and sizes need a single cell.
-    let mut options = placement(0.0, 0.0);
-    options.label = Some("x");
-    assert!(library::insert(MODEL, entry, &options).is_err());
-    let mut options = placement(0.0, 0.0);
-    options.width = Some(10.0);
-    assert!(library::insert(MODEL, entry, &options).is_err());
-}
-
-#[test]
-fn insert_turns_image_entries_into_image_cells() {
-    let entries = entries();
-    let entry = library::find(&entries, "Raw").unwrap().1;
-    let (xml, ids) = library::insert(MODEL, entry, &placement(1.0, 2.0)).unwrap();
-    document::validate(&xml).unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let image = cell(&doc, &ids[0]);
-    // A style value cannot contain ';', so ";base64" is dropped like draw.io does.
-    let style = image.attribute("style").unwrap();
-    assert!(
-        style.contains("image=data:image/png,iVBORw0KGgo="),
-        "{style}"
+    let groups = run(
+        dir.path(),
+        &["library", "search", "--library", "icons", "--kind", "group"],
     );
-    assert!(style.contains("aspect=fixed"));
-    let g = geometry(image);
+    assert_eq!(groups, "icons/card\tgroup\t100x40\tCard\n");
+    // The limit is reported on stderr.
+    let limited = cli()
+        .current_dir(dir.path())
+        .args(["library", "search", "--limit", "2"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert_eq!(String::from_utf8_lossy(&limited.stdout).lines().count(), 2);
+    assert!(String::from_utf8_lossy(&limited.stderr).contains("2 of "));
+    let json: serde_json::Value = serde_json::from_str(&run(
+        dir.path(),
+        &["library", "search", "raw", "--library", "icons", "--json"],
+    ))
+    .unwrap();
     assert_eq!(
-        (g.attribute("width"), g.attribute("height")),
-        (Some("16"), Some("8"))
-    );
-    // Linked images are kept as URLs; rendering them needs --allow-network.
-    let entry = library::find(&entries, "Linked").unwrap().1;
-    let (xml, ids) = library::insert(MODEL, entry, &placement(0.0, 0.0)).unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let style = cell(&doc, &ids[0]).attribute("style").unwrap();
-    assert!(
-        style.contains("image=https://example.com/icon.svg"),
-        "{style}"
+        json,
+        serde_json::json!([{"ref": "icons/raw", "library": "icons", "id": "raw", "title": "Raw", "kind": "image", "width": 16.0, "height": 8.0, "origin": "project"}])
     );
 }
 
 #[test]
-fn insert_targets_pages_and_expands_compressed_ones() {
-    let entries = entries();
-    let entry = library::find(&entries, "Icon A").unwrap().1;
-    for page in [1, 2] {
-        let mut options = placement(0.0, 0.0);
-        options.page = page;
-        let (xml, ids) = library::insert(MIXED, entry, &options).unwrap();
-        document::validate(&xml).unwrap();
-        let doc = roxmltree::Document::parse(&xml).unwrap();
-        let pages: Vec<_> = doc
-            .descendants()
-            .filter(|n| n.has_tag_name("diagram"))
-            .collect();
-        assert_eq!(pages.len(), 2);
-        for (index, diagram) in pages.iter().enumerate() {
-            let has = diagram
-                .descendants()
-                .any(|n| n.attribute("id") == Some(ids[0].as_str()));
-            assert_eq!(has, index + 1 == page, "page {page}");
+fn show_describes_libraries_and_entries() {
+    let dir = project();
+    let card: serde_json::Value = serde_json::from_str(&run(
+        dir.path(),
+        &["library", "show", "icons/card", "--json"],
+    ))
+    .unwrap();
+    assert_eq!(card["kind"], "group");
+    assert_eq!(card["label"], "Card");
+    assert_eq!(card["style"], "group;");
+    assert_eq!(card["data"], serde_json::json!({"owner": "team"}));
+    assert_eq!(
+        card["cells"],
+        serde_json::json!([
+            {"id": "<ID>", "kind": "vertex", "label": "Card", "parent": null},
+            {"id": "<ID>-1", "kind": "vertex", "label": "Title", "parent": "<ID>"}
+        ])
+    );
+    assert_eq!(
+        card["example"],
+        r#"<mxCell id="ID" parent="1" dpng-ref="icons/card"><mxGeometry x="0" y="0" as="geometry"/></mxCell>"#
+    );
+    let raw: serde_json::Value = serde_json::from_str(&run(
+        dir.path(),
+        &["library", "show", "icons/raw", "--json"],
+    ))
+    .unwrap();
+    assert_eq!(raw["image"]["mediaType"], "image/png");
+    assert_eq!(raw["image"]["bytes"], 8);
+    // The style names the image instead of carrying it, and works as written.
+    let style = raw["style"].as_str().unwrap();
+    assert!(style.contains("image=lib:icons/raw;"), "{style}");
+    assert!(!style.contains("data:"), "{style}");
+    assert!(!run(dir.path(), &["library", "show", "icons/raw"]).contains("data:"));
+    let xml = format!(
+        r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="r" style="{style}" vertex="1" parent="1"><mxGeometry width="16" height="8" as="geometry"/></mxCell></root></mxGraphModel>"#
+    );
+    let expanded = stdout(cli().current_dir(dir.path()).arg("expand").write_stdin(xml));
+    assert!(expanded.contains("image=data:image/png,"), "{expanded}");
+    assert!(
+        raw["example"]
+            .as_str()
+            .unwrap()
+            .contains("width=\"16\" height=\"8\"")
+    );
+    let text = run(dir.path(), &["library", "show", "icons"]);
+    assert!(
+        text.contains("name: icons\ntitle: Icons\norigin: project\nentries: 5\n"),
+        "{text}"
+    );
+    let icon = run(dir.path(), &["library", "show", "icons/icon-a"]);
+    assert!(icon.contains("kind: image"), "{icon}");
+    // Close references are suggested for mistakes.
+    let error = stderr(
+        cli()
+            .current_dir(dir.path())
+            .args(["library", "show", "icons/cart"]),
+        1,
+    );
+    assert!(error.contains("error[REF_NOT_FOUND]"), "{error}");
+    assert!(error.contains("candidates: icons/card\n"), "{error}");
+    let json = stderr(
+        cli()
+            .current_dir(dir.path())
+            .args(["library", "show", "icons/dupe", "--json"]),
+        1,
+    );
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value["errors"][0]["code"], "REF_NOT_FOUND");
+    assert_eq!(value["errors"][0]["candidates"][0], "icons/dup");
+}
+
+#[test]
+fn diagrams_use_project_libraries() {
+    let dir = project();
+    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" dpng-ref="icons/icon-a"><mxGeometry width="48" as="geometry"/></mxCell><mxCell id="c" parent="1" dpng-ref="icons/card"/></root></mxGraphModel>"#;
+    let out = stdout(cli().current_dir(dir.path()).arg("expand").write_stdin(xml));
+    diagram::validate(&out).unwrap();
+    assert!(out.contains("owner=\"team\""));
+    assert!(!out.contains("dpng-ref"));
+    // Project references need a project.
+    let elsewhere = tempdir().unwrap();
+    let error = stderr(
+        cli()
+            .current_dir(elsewhere.path())
+            .arg("validate")
+            .write_stdin(xml),
+        1,
+    );
+    assert!(error.contains("no project (.d-png/) here"), "{error}");
+}
+
+/// Fails when an entry of a preview overlaps a label or another entry.
+fn assert_separate(xml: &str) {
+    type Rect = (f64, f64, f64, f64);
+    let doc = roxmltree::Document::parse(xml).unwrap();
+    let mut slots: Vec<(Option<Rect>, Rect, String)> = Vec::new();
+    let mut current: Option<Rect> = None;
+    for node in doc.descendants() {
+        let cell = match node.tag_name().name() {
+            "mxCell"
+                if !node
+                    .parent_element()
+                    .is_some_and(|p| p.tag_name().name() != "root") =>
+            {
+                node
+            }
+            "object" | "UserObject" => match node.children().find(|n| n.has_tag_name("mxCell")) {
+                Some(cell) => cell,
+                None => continue,
+            },
+            _ => continue,
+        };
+        if cell.attribute("parent") != Some("1") || cell.attribute("vertex") != Some("1") {
+            continue;
+        }
+        let Some(geometry) = cell.children().find(|n| n.has_tag_name("mxGeometry")) else {
+            continue;
+        };
+        let number = |key| {
+            geometry
+                .attribute(key)
+                .map_or(0.0, |v: &str| v.parse().unwrap())
+        };
+        let (x, y, width, height) = (number("x"), number("y"), number("width"), number("height"));
+        // A rotated vertex covers its bounds turned about the centre.
+        let turn = cell
+            .attribute("style")
+            .unwrap_or("")
+            .split(';')
+            .filter_map(|p| p.strip_prefix("rotation="))
+            .next_back()
+            .map_or(0.0, |v| v.parse::<f64>().unwrap().to_radians());
+        let (cos, sin) = (turn.cos().abs(), turn.sin().abs());
+        let (turned_width, turned_height) =
+            (width * cos + height * sin, width * sin + height * cos);
+        let (cx, cy) = (x + width / 2.0, y + height / 2.0);
+        let rect = (
+            cx - turned_width / 2.0,
+            cy - turned_height / 2.0,
+            cx + turned_width / 2.0,
+            cy + turned_height / 2.0,
+        );
+        let id = node.attribute("id").unwrap_or("");
+        if id.starts_with("label") {
+            slots.push((current.take(), rect, id.to_owned()));
+        } else {
+            current = Some(current.map_or(rect, |c| {
+                (
+                    c.0.min(rect.0),
+                    c.1.min(rect.1),
+                    c.2.max(rect.2),
+                    c.3.max(rect.3),
+                )
+            }));
         }
     }
-    let mut options = placement(0.0, 0.0);
-    options.page = 3;
-    assert!(library::insert(MIXED, entry, &options).is_err());
-}
-
-#[test]
-fn name_selection_requires_a_unique_match() {
-    let entries = entries();
-    assert!(library::find(&entries, "Dup").is_err());
-    assert!(library::find(&entries, "missing").is_err());
-    assert_eq!(library::find(&entries, "ICON A").unwrap().1.title, "Icon A");
-}
-
-#[test]
-fn cli_insert_prints_ids_and_keeps_output_on_errors() {
-    let dir = tempdir().unwrap();
-    let lib = dir.path().join("lib.xml");
-    fs::write(&lib, library_xml()).unwrap();
-    let output = dir.path().join("out.xml");
-    let result = cli()
-        .arg("insert")
-        .arg("--library-file")
-        .arg(&lib)
-        .args(["--name", "Icon A", "--id", "icon", "--x", "5", "-o"])
-        .arg(&output)
-        .write_stdin(MODEL)
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-    assert_eq!(String::from_utf8(result).unwrap(), "icon\n");
-    let saved = fs::read(&output).unwrap();
-    // Reusing the ID, an ambiguous name and a bad index all fail without writing.
-    for args in [
-        vec!["--name", "Icon A", "--id", "icon"],
-        vec!["--name", "Dup"],
-        vec!["--index", "9"],
-        vec!["--index", "1", "--width", "0"],
-    ] {
-        cli()
-            .arg("insert")
-            .arg("--library-file")
-            .arg(&lib)
-            .args(&args)
-            .arg("-i")
-            .arg(&output)
-            .arg("-o")
-            .arg(&output)
-            .assert()
-            .code(1);
-        assert_eq!(fs::read(&output).unwrap(), saved, "{args:?}");
+    let hit =
+        |a: Rect, b: Rect| a.0 < b.2 - 0.5 && b.0 < a.2 - 0.5 && a.1 < b.3 - 0.5 && b.1 < a.3 - 0.5;
+    // Each entry comes just before its label.
+    for (i, (entry, _, title)) in slots.iter().enumerate() {
+        let Some(entry) = entry else { continue };
+        for (j, (other, label, other_title)) in slots.iter().enumerate() {
+            // Every label, its own included, and every other entry.
+            let other = other.filter(|_| i != j);
+            assert!(
+                !hit(*entry, *label) && !other.is_some_and(|o| hit(*entry, o)),
+                "{title} overlaps {other_title}"
+            );
+        }
     }
-    cli()
-        .arg("insert")
-        .arg("--library-file")
-        .arg(&lib)
-        .args(["--name", "Icon A", "--index", "1", "-o"])
-        .arg(&output)
-        .assert()
-        .code(2);
-    // The entry content never reaches stdout.
-    let list = cli()
-        .arg("insert")
-        .arg("--library-file")
-        .arg(&lib)
-        .args(["--index", "3", "-i"])
-        .arg(&output)
-        .arg("-o")
-        .arg(&output)
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-    assert!(!String::from_utf8(list).unwrap().contains("data:"));
-    document::validate(&fs::read_to_string(&output).unwrap()).unwrap();
 }
 
-#[test]
-fn invalid_libraries_are_rejected() {
-    for text in [
-        "<mxlibrary>not json</mxlibrary>",
-        "<other>[]</other>",
-        r#"<mxlibrary>[{"title":"no content"}]</mxlibrary>"#,
-    ] {
-        assert!(library::parse(text.as_bytes()).is_err(), "{text}");
-    }
-    let broken = r#"<mxlibrary>[{"xml":"not base64!","title":"x"}]</mxlibrary>"#;
-    let entries = library::parse(broken.as_bytes()).unwrap();
-    assert!(library::insert(MODEL, &entries[0], &placement(0.0, 0.0)).is_err());
-}
+/// Entries of every kind and shape a preview lays out: wide, tall and
+/// round shapes, a group, a pool with lanes, an edge and a set.
+const VARIED: &[(&str, &str, f64, f64)] = &[
+    (
+        "Box",
+        r#"<mxCell id="2" style="rounded=1;" vertex="1" parent="1"><mxGeometry width="120" height="60" as="geometry"/></mxCell>"#,
+        120.0,
+        60.0,
+    ),
+    (
+        "Wide Bar",
+        r#"<mxCell id="2" value="Bar" style="" vertex="1" parent="1"><mxGeometry width="400" height="20" as="geometry"/></mxCell>"#,
+        400.0,
+        20.0,
+    ),
+    (
+        "Tall Bar",
+        r#"<mxCell id="2" style="" vertex="1" parent="1"><mxGeometry width="20" height="300" as="geometry"/></mxCell>"#,
+        20.0,
+        300.0,
+    ),
+    (
+        "Circle",
+        r#"<mxCell id="2" style="ellipse;" vertex="1" parent="1"><mxGeometry width="80" height="80" as="geometry"/></mxCell>"#,
+        80.0,
+        80.0,
+    ),
+    (
+        "Card",
+        r#"<object id="g" label="Card" owner="team"><mxCell style="group;" vertex="1" parent="1"><mxGeometry width="100" height="40" as="geometry"/></mxCell></object><mxCell id="a" value="Title" vertex="1" parent="g"><mxGeometry width="40" height="40" as="geometry"/></mxCell>"#,
+        100.0,
+        40.0,
+    ),
+    (
+        "Pool",
+        r#"<mxCell id="2" value="Pool" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="1"><mxGeometry width="320" height="240" as="geometry"/></mxCell><mxCell id="3" value="Lane 1" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="2"><mxGeometry x="20" width="300" height="120" as="geometry"/></mxCell><mxCell id="4" value="Lane 2" style="swimlane;horizontal=0;startSize=20;" vertex="1" parent="2"><mxGeometry x="20" y="120" width="300" height="120" as="geometry"/></mxCell>"#,
+        320.0,
+        240.0,
+    ),
+    (
+        "Curve",
+        r#"<mxCell id="2" style="curved=1;endArrow=classic;html=1;" edge="1" parent="1"><mxGeometry width="50" height="50" relative="1" as="geometry"><mxPoint y="50" as="sourcePoint"/><mxPoint x="50" as="targetPoint"/><Array as="points"><mxPoint x="50" y="50"/><mxPoint/></Array></mxGeometry></mxCell>"#,
+        50.0,
+        50.0,
+    ),
+    (
+        "Labelled Connector",
+        r#"<mxCell id="2" value="Label" style="endArrow=classic;html=1;" edge="1" parent="1"><mxGeometry width="160" relative="1" as="geometry"><mxPoint y="100" as="sourcePoint"/><mxPoint x="160" y="100" as="targetPoint"/></mxGeometry></mxCell>"#,
+        160.0,
+        0.0,
+    ),
+    (
+        "Branch",
+        r#"<mxCell id="2" value="A" style="rhombus;" vertex="1" parent="1"><mxGeometry width="80" height="60" as="geometry"/></mxCell><mxCell id="3" value="B" style="rounded=1;" vertex="1" parent="1"><mxGeometry x="140" width="120" height="60" as="geometry"/></mxCell><mxCell id="4" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry"/></mxCell>"#,
+        260.0,
+        60.0,
+    ),
+];
 
-#[test]
-fn search_path_finds_libraries_and_selects_by_library_name() {
-    let dir = tempdir().unwrap();
-    let (icons, extra) = (dir.path().join("icons"), dir.path().join("extra"));
-    fs::create_dir_all(&icons).unwrap();
-    fs::create_dir_all(&extra).unwrap();
-    fs::write(icons.join("main.xml"), library_xml()).unwrap();
-    fs::write(icons.join("broken.xml"), "<mxlibrary>not json</mxlibrary>").unwrap();
-    fs::write(icons.join("notes.txt"), "ignored").unwrap();
-    let other = r#"<mxlibrary>[{"xml":"<mxGraphModel><root><mxCell id=\"0\"/><mxCell id=\"1\" parent=\"0\"/><mxCell id=\"2\" vertex=\"1\" parent=\"1\"><mxGeometry width=\"5\" height=\"5\" as=\"geometry\"/></mxCell></root></mxGraphModel>","w":5,"h":5,"title":"Icon A"}]</mxlibrary>"#;
-    fs::write(
-        extra.join("other.xml"),
-        other
-            .replace('<', "&lt;")
-            .replacen("&lt;mxlibrary>", "<mxlibrary>", 1)
-            .replace("&lt;/mxlibrary>", "</mxlibrary>"),
+fn varied() -> library::Library {
+    let entries: Vec<_> = VARIED
+        .iter()
+        .map(|(title, cells, w, h)| {
+            let xml = format!(
+                r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>{cells}</root></mxGraphModel>"#
+            );
+            serde_json::json!({"xml": compress(&xml), "w": w, "h": h, "title": title})
+        })
+        .collect();
+    library::parse(
+        LibraryName::parse("varied").unwrap(),
+        library_file(serde_json::Value::Array(entries)).as_bytes(),
     )
-    .unwrap();
-    let search = std::env::join_paths([&icons, &extra.join("other.xml")]).unwrap();
-    let run = |args: &[&str]| {
-        let output = cli()
-            .env("DRAWIO_PNG_LIBRARY_PATH", &search)
-            .args(args)
-            .output()
-            .unwrap();
-        (
-            output.status.code(),
-            String::from_utf8(output.stdout).unwrap(),
-            String::from_utf8(output.stderr).unwrap(),
-        )
-    };
-    // Directories contribute their *.xml files; broken ones are skipped with a warning.
-    let (code, stdout, stderr) = run(&["library", "list", "--no-builtin"]);
-    assert_eq!(code, Some(0), "{stderr}");
-    assert_eq!(stdout, "main\t6\ttest\nother\t1\t-\n");
-    // Built-in libraries follow those on DRAWIO_PNG_LIBRARY_PATH.
-    let (_, all, _) = run(&["library", "list"]);
-    assert!(all.starts_with(&stdout) && all.contains("\ndrawio/aws4-compute\t"));
-    let (code, stdout, stderr) = run(&["library", "search", "icon", "--no-builtin"]);
-    assert_eq!(code, Some(0), "{stderr}");
-    assert_eq!(stdout, "main\t1\tIcon A\t144x72\nother\t1\tIcon A\t5x5\n");
-    assert!(stderr.contains("warning: skipped invalid library") && stderr.contains("broken.xml"));
-    let (_, stdout, _) = run(&["library", "search", "--library", "other"]);
-    assert_eq!(stdout, "other\t1\tIcon A\t5x5\n");
-    let (code, _, stderr) = run(&["library", "show", "missing"]);
-    assert_eq!(code, Some(1));
-    assert!(
-        stderr.contains("available: main, other, drawio/* (see `drawio-png-cli library list`)"),
-        "{stderr}"
-    );
-
-    let output = dir.path().join("out.xml");
-    fs::write(&output, MODEL).unwrap();
-    let path = output.to_str().unwrap();
-    // A title in several libraries needs --library; --index needs one library.
-    let (code, _, stderr) = run(&["insert", "--name", "Icon A", "-i", path, "-o", path]);
-    assert_eq!(code, Some(1));
-    assert!(
-        stderr.contains(r#""Icon A" is in libraries "main", "other"; use --library"#),
-        "{stderr}"
-    );
-    let (code, _, stderr) = run(&["insert", "--index", "1", "-i", path, "-o", path]);
-    assert_eq!(code, Some(1));
-    assert!(stderr.contains("--index needs one library"), "{stderr}");
-    assert_eq!(fs::read_to_string(&output).unwrap(), MODEL);
-    let (code, stdout, stderr) = run(&[
-        "insert",
-        "--library",
-        "other",
-        "--name",
-        "icon a",
-        "--id",
-        "o",
-        "-i",
-        path,
-        "-o",
-        path,
-    ]);
-    assert_eq!(code, Some(0), "{stderr}");
-    assert_eq!(stdout, "o\n");
-    let (code, stdout, _) = run(&[
-        "insert",
-        "--library",
-        "main",
-        "--index",
-        "2",
-        "-i",
-        path,
-        "-o",
-        path,
-    ]);
-    assert_eq!(code, Some(0));
-    assert_eq!(stdout.lines().count(), 4);
-    document::validate(&fs::read_to_string(&output).unwrap()).unwrap();
+    .unwrap()
 }
 
 #[test]
-fn library_files_and_names_are_required() {
-    // Without a file or the built-in libraries, DRAWIO_PNG_LIBRARY_PATH is needed;
-    // a file excludes --library and --no-builtin.
-    let output = cli()
-        .env_remove("DRAWIO_PNG_LIBRARY_PATH")
-        .args(["library", "list", "--no-builtin"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("set DRAWIO_PNG_LIBRARY_PATH"));
-    cli()
-        .args([
-            "library",
-            "search",
-            "--library-file",
-            "lib.xml",
-            "--library",
-            "lib",
-        ])
-        .assert()
-        .code(2);
-    cli()
-        .args([
-            "library",
-            "list",
-            "--library-file",
-            "lib.xml",
-            "--no-builtin",
-        ])
-        .assert()
-        .code(2);
-    cli()
-        .env("DRAWIO_PNG_LIBRARY_PATH", "/nonexistent/library.xml")
-        .args(["library", "list"])
-        .assert()
-        .code(1);
-}
-
-#[test]
-fn label_changes_only_the_top_level_cell() {
-    // One top-level group whose children keep their own labels.
-    let group = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="g" value="Group" style="group" vertex="1" connectable="0" parent="1"><mxGeometry width="100" height="40" as="geometry"/></mxCell><mxCell id="a" value="Child A" vertex="1" parent="g"><mxGeometry width="40" height="40" as="geometry"/></mxCell><object id="b" label="Child B"><mxCell vertex="1" parent="g"><mxGeometry x="50" width="40" height="40" as="geometry"/></mxCell></object><mxCell id="c" vertex="1" parent="g"><mxGeometry x="90" width="10" height="10" as="geometry"/></mxCell></root></mxGraphModel>"#;
-    let libraries = library_named(
-        "g",
-        serde_json::json!([{"xml": group, "w": 100, "h": 40, "title": "G"}]),
-    );
-    let mut options = placement(0.0, 0.0);
-    options.id = Some("new-group");
-    options.label = Some("New Group");
-    let (xml, ids) =
-        library::insert(MODEL, library::find(&libraries, "G").unwrap().1, &options).unwrap();
-    document::validate(&xml).unwrap();
-    assert_eq!(
-        ids,
-        ["new-group", "new-group-1", "new-group-2", "new-group-3"]
-    );
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    assert_eq!(
-        cell(&doc, "new-group").attribute("value"),
-        Some("New Group")
-    );
-    assert_eq!(
-        cell(&doc, "new-group-1").attribute("value"),
-        Some("Child A")
-    );
-    assert_eq!(
-        cell(&doc, "new-group-2").attribute("label"),
-        Some("Child B")
-    );
-    // A child without a label does not get one.
-    assert_eq!(cell(&doc, "new-group-3").attribute("value"), None);
-}
-
-#[test]
-fn edge_ports_follow_the_new_cell_ids() {
-    let ports = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="v" vertex="1" parent="1"><mxGeometry width="100" height="40" as="geometry"/></mxCell><mxCell id="p" style="port" vertex="1" parent="v"><mxGeometry x="1" y="0.5" width="4" height="4" relative="1" as="geometry"/></mxCell><mxCell id="w" vertex="1" parent="1"><mxGeometry x="200" width="100" height="40" as="geometry"/></mxCell><mxCell id="q" style="port" vertex="1" parent="w"><mxGeometry y="0.5" width="4" height="4" relative="1" as="geometry"/></mxCell><mxCell id="e" style="sourcePort=p;targetPort=q;endArrow=none;entryX=0;" edge="1" parent="1" source="v" target="w"><mxGeometry relative="1" as="geometry"/></mxCell></root></mxGraphModel>"#;
-    let libraries = library_named(
-        "p",
-        serde_json::json!([{"xml": ports, "w": 300, "h": 40, "title": "P"}]),
-    );
-    let (xml, ids) = library::insert(
-        MODEL,
-        library::find(&libraries, "P").unwrap().1,
-        &placement(0.0, 0.0),
-    )
-    .unwrap();
-    document::validate(&xml).unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let id = |old: &str| {
-        // Cells keep their order, so map by position in the entry.
-        let order = ["v", "p", "w", "q", "e"];
-        let mut sorted = ids.clone();
-        sorted.sort_by_key(|i| i.trim_start_matches("lib-").parse::<u32>().unwrap());
-        sorted[order.iter().position(|o| *o == old).unwrap()].clone()
-    };
-    let edge = cell(&doc, &id("e"));
-    assert_eq!(
-        edge.attribute("style"),
-        Some(
-            format!(
-                "sourcePort={};targetPort={};endArrow=none;entryX=0;",
-                id("p"),
-                id("q")
+fn preview_lays_out_labelled_entries_and_limits_their_number() {
+    let varied = varied();
+    let all: Vec<_> = varied
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                Ref {
+                    library: varied.name.clone(),
+                    entry: e.id.clone(),
+                },
+                e,
             )
-            .as_str()
-        )
-    );
-    assert_eq!(edge.attribute("source"), Some(id("v").as_str()));
-    // Styles without ports, and ports outside the entry, stay as they are.
-    let other = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="e" style="sourcePort=elsewhere;rounded=1" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1" y="2" as="sourcePoint"/><mxPoint x="3" y="4" as="targetPoint"/></mxGeometry></mxCell></root></mxGraphModel>"#;
-    let libraries = library_named(
-        "o",
-        serde_json::json!([{"xml": other, "w": 2, "h": 2, "title": "O"}]),
-    );
-    let (xml, ids) = library::insert(
-        MODEL,
-        library::find(&libraries, "O").unwrap().1,
-        &placement(0.0, 0.0),
+        })
+        .collect();
+    let xml = preview::preview(&all).unwrap();
+    diagram::validate(&xml).unwrap();
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    assert!(doc.descendants().any(|n| {
+        n.attribute("value")
+            .is_some_and(|v| v.starts_with("varied/box\n"))
+    }));
+    // Groups, pools and connectors keep their size and must not reach a neighbour.
+    assert_separate(&xml);
+    // A rotated custom image keeps its turn although its style is not printed.
+    let rotated = library::parse(
+        LibraryName::parse("rotated").unwrap(),
+        br#"<mxlibrary>[{"title":"Rotated Image","w":350,"h":30,"xml":"&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id=\"0\"/&gt;&lt;mxCell id=\"1\" parent=\"0\"/&gt;&lt;mxCell id=\"2\" style=\"shape=image;image=data:image/png,iVBORw0KGgo=;rotation=-90;\" vertex=\"1\" parent=\"1\"&gt;&lt;mxGeometry width=\"350\" height=\"30\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;"}]</mxlibrary>"#,
     )
     .unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    assert_eq!(
-        cell(&doc, &ids[0]).attribute("style"),
-        Some("sourcePort=elsewhere;rounded=1")
+    let entry = &rotated.entries[0];
+    assert_separate(
+        &preview::preview(&[(
+            Ref {
+                library: rotated.name.clone(),
+                entry: entry.id.clone(),
+            },
+            entry,
+        )])
+        .unwrap(),
     );
+
+    // More entries than one preview shows.
+    let directory = project();
+    let many: Vec<_> = (0..preview::PREVIEW_LIMIT + 1)
+        .map(|i| serde_json::json!({"xml": CARD, "w": 100, "h": 40, "title": format!("Card {i}")}))
+        .collect();
+    fs::write(
+        directory.path().join(".d-png/libraries/many.xml"),
+        library_file(serde_json::Value::Array(many)),
+    )
+    .unwrap();
+    let output = directory.path().join("preview.png");
+    let preview = |args: &[&str]| {
+        let mut command = cli();
+        command
+            .current_dir(directory.path())
+            .args(["library", "preview"])
+            .args(args)
+            .arg("-o")
+            .arg(&output);
+        command
+    };
+    let many = stderr(&mut preview(&["--library", "many"]), 2);
+    assert!(many.contains("61 entries match"), "{many}");
+    let none = stderr(&mut preview(&["no such shape"]), 1);
+    assert!(none.contains("no entries match"), "{none}");
+    stderr(&mut preview(&[]), 2);
+    // JSON and the image cannot share standard output.
+    let both = stderr(
+        cli()
+            .current_dir(directory.path())
+            .args(["library", "preview", "card", "--json", "-o", "-"]),
+        2,
+    );
+    assert!(both.contains("give -o a file"), "{both}");
+    assert!(!output.exists());
 }
 
 #[test]
-fn library_names_come_from_unicode_file_names_and_positions_can_be_negative() {
-    let dir = tempdir().unwrap();
-    let text = library_of(
-        serde_json::json!([{"xml": compress(ICON), "w": 144, "h": 72, "title": "Icon A"}]),
+#[ignore = "requires Chromium and draw.io 26.0.2 web assets; set D_PNG_TEST_CHROME_PATH and D_PNG_TEST_DRAWIO_WEB_PATH"]
+fn preview_and_write_render_stencil_shapes_with_web_assets() {
+    let chrome = std::env::var_os("D_PNG_TEST_CHROME_PATH").expect("set D_PNG_TEST_CHROME_PATH");
+    let web =
+        std::env::var_os("D_PNG_TEST_DRAWIO_WEB_PATH").expect("set D_PNG_TEST_DRAWIO_WEB_PATH");
+    // A library of draw.io shapes that need the web assets' stencils.
+    let directory = tempdir().unwrap();
+    cli().arg("init").arg(directory.path()).assert().success();
+    let database = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" value="" style="shape=mxgraph.flowchart.database;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry width="60" height="60" as="geometry"/></mxCell></root></mxGraphModel>"#;
+    fs::write(
+        directory.path().join(".d-png/libraries/flowchart.xml"),
+        library_file(serde_json::json!([
+            {"xml": compress(database), "w": 60, "h": 60, "title": "Database"},
+        ])),
+    )
+    .unwrap();
+    let render = |args: &[&str], output: &Path, input: Option<&str>| {
+        let mut command = cli();
+        command
+            .current_dir(directory.path())
+            .env("D_PNG_CHROME_PATH", &chrome)
+            .env(
+                "D_PNG_CHROME_ARGS",
+                std::env::var("D_PNG_TEST_CHROME_ARGS").unwrap_or_default(),
+            )
+            .env("D_PNG_DRAWIO_WEB_PATH", &web)
+            .args(args)
+            .arg("-o")
+            .arg(output);
+        if let Some(input) = input {
+            command.write_stdin(input);
+        }
+        command.assert().success();
+        fs::read(output).unwrap()
+    };
+    let preview = render(
+        &["library", "preview", "database"],
+        &directory.path().join("preview.png"),
+        None,
     );
-    // A non-ASCII name without .xml must not be cut inside a character.
-    for (file, name) in [
-        ("図形集", "図形集"),
-        ("図形集.xml", "図形集"),
-        ("形.XML", "形"),
-    ] {
-        let path = dir.path().join(file);
-        fs::write(&path, &text).unwrap();
-        let output = cli()
-            .args(["library", "list", "--library-file"])
-            .arg(&path)
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
-        assert_eq!(
-            String::from_utf8(output).unwrap(),
-            format!("{name}\t1\t-\n"),
-            "{file}"
-        );
-    }
-    // Negative coordinates work as separate values.
-    let output = dir.path().join("out.xml");
-    cli()
-        .arg("insert")
-        .arg("--library-file")
-        .arg(dir.path().join("図形集.xml"))
-        .args([
-            "--name", "Icon A", "--id", "neg", "--x", "-10", "--y", "-20.5", "-o",
-        ])
-        .arg(&output)
-        .write_stdin(MODEL)
-        .assert()
-        .success();
-    let xml = fs::read_to_string(&output).unwrap();
-    let doc = roxmltree::Document::parse(&xml).unwrap();
-    let g = geometry(cell(&doc, "neg"));
-    assert_eq!(
-        (g.attribute("x"), g.attribute("y")),
-        (Some("-10"), Some("-20.5"))
+    assert!(preview.starts_with(d_png_cli::domain::drawio_png::SIGNATURE));
+    // A stencil shape written by reference, on the second page.
+    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" dpng-ref="flowchart/database"/></root></mxGraphModel></diagram></mxfile>"#;
+    let png = render(
+        &["write", "--page", "2"],
+        &directory.path().join("database.png"),
+        Some(two),
     );
+    let (width, height) = d_png_cli::domain::drawio_png::dimensions(&png).unwrap();
+    assert_eq!((width, height), (61, 61));
+    let xml = d_png_cli::domain::drawio_png::extract(&png).unwrap();
+    assert!(xml.contains("shape=mxgraph.flowchart.database") && !xml.contains("dpng-ref"));
 }

@@ -1,5 +1,5 @@
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{png_data, storage};
+use d_png_cli::{adapters::fs as storage, domain::drawio_png as png_data};
 use std::fs;
 use tempfile::tempdir;
 
@@ -8,10 +8,20 @@ const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 const PLAIN: &[u8] = include_bytes!("fixtures/plain.png");
 
 fn cli() -> Command {
-    let mut command = cargo_bin_cmd!("drawio-png-cli");
+    let mut command = cargo_bin_cmd!("d-png-cli");
     command
-        .env_remove("DRAWIO_PNG_DRAWIO_PATH")
-        .env_remove("DRAWIO_PNG_DRAWIO_ARGS");
+        .env_remove("D_PNG_DRAWIO_PATH")
+        .env_remove("D_PNG_DRAWIO_ARGS")
+        .env_remove("D_PNG_RENDERER")
+        .env_remove("D_PNG_PROJECT")
+        .env(
+            "D_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "D_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        );
     command
 }
 
@@ -20,11 +30,12 @@ fn stdin_round_trip_and_validation() {
     let directory = tempdir().unwrap();
     let png = directory.path().join("日本語 space.drawio.png");
     cli()
-        .args(["embed", "--no-render", "-o"])
+        .args(["write", "--metadata-only", "-o"])
         .arg(&png)
         .write_stdin(MIXED)
         .assert()
-        .success();
+        .success()
+        .stdout("");
     cli()
         .arg("validate")
         .arg(&png)
@@ -33,7 +44,7 @@ fn stdin_round_trip_and_validation() {
         .stdout("")
         .stderr("");
     let result = cli()
-        .arg("extract")
+        .arg("expand")
         .arg(&png)
         .assert()
         .success()
@@ -46,7 +57,7 @@ fn stdin_round_trip_and_validation() {
     assert!(xml.contains("日本語"));
     let output = directory.path().join("output.xml");
     cli()
-        .arg("extract")
+        .arg("read")
         .arg(&png)
         .arg("-o")
         .arg(&output)
@@ -54,6 +65,15 @@ fn stdin_round_trip_and_validation() {
         .success()
         .stdout("");
     assert_eq!(fs::read_to_string(output).unwrap(), xml);
+    // Standard input and "-" read the same way as a file.
+    for args in [vec!["expand"], vec!["expand", "-"]] {
+        cli()
+            .args(args)
+            .write_stdin(fs::read(&png).unwrap())
+            .assert()
+            .success()
+            .stdout(xml.clone());
+    }
 }
 
 #[test]
@@ -65,9 +85,9 @@ fn file_input_bom_and_same_path_base_update() {
     let png = directory.path().join("output.png");
     fs::write(&png, PLAIN).unwrap();
     cli()
-        .args(["embed", "--no-render", "-i"])
+        .args(["write", "--metadata-only"])
         .arg(&xml)
-        .arg("-b")
+        .arg("--base-image")
         .arg(&png)
         .arg("-o")
         .arg(&png)
@@ -87,7 +107,7 @@ fn invalid_xml_never_changes_existing_output() {
         "<mxGraphModel><root/></mxGraphModel>",
     ] {
         cli()
-            .args(["embed", "--no-render", "-o"])
+            .args(["write", "--metadata-only", "-o"])
             .arg(&path)
             .write_stdin(invalid)
             .assert()
@@ -105,25 +125,27 @@ fn invalid_renderer_is_an_error_without_touching_output() {
     fs::write(&output, PLAIN).unwrap();
     cli()
         .env(
-            "DRAWIO_PNG_DRAWIO_PATH",
+            "D_PNG_DRAWIO_PATH",
             directory.path().join("missing-renderer"),
         )
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
-        .code(1);
+        .code(1)
+        .stderr(predicates::str::contains("RENDERER_NOT_FOUND"));
     assert_eq!(fs::read(output).unwrap(), PLAIN);
 }
 
 #[test]
-fn no_render_does_not_discover_a_renderer_or_reuse_output_pixels() {
+fn metadata_only_does_not_discover_a_renderer_or_reuse_output_pixels() {
     let directory = tempdir().unwrap();
     let output = directory.path().join("output.png");
     fs::write(&output, "not a PNG").unwrap();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", "missing-renderer")
-        .args(["embed", "--no-render", "-o"])
+        .env("D_PNG_DRAWIO_PATH", "missing-renderer")
+        .env("D_PNG_CHROME_PATH", "missing-renderer")
+        .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -132,45 +154,46 @@ fn no_render_does_not_discover_a_renderer_or_reuse_output_pixels() {
 }
 
 #[test]
-fn debug_bypass_still_checks_png_and_saves_atomically() {
+fn invalid_base_images_never_replace_output() {
     let directory = tempdir().unwrap();
     let output = directory.path().join("output.png");
     cli()
-        .args(["embed", "--no-render", "--no-validate", "-o"])
+        .args(["write", "--metadata-only", "-o"])
         .arg(&output)
-        .write_stdin("<broken")
+        .write_stdin(MODEL)
         .assert()
         .success();
-    assert_eq!(
-        png_data::extract(&fs::read(&output).unwrap()).unwrap(),
-        "<broken"
-    );
-    cli().arg("validate").arg(&output).assert().code(1);
     let before = fs::read(&output).unwrap();
     let bad_base = directory.path().join("bad.png");
     fs::write(&bad_base, "bad").unwrap();
     cli()
-        .args(["embed", "--no-render", "--no-validate", "-b"])
+        .args(["write", "--metadata-only", "--base-image"])
         .arg(&bad_base)
         .arg("-o")
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
-        .code(1);
+        .code(1)
+        .stderr(predicates::str::contains("PNG_INVALID"));
     assert_eq!(fs::read(output).unwrap(), before);
 }
 
 #[test]
 fn argument_errors_and_io_errors_have_distinct_exit_codes() {
-    cli().arg("embed").assert().code(2);
+    cli().arg("write").assert().code(2);
     cli()
-        .args(["embed", "-b", "base.png", "-o", "out.png"])
+        .args(["write", "--base-image", "base.png", "-o", "out.png"])
         .assert()
         .code(2);
+    // v0.1.0 commands are gone.
+    for command in ["embed", "extract", "insert"] {
+        cli().arg(command).assert().code(2);
+    }
     cli()
         .args(["validate", "does-not-exist.xml"])
         .assert()
-        .code(1);
+        .code(1)
+        .stderr(predicates::str::contains("INPUT_READ"));
     cli().arg("--help").assert().success();
 }
 
@@ -208,21 +231,21 @@ fn commands_without_rendering_ignore_invalid_desktop_options() {
     let directory = tempdir().unwrap();
     let output = directory.path().join("output.png");
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
-        .args(["embed", "--no-render", "-o"])
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
+        .args(["write", "--metadata-only", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
         .success();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
         .arg("validate")
         .arg(&output)
         .assert()
         .success();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "'unfinished")
-        .arg("extract")
+        .env("D_PNG_DRAWIO_ARGS", "'unfinished")
+        .arg("read")
         .arg(&output)
         .assert()
         .success()
@@ -264,7 +287,7 @@ fn base_images_with_broken_zlib_trailers_never_replace_output() {
         fs::write(&path, &base).unwrap();
         fs::write(&output, PLAIN).unwrap();
         let result = cli()
-            .args(["embed", "--no-render", "-b"])
+            .args(["write", "--metadata-only", "--base-image"])
             .arg(&path)
             .arg("-o")
             .arg(&output)
@@ -282,24 +305,22 @@ fn base_images_with_broken_zlib_trailers_never_replace_output() {
 
 #[test]
 fn skill_guides_match_this_version() {
-    let core = include_str!("../assets/skill/drawio-png.md");
-    let full = include_str!("../assets/skill/drawio-png-full.md");
+    let core = include_str!("../assets/skill/d-png.md");
     // Normalize in case a checkout converted line endings.
-    let stub = &include_str!("../skills/drawio-png/SKILL.md").replace("\r\n", "\n");
-    for (args, expected) in [(vec!["skill"], core), (vec!["skill", "--full"], full)] {
-        let output = cli()
-            .args(&args)
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone();
-        assert_eq!(String::from_utf8(output).unwrap(), expected);
-    }
-    // The installed stub only points at the guides shipped with the binary.
-    assert!(stub.starts_with("---\nname: drawio-png\n"));
-    assert!(stub.contains("drawio-png-cli skill ") && stub.contains("drawio-png-cli skill --full"));
-    // Every `drawio-png-cli <command>` the guides mention must exist in this version.
+    let stub = &include_str!("../skills/d-png/SKILL.md").replace("\r\n", "\n");
+    let output = cli()
+        .arg("skill")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(String::from_utf8(output).unwrap(), core);
+    cli().args(["skill", "--full"]).assert().code(2);
+    // The installed stub only points at the guide shipped with the binary.
+    assert!(stub.starts_with("---\nname: d-png\n"));
+    assert!(stub.contains("d-png-cli skill ") && !stub.contains("skill --full"));
+    // Every `d-png-cli <command>` the guides mention must exist in this version.
     let help = |args: &[&str]| {
         let output = cli()
             .args(args)
@@ -319,12 +340,11 @@ fn skill_guides_match_this_version() {
             .skip(1) // the rest of the "Commands:" line
             .take_while(|line| !line.trim().is_empty())
             .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
-            .chain(["ls".to_owned()])
             .collect()
     };
     let (top, library) = (commands(help(&[])), commands(help(&["library"])));
-    for text in [core, full, stub.as_str()] {
-        for mention in text.split("drawio-png-cli ").skip(1) {
+    for text in [core, stub.as_str()] {
+        for mention in text.split("d-png-cli ").skip(1) {
             let mut words = mention.split(|c: char| !c.is_ascii_alphanumeric() && c != '-');
             let command = words.next().unwrap_or("");
             if command.is_empty() || !command.chars().all(|c| c.is_ascii_lowercase()) {
@@ -332,13 +352,13 @@ fn skill_guides_match_this_version() {
             }
             assert!(
                 top.contains(&command.to_owned()),
-                "unknown command: drawio-png-cli {command}"
+                "unknown command: d-png-cli {command}"
             );
             if command == "library" {
                 let sub = words.find(|w| !w.is_empty()).unwrap_or("");
                 assert!(
                     library.contains(&sub.to_owned()),
-                    "unknown command: drawio-png-cli library {sub}"
+                    "unknown command: d-png-cli library {sub}"
                 );
             }
         }

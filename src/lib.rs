@@ -1,20 +1,17 @@
-pub mod chromium;
-mod chromium_assets;
-pub mod document;
-pub mod fonts;
-pub mod interrupt;
-pub mod library;
-pub mod png_data;
-pub mod render;
-mod resample;
-pub mod shapes;
-pub mod storage;
+// Diagnostics are large but only travel on error paths, where their detail
+// (location, reference, candidates) is the point; boxing them would only
+// complicate every signature.
+#![allow(clippy::result_large_err)]
+
+pub mod adapters;
+pub mod app;
+pub mod domain;
 
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 
-/// Licenses and notices for drawio-png-cli, its Cargo dependencies, and bundled works.
+/// Licenses and notices for d-png-cli, its Cargo dependencies, and bundled works.
 pub const BUNDLED_LICENSES: &str = concat!(
-    "--- drawio-png-cli original code (MIT) ---\n",
+    "--- d-png-cli original code (MIT) ---\n",
     include_str!("../LICENSE"),
     "\n\n--- Third-party notices ---\n",
     include_str!("../THIRD_PARTY_NOTICES.md"),

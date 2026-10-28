@@ -1,0 +1,565 @@
+//! How results and diagnostics look on the terminal and in `--json`.
+use serde_json::{Value, json};
+
+use crate::{
+    app::{
+        diagram::{Read, Written},
+        install::{Change, Packed},
+        libraries::Hit,
+        library::{EntryDetails, Listed, Previewed, Shown},
+        register::Added,
+    },
+    domain::{
+        codec,
+        diagnostic::{Diagnostic, Location},
+        expand::{Expanded, ExpandedRef},
+    },
+};
+
+fn location_json(location: &Location, value: &mut serde_json::Map<String, Value>) {
+    if let Some(page) = location.page {
+        value.insert("page".into(), json!(page));
+    }
+    if let Some(name) = &location.page_name {
+        value.insert("pageName".into(), json!(name));
+    }
+    if let Some(cell) = &location.cell {
+        value.insert("cell".into(), json!(cell));
+    }
+}
+
+pub fn diagnostic_json(d: &Diagnostic) -> Value {
+    let mut value = serde_json::Map::new();
+    value.insert("code".into(), json!(d.code.as_str()));
+    value.insert("message".into(), json!(d.message));
+    location_json(&d.location, &mut value);
+    if let Some(reference) = &d.reference {
+        value.insert("ref".into(), json!(reference));
+    }
+    if !d.candidates.is_empty() {
+        value.insert("candidates".into(), json!(d.candidates));
+    }
+    Value::Object(value)
+}
+
+/// `error[CODE] page 1 "name", cell "id": message`, then candidates.
+pub fn diagnostic_text(level: &str, d: &Diagnostic) -> String {
+    let mut place = Vec::new();
+    if let Some(page) = d.location.page {
+        place.push(match &d.location.page_name {
+            Some(name) => format!("page {page} {name:?}"),
+            None => format!("page {page}"),
+        });
+    }
+    if let Some(cell) = &d.location.cell {
+        place.push(format!("cell {cell:?}"));
+    }
+    let mut text = format!("{level}[{}] ", d.code);
+    if !place.is_empty() {
+        text.push_str(&place.join(", "));
+        text.push_str(": ");
+    }
+    text.push_str(&d.message);
+    if !d.candidates.is_empty() {
+        text.push_str(&format!("\n  candidates: {}", d.candidates.join(", ")));
+    }
+    text
+}
+
+/// The errors and warnings on standard error, as text or one JSON line.
+pub fn diagnostics(errors: &[Diagnostic], warnings: &[Diagnostic], json: bool) -> String {
+    if json {
+        let value = json!({
+            "errors": errors.iter().map(diagnostic_json).collect::<Vec<_>>(),
+            "warnings": warnings.iter().map(diagnostic_json).collect::<Vec<_>>(),
+        });
+        return format!("{value}\n");
+    }
+    let mut text = String::new();
+    for d in errors {
+        text.push_str(&diagnostic_text("error", d));
+        text.push('\n');
+    }
+    for d in warnings {
+        text.push_str(&diagnostic_text("warning", d));
+        text.push('\n');
+    }
+    text
+}
+
+pub fn expanded_json(expanded: &[ExpandedRef]) -> Value {
+    Value::Array(
+        expanded
+            .iter()
+            .map(|e| {
+                let mut value = serde_json::Map::new();
+                location_json(&e.location, &mut value);
+                value.insert("ref".into(), json!(e.reference));
+                match &e.result {
+                    Expanded::Cells(ids) => {
+                        value.insert("type".into(), json!("cells"));
+                        value.insert("ids".into(), json!(ids));
+                    }
+                    Expanded::Image => {
+                        value.insert("type".into(), json!("image"));
+                    }
+                }
+                Value::Object(value)
+            })
+            .collect(),
+    )
+}
+
+pub fn written_json(written: &Written, output: &str, renderer: Option<&str>) -> Value {
+    json!({
+        "output": output,
+        "width": written.width,
+        "height": written.height,
+        "renderer": renderer,
+        "page": written.page,
+        "pages": written.pages,
+        "expanded": expanded_json(&written.expanded),
+        "warnings": written.warnings.iter().map(diagnostic_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn read_json(read: &Read, output: &str) -> Value {
+    let located = |location: &Location, extra: Value| {
+        let mut value = serde_json::Map::new();
+        location_json(location, &mut value);
+        if let Value::Object(extra) = extra {
+            value.extend(extra);
+        }
+        Value::Object(value)
+    };
+    json!({
+        "output": output,
+        "pages": read.pages,
+        "compacted": read.compacted.iter().map(|c| located(&c.location, json!({"ref": c.reference, "replacedChars": c.replaced_chars}))).collect::<Vec<_>>(),
+        "keptImages": read.kept.iter().map(|k| located(&k.location, json!({"chars": k.chars}))).collect::<Vec<_>>(),
+    })
+}
+
+fn one_line(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
+}
+
+/// A size for display, without floating-point noise.
+fn size(value: f64) -> String {
+    codec::number((value * 100.0).round() / 100.0)
+}
+
+/// A library of `library list` (spec 9.7); `version` and `range` only for
+/// installed libraries, and a dependency that is not installed only by name.
+pub fn library_json(listed: &Listed) -> Value {
+    let info = &listed.info;
+    let mut value = json!({
+        "name": info.name.to_string(),
+        "origin": listed.origin.as_str(),
+    });
+    let object = value.as_object_mut().expect("object");
+    if let Some(version) = info.version {
+        object.insert("version".into(), json!(version.to_string()));
+    }
+    if let Some(range) = &listed.range {
+        object.insert("range".into(), json!(range.to_string()));
+    }
+    if !listed.installed {
+        object.insert("installed".into(), json!(false));
+        return value;
+    }
+    object.insert("title".into(), json!(info.title));
+    object.insert("entries".into(), json!(info.entries));
+    object.insert("file".into(), json!(info.location));
+    object.insert("normalized".into(), json!(info.normalized));
+    value
+}
+
+pub fn added_json(added: &Added) -> Value {
+    json!({
+        "name": added.name.to_string(),
+        "action": added.action,
+        "file": added.location,
+        "entries": added.entries.iter().map(|e| json!({
+            "ref": e.reference.to_string(),
+            "kind": e.kind.as_str(),
+            "title": e.title,
+            "width": e.width,
+            "height": e.height,
+        })).collect::<Vec<_>>(),
+        "skipped": added.skipped.iter().map(diagnostic_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn added_text(added: &Added) -> String {
+    let mut text = format!(
+        "{} {} (project, {} {}) -> {}\n",
+        added.action,
+        added.name,
+        added.entries.len(),
+        if added.entries.len() == 1 {
+            "entry"
+        } else {
+            "entries"
+        },
+        added.location.as_deref().unwrap_or("-"),
+    );
+    for e in &added.entries {
+        text.push_str(&format!(
+            "  {}\t{}\t{}x{}\t{}\n",
+            e.reference,
+            e.kind,
+            size(e.width),
+            size(e.height),
+            one_line(&e.title)
+        ));
+    }
+    text
+}
+
+pub fn library_line(listed: &Listed) -> String {
+    let info = &listed.info;
+    format!(
+        "{}\t{}\t{}\t{}\n",
+        info.name,
+        info.version.map_or("-".into(), |v| v.to_string()),
+        if listed.installed {
+            info.entries.to_string()
+        } else {
+            "-".into()
+        },
+        if listed.installed {
+            info.title.as_deref().map_or("-".into(), one_line)
+        } else {
+            "(not installed)".into()
+        }
+    )
+}
+
+pub fn hit_json(hit: &Hit) -> Value {
+    let mut value = json!({
+        "ref": hit.reference.to_string(),
+        "library": hit.reference.library.to_string(),
+        "id": hit.reference.entry.as_str(),
+        "title": hit.title,
+        "kind": hit.kind.as_str(),
+        "width": hit.width,
+        "height": hit.height,
+        "origin": hit.origin.as_str(),
+    });
+    if let Some(version) = hit.version {
+        value["version"] = json!(version.to_string());
+    }
+    value
+}
+
+/// `library preview --json`: the image and the entries it shows, as
+/// `library search --json` describes them.
+pub fn previewed_json(previewed: &Previewed, output: &str) -> Value {
+    json!({
+        "output": output,
+        "width": previewed.width,
+        "height": previewed.height,
+        "entries": previewed.entries.iter().map(hit_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn hit_line(hit: &Hit) -> String {
+    format!(
+        "{}\t{}\t{}x{}\t{}\n",
+        hit.reference,
+        hit.kind,
+        size(hit.width),
+        size(hit.height),
+        one_line(&hit.title)
+    )
+}
+
+pub fn shown_json(shown: &Shown) -> Value {
+    match shown {
+        Shown::Library(listed) => library_json(listed),
+        Shown::Entry(details) => entry_json(details),
+    }
+}
+
+fn entry_json(details: &EntryDetails) -> Value {
+    let mut value = json!({
+        "ref": details.reference.to_string(),
+        "title": details.title,
+        "kind": details.kind.as_str(),
+        "width": details.width,
+        "height": details.height,
+        "origin": details.origin.as_str(),
+        "example": details.example,
+    });
+    let object = value.as_object_mut().expect("object");
+    if let Some(version) = details.version {
+        object.insert("version".into(), json!(version.to_string()));
+    }
+    if let Some(description) = &details.description {
+        if let Some(label) = &description.label {
+            object.insert("label".into(), json!(label));
+        }
+        if let Some(style) = &description.style {
+            object.insert("style".into(), json!(style));
+        }
+        if !description.data.is_empty() {
+            object.insert(
+                "data".into(),
+                Value::Object(
+                    description
+                        .data
+                        .iter()
+                        .map(|(k, v)| (k.clone(), json!(v)))
+                        .collect(),
+                ),
+            );
+        }
+        object.insert(
+            "cells".into(),
+            Value::Array(
+                description
+                    .cells
+                    .iter()
+                    .map(|c| {
+                        json!({
+                            "id": c.id,
+                            "kind": if c.edge { "edge" } else { "vertex" },
+                            "label": c.label,
+                            "parent": c.parent,
+                        })
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    if let Some((fingerprint, image)) = &details.image {
+        object.insert(
+            "image".into(),
+            json!({"fingerprint": fingerprint, "mediaType": image.media_type, "bytes": image.bytes}),
+        );
+    }
+    value
+}
+
+pub fn shown_text(shown: &Shown) -> String {
+    match shown {
+        Shown::Library(listed) => {
+            let info = &listed.info;
+            let mut text = format!("name: {}\n", info.name);
+            if listed.installed {
+                text.push_str(&format!(
+                    "title: {}\n",
+                    info.title.as_deref().map_or("-".into(), one_line)
+                ));
+            }
+            text.push_str(&format!("origin: {}\n", listed.origin.as_str()));
+            if let Some(version) = info.version {
+                text.push_str(&format!("version: {version}\n"));
+            }
+            if let Some(range) = &listed.range {
+                text.push_str(&format!("range: {range}\n"));
+            }
+            if !listed.installed {
+                text.push_str("installed: no; run `d-png-cli library install`\n");
+                return text;
+            }
+            text.push_str(&format!(
+                "entries: {}\nfile: {}\n",
+                info.entries,
+                info.location.as_deref().unwrap_or("-"),
+            ));
+            text
+        }
+        Shown::Entry(details) => {
+            let mut text = format!(
+                "ref: {}\ntitle: {}\nkind: {}\nsize: {}x{}\norigin: {}\n",
+                details.reference,
+                one_line(&details.title),
+                details.kind,
+                size(details.width),
+                size(details.height),
+                details.origin.as_str(),
+            );
+            if let Some(version) = details.version {
+                text.push_str(&format!("version: {version}\n"));
+            }
+            if let Some(description) = &details.description {
+                if let Some(label) = &description.label {
+                    text.push_str(&format!("label: {}\n", one_line(label)));
+                }
+                if let Some(style) = &description.style {
+                    text.push_str(&format!("style: {}\n", one_line(style)));
+                }
+                for (key, value) in &description.data {
+                    text.push_str(&format!("data: {key}={}\n", one_line(value)));
+                }
+                text.push_str("cells:\n");
+                for cell in &description.cells {
+                    text.push_str(&format!(
+                        "  {}\t{}\t{}\t{}\n",
+                        cell.id,
+                        if cell.edge { "edge" } else { "vertex" },
+                        one_line(&cell.label),
+                        cell.parent.as_deref().unwrap_or("-")
+                    ));
+                }
+            }
+            if let Some((fingerprint, image)) = &details.image {
+                text.push_str(&format!(
+                    "image: {} {} bytes, fingerprint {fingerprint}\n",
+                    image.media_type, image.bytes
+                ));
+            }
+            text.push_str(&format!("example: {}\n", details.example));
+            text
+        }
+    }
+}
+
+fn ids(ids: &[crate::domain::reference::EntryId]) -> String {
+    if ids.is_empty() {
+        "(none)".into()
+    } else {
+        ids.iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+pub fn changes_json(changes: &[Change]) -> Value {
+    Value::Array(
+        changes
+            .iter()
+            .map(|change| match change {
+                Change::Installed {
+                    name,
+                    version,
+                    resolved,
+                    entries,
+                } => json!({
+                    "name": name.to_string(),
+                    "action": "installed",
+                    "version": version.to_string(),
+                    "resolved": resolved,
+                    "entries": entries.iter().map(|e| json!({
+                        "ref": e.reference.to_string(),
+                        "kind": e.kind.as_str(),
+                        "title": e.title,
+                    })).collect::<Vec<_>>(),
+                }),
+                Change::Updated {
+                    name,
+                    from,
+                    to,
+                    range,
+                    added,
+                    removed,
+                } => json!({
+                    "name": name.to_string(),
+                    "action": "updated",
+                    "from": from.to_string(),
+                    "version": to.to_string(),
+                    "range": range.to_string(),
+                    "added": added.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+                    "removed": removed.iter().map(|i| format!("{name}/{i}")).collect::<Vec<_>>(),
+                }),
+                Change::Removed { name } => json!({"name": name.to_string(), "action": "removed"}),
+                Change::Unchanged { name, version } => json!({
+                    "name": name.to_string(),
+                    "action": "unchanged",
+                    "version": version.to_string(),
+                }),
+            })
+            .collect(),
+    )
+}
+
+pub fn changes_text(changes: &[Change], dry_run: bool) -> String {
+    let mut text = String::new();
+    let would = if dry_run { "would " } else { "" };
+    for change in changes {
+        match change {
+            Change::Installed {
+                name,
+                version,
+                resolved,
+                entries,
+            } => {
+                text.push_str(&format!(
+                    "{would}install {name}@{version} ({} {}) from {resolved}\n",
+                    entries.len(),
+                    if entries.len() == 1 {
+                        "entry"
+                    } else {
+                        "entries"
+                    }
+                ));
+                for e in entries {
+                    text.push_str(&format!(
+                        "  {}\t{}\t{}x{}\t{}\n",
+                        e.reference,
+                        e.kind,
+                        size(e.width),
+                        size(e.height),
+                        one_line(&e.title)
+                    ));
+                }
+            }
+            Change::Updated {
+                name,
+                from,
+                to,
+                range,
+                added,
+                removed,
+            } => text.push_str(&format!(
+                "{would}update {name} {from} -> {to} (range {range})\n  added: {}\n  removed: {}\n",
+                ids(added),
+                ids(removed)
+            )),
+            Change::Removed { name } => text.push_str(&format!("{would}remove {name}\n")),
+            Change::Unchanged { name, version } => {
+                text.push_str(&format!("{name}@{version} is up to date\n"))
+            }
+        }
+    }
+    if !dry_run {
+        text = text
+            .replace("install ", "installed ")
+            .replace("update ", "updated ")
+            .replace("remove ", "removed ");
+    }
+    text
+}
+
+pub fn packed_json(packed: &Packed, path: &str) -> Value {
+    json!({
+        "name": packed.name.to_string(),
+        "version": packed.version.to_string(),
+        "file": path,
+        "entries": packed.entries,
+        "added": packed.added.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+        "removed": packed.removed.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+        "warnings": packed.warnings.iter().map(diagnostic_json).collect::<Vec<_>>(),
+    })
+}
+
+pub fn packed_text(packed: &Packed, path: &str) -> String {
+    format!(
+        "packed {}@{} ({} {}) -> {path}\n  added: {}\n  removed: {}\n",
+        packed.name,
+        packed.version,
+        packed.entries,
+        if packed.entries == 1 {
+            "entry"
+        } else {
+            "entries"
+        },
+        ids(&packed.added),
+        ids(&packed.removed)
+    )
+}

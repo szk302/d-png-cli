@@ -1,0 +1,15 @@
+<mxfile>
+  <diagram id="page-1" name="構成図">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <object id="service" label="決済サービス" owner="payments" dpng-ref="components/service">
+          <mxCell style="fillColor=#dae8fc;" parent="1">
+            <mxGeometry x="200" y="40" width="120" height="60" as="geometry"/>
+          </mxCell>
+        </object>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.1.0 (matching the version in Cargo.toml) to build the
+# Push a tag such as v0.2.0 (matching the version in Cargo.toml) to build the
 # binaries and publish them as a GitHub release. A tag with a suffix, such as
 # v0.2.0-rc.1, creates a pre-release.
 on:
@@ -24,8 +24,9 @@ jobs:
             exit 1
           fi
 
-  # The same checks as for pull requests and main: licenses, formatting,
-  # lints, tests and real Chromium rendering on Linux, macOS and Windows.
+  # The same checks as for pull requests and main: licenses, then
+  # formatting, lints and tests on Linux, macOS and Windows, and real
+  # Chromium rendering on Linux.
   ci:
     uses: ./.github/workflows/ci.yml
 
@@ -69,14 +70,14 @@ jobs:
         id: package
         shell: bash
         run: |
-          binary="target/${{ matrix.target }}/release/drawio-png-cli"
+          binary="target/${{ matrix.target }}/release/d-png-cli"
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           if [ "${{ matrix.cross }}" != true ]; then
             "$binary" --version
             "$binary" validate tests/fixtures/text.drawio.png
           fi
           mkdir -p dist
-          archive="dist/drawio-png-cli-${GITHUB_REF_NAME#v}-${{ matrix.target }}.${{ matrix.archive }}"
+          archive="dist/d-png-cli-${GITHUB_REF_NAME#v}-${{ matrix.target }}.${{ matrix.archive }}"
           python scripts/package_binary.py "$binary" "$archive"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
       - name: Attest build provenance
@@ -102,7 +103,7 @@ jobs:
           merge-multiple: true
       - name: Write checksums
         working-directory: dist
-        run: sha256sum drawio-png-cli-* > SHA256SUMS && cat SHA256SUMS
+        run: sha256sum d-png-cli-* > SHA256SUMS && cat SHA256SUMS
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

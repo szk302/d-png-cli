@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package an already built drawio-png-cli binary with the redistribution notices."""
+"""Package an already built d-png-cli binary with the redistribution notices."""
 
 import argparse
 from pathlib import Path

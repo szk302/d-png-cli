@@ -1,4 +1,7 @@
-use drawio_png_cli::{document, png_data, storage};
+use d_png_cli::{
+    adapters::fs as storage,
+    domain::{codec, diagram as document, drawio_png as png_data},
+};
 use std::io::Cursor;
 
 const MODEL: &str = include_str!("fixtures/model.xml");
@@ -154,22 +157,22 @@ fn compressed_data_requires_complete_stream_and_bounded_expansion() {
     let mut raw = DeflateEncoder::new(Vec::new(), Compression::fast());
     raw.write_all(b"diagram content").unwrap();
     let raw = raw.finish().unwrap();
-    assert_eq!(storage::inflate(&raw, false).unwrap(), b"diagram content");
-    assert!(storage::inflate(&raw[..raw.len() - 1], false).is_err());
+    assert_eq!(codec::inflate(&raw, false).unwrap(), b"diagram content");
+    assert!(codec::inflate(&raw[..raw.len() - 1], false).is_err());
     let mut trailing = raw.clone();
     trailing.push(0);
-    assert!(storage::inflate(&trailing, false).is_err());
+    assert!(codec::inflate(&trailing, false).is_err());
     let mut zlib = ZlibEncoder::new(Vec::new(), Compression::fast());
     zlib.write_all(b"diagram content").unwrap();
     let zlib = zlib.finish().unwrap();
-    assert!(storage::inflate(&zlib[..zlib.len() - 1], true).is_err());
+    assert!(codec::inflate(&zlib[..zlib.len() - 1], true).is_err());
     let mut bomb = DeflateEncoder::new(Vec::new(), Compression::fast());
     for _ in 0..1025 {
         bomb.write_all(&[0; 65536]).unwrap();
     }
     let bomb = bomb.finish().unwrap();
     assert!(
-        storage::inflate(&bomb, false)
+        codec::inflate(&bomb, false)
             .unwrap_err()
             .to_string()
             .contains("64 MiB")

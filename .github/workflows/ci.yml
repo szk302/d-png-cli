@@ -59,18 +59,18 @@ jobs:
       - name: Test headless Chromium rendering
         if: runner.os == 'Linux'
         env:
-          DRAWIO_PNG_TEST_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
+          D_PNG_TEST_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
         run: |
-          DRAWIO_PNG_TEST_CHROME_PATH="$(command -v google-chrome)" cargo test --locked --test chromium -- --ignored --nocapture
+          D_PNG_TEST_CHROME_PATH="$(command -v google-chrome)" cargo test --locked --test chromium -- --ignored --nocapture
       - run: cargo build --release --locked
       - name: Package binary with license notices
         shell: bash
         run: |
-          binary=target/release/drawio-png-cli
+          binary=target/release/d-png-cli
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
-          python scripts/package_binary.py "$binary" "target/drawio-png-cli-$RUNNER_OS-$RUNNER_ARCH.tar.gz"
+          python scripts/package_binary.py "$binary" "target/d-png-cli-$RUNNER_OS-$RUNNER_ARCH.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
-          name: drawio-png-cli-${{ runner.os }}-${{ runner.arch }}
-          path: target/drawio-png-cli-*.tar.gz
+          name: d-png-cli-${{ runner.os }}-${{ runner.arch }}
+          path: target/d-png-cli-*.tar.gz
           if-no-files-found: error

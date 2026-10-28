@@ -1,6 +1,6 @@
 #![cfg(unix)]
 use assert_cmd::{Command, cargo::cargo_bin_cmd};
-use drawio_png_cli::{png_data, render};
+use d_png_cli::{adapters::render::desktop, domain::drawio_png as png_data};
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -13,8 +13,18 @@ const MODEL: &str = include_str!("fixtures/model.xml");
 const MIXED: &str = include_str!("fixtures/mixed-pages.xml");
 
 fn cli() -> Command {
-    let mut command = cargo_bin_cmd!("drawio-png-cli");
-    command.env_remove("DRAWIO_PNG_DRAWIO_ARGS");
+    let mut command = cargo_bin_cmd!("d-png-cli");
+    command
+        .env_remove("D_PNG_DRAWIO_ARGS")
+        .env_remove("D_PNG_RENDERER")
+        .env(
+            "D_PNG_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-user-area"),
+        )
+        .env(
+            "D_PNG_CACHE",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-cache"),
+        );
     command
 }
 
@@ -43,8 +53,8 @@ cp "$(dirname "$0")/plain.png" "$7"
     );
     let output = directory.path().join("output.png");
     cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .args(["embed", "-o"])
+        .env("D_PNG_DRAWIO_PATH", &path)
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MIXED)
         .assert()
@@ -68,11 +78,11 @@ cp "$(dirname "$0")/plain.png" "$7"
     );
     let output = directory.path().join("output.png");
     cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
+        .env("D_PNG_DRAWIO_PATH", &path)
         .args([
-            "embed",
+            "write",
             "--renderer",
-            "desktop",
+            "desktop-app",
             "--default-font",
             "Noto Sans CJK JP",
             "--fallback-font",
@@ -101,7 +111,7 @@ fn renderer_failures_and_invalid_output_are_errors() {
         "echo broken > \"$7\"",
     ] {
         let (_directory, path) = script(body);
-        assert!(render::render_with(&path, MODEL, Duration::from_secs(2)).is_err());
+        assert!(desktop::render_with(&path, MODEL, Duration::from_secs(2)).is_err());
     }
 }
 
@@ -111,8 +121,8 @@ fn renderer_failure_does_not_overwrite_destination() {
     let output = directory.path().join("output.png");
     fs::write(&output, b"original").unwrap();
     cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .args(["embed", "-o"])
+        .env("D_PNG_DRAWIO_PATH", &path)
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -124,7 +134,7 @@ fn renderer_failure_does_not_overwrite_destination() {
 fn timeout_terminates_renderer_promptly() {
     let (_directory, path) = script("exec sleep 30");
     let start = Instant::now();
-    let error = render::render_with(&path, MODEL, Duration::from_millis(80)).unwrap_err();
+    let error = desktop::render_with(&path, MODEL, Duration::from_millis(80)).unwrap_err();
     assert!(error.to_string().contains("timed out"));
     assert!(start.elapsed() < Duration::from_secs(3));
 }
@@ -135,9 +145,9 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
     fs::rename(&path, directory.path().join("drawio")).unwrap();
     let output = directory.path().join("output.png");
     let result = cli()
-        .env_remove("DRAWIO_PNG_DRAWIO_PATH")
+        .env_remove("D_PNG_DRAWIO_PATH")
         .env("PATH", directory.path())
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -147,9 +157,9 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
         .clone();
     assert!(String::from_utf8_lossy(&result).contains("Desktop failed"));
     let result = cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", "does-not-exist")
+        .env("D_PNG_DRAWIO_PATH", "does-not-exist")
         .env("PATH", directory.path())
-        .args(["embed", "-o"])
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -157,7 +167,7 @@ fn path_discovery_works_and_bad_explicit_path_does_not_fall_back() {
         .get_output()
         .stderr
         .clone();
-    assert!(String::from_utf8_lossy(&result).contains("DRAWIO_PNG_DRAWIO_PATH"));
+    assert!(String::from_utf8_lossy(&result).contains("D_PNG_DRAWIO_PATH"));
 }
 
 #[test]
@@ -168,7 +178,7 @@ fn timeout_also_stops_renderer_helpers() {
 wait
 "#,
     );
-    assert!(render::render_with(&path, MODEL, Duration::from_millis(80)).is_err());
+    assert!(desktop::render_with(&path, MODEL, Duration::from_millis(80)).is_err());
     std::thread::sleep(Duration::from_millis(500));
     assert!(!directory.path().join("escaped").exists());
 }
@@ -188,9 +198,9 @@ cp "$(dirname "$0")/plain.png" "$7"
 "#,
     );
     let output = directory.path().join("output.png");
-    cli().current_dir(directory.path()).env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .env("DRAWIO_PNG_DRAWIO_ARGS", r#"--disable-gpu --user-data-dir="/tmp/日本語 profile" '$HOME' '$(touch injected)' '`touch injected`'"#)
-        .args(["embed", "-o"]).arg(&output).write_stdin(MODEL).assert().success();
+    cli().current_dir(directory.path()).env("D_PNG_DRAWIO_PATH", &path)
+        .env("D_PNG_DRAWIO_ARGS", r#"--disable-gpu --user-data-dir="/tmp/日本語 profile" '$HOME' '$(touch injected)' '`touch injected`'"#)
+        .args(["write", "--renderer", "desktop-app", "-o"]).arg(&output).write_stdin(MODEL).assert().success();
     assert_eq!(
         png_data::extract(&fs::read(output).unwrap()).unwrap(),
         MODEL
@@ -204,9 +214,9 @@ fn invalid_environment_options_do_not_start_renderer_or_change_output() {
     let output = directory.path().join("output.png");
     fs::write(&output, b"original").unwrap();
     let result = cli()
-        .env("DRAWIO_PNG_DRAWIO_PATH", &path)
-        .env("DRAWIO_PNG_DRAWIO_ARGS", "--user-data-dir='unfinished")
-        .args(["embed", "-o"])
+        .env("D_PNG_DRAWIO_PATH", &path)
+        .env("D_PNG_DRAWIO_ARGS", "--user-data-dir='unfinished")
+        .args(["write", "--renderer", "desktop-app", "-o"])
         .arg(&output)
         .write_stdin(MODEL)
         .assert()
@@ -214,7 +224,7 @@ fn invalid_environment_options_do_not_start_renderer_or_change_output() {
         .get_output()
         .stderr
         .clone();
-    assert!(String::from_utf8_lossy(&result).contains("invalid DRAWIO_PNG_DRAWIO_ARGS"));
+    assert!(String::from_utf8_lossy(&result).contains("invalid D_PNG_DRAWIO_ARGS"));
     assert!(!directory.path().join("started").exists());
     assert_eq!(fs::read(output).unwrap(), b"original");
 }
