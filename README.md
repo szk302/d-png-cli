@@ -203,7 +203,7 @@ d-png-cli library preview postgres -o candidates.png
 
 ### スコープと取得元
 
-複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.d-png/config.toml`（個人の取得元はユーザーの `config.toml`）にスコープごとに書きます。
+複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.d-png/config.toml`（個人の取得元はユーザーの `config.toml`。[個人のライブラリを複数のプロジェクトで使う](#個人のライブラリを複数のプロジェクトで使う)）にスコープごとに書きます。
 
 ```toml
 [scopes]
@@ -229,6 +229,35 @@ d-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./d-pn
 - XML の参照には版を書きません。保存済みの PNG は参照を含まないため、版を上げても既存の図面は変わりません。
 
 詳細は [仕様の 9 章](docs/spec.md#9-ライブラリ) を参照してください。
+
+### 個人のライブラリを複数のプロジェクトで使う
+
+ライブラリをグローバルにインストールする仕組みはありません。ユーザー領域に置けるのは `config.toml` だけで、ライブラリは各プロジェクトの `.d-png/libraries/` に入れます。どのプロジェクトでも使う個人のライブラリは、ユーザーの `config.toml` に `file:` の取得元を書いておき、プロジェクトごとに取り込みます。
+
+1. ユーザーの `config.toml` にスコープと取得元を書きます。ファイルの場所は Linux が `~/.config/d-png-cli/config.toml`（`$XDG_CONFIG_HOME` があればその下）、macOS が `~/Library/Application Support/d-png-cli/config.toml`、Windows が `%APPDATA%\d-png-cli\config.toml` です（`D_PNG_HOME` で変えられます）。
+
+   ```toml
+   [scopes]
+   mine = "file:~/d-png-libraries"
+   ```
+
+2. 取得元のディレクトリに、ライブラリの版を作ります。プロジェクトの外でも実行できます。
+
+   ```sh
+   d-png-cli library pack ./my-icons.xml ./Logo.svg --name @mine/icons --version 1.0.0 --to ~/d-png-libraries
+   ```
+
+3. 使うプロジェクトで取り込みます。
+
+   ```sh
+   d-png-cli library install @mine/icons    # .d-png/config.toml の [dependencies] と lock.json に記録する
+   d-png-cli library vscode --write         # VS Code 拡張でも使う場合
+   ```
+
+部品を足すときは、取得元で新しい版を作り（`library pack … --version 1.1.0`）、各プロジェクトで `library update @mine/icons` を実行します。
+
+- `~/` は環境変数 `HOME`（なければ `USERPROFILE`）のディレクトリです。相対パスは、ユーザーの `config.toml` を置いたディレクトリ（`D_PNG_HOME`）から解決します。
+- 取得元はユーザーの設定にしかないため、そのリポジトリを clone したほかの人や CI では `library install --frozen` で復元できません（`SCOPE_UNKNOWN`）。ほかの人と共有するリポジトリでは、Git など全員が読める取得元をプロジェクトの `.d-png/config.toml` に書いてください。
 
 ### VS Code 拡張との共有
 
