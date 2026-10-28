@@ -1,8 +1,8 @@
 [package]
 name = "d-png-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
-description = "Extract, validate, and embed editable draw.io diagrams in PNG files"
+description = "Write draw.io diagrams, given as XML, into .drawio.png files that VS Code's draw.io extension can edit"
 license = "MIT AND Apache-2.0 AND Zlib AND BSD-3-Clause"
 repository = "https://github.com/szk302/d-png-cli"
 

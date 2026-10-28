@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.1.0 (matching the version in Cargo.toml) to build the
+# Push a tag such as v0.2.0 (matching the version in Cargo.toml) to build the
 # binaries and publish them as a GitHub release. A tag with a suffix, such as
 # v0.2.0-rc.1, creates a pre-release.
 on:
