@@ -16,7 +16,7 @@
 
 ```sh
 # 例: Linux x86_64。SHA256SUMS で改ざんを確認する
-version=0.2.0
+version=0.2.1
 gh release download "v$version" -R szk302/d-png-cli \
   -p "d-png-cli-$version-x86_64-unknown-linux-musl.tar.gz" -p SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS

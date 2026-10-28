@@ -1,6 +1,6 @@
 [package]
 name = "d-png-cli"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Write draw.io diagrams, given as XML, into .drawio.png files that VS Code's draw.io extension can edit"
 license = "MIT AND Apache-2.0 AND Zlib AND BSD-3-Clause"
