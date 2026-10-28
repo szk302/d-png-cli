@@ -556,6 +556,12 @@ d-png-cli library list [--scope SCOPE] [--json]
 
 `normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリ（clone の直後など）は、`--json` では名前・版・範囲に `"installed":false` を付けて出し、テキストではエントリー数を `-`、表示名を `(not installed)` として、標準エラーで `library install` を案内する。
 
+ライブラリが 1 つもなければ、終了コード `0` のまま標準エラーで案内する。プロジェクトがなければ `init` を、あれば `library add` と `library install`（取得元のあるスコープがあればその名前）を示す。
+
+```
+hint: no libraries yet; register a file with `d-png-cli library add FILE`, or install one with `d-png-cli library install @SCOPE/NAME` (scopes with a source: @acme)
+```
+
 ### 9.8 `library search`
 
 ```
@@ -565,6 +571,7 @@ d-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIN
 - 語を空白で区切り、すべての語がタイトルか ID に含まれる（大文字小文字を区別しない）エントリーを出す。語を省略すると全エントリー。
 - 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位はプロジェクト → 取り込み、ライブラリ名順、エントリー順。
 - `--limit` の既定は `50`（`0` で無制限）。打ち切った場合は全件数を標準エラーに出す。
+- 1 件もなく、プロジェクトかライブラリがなければ、9.7 と同じ案内を標準エラーに出す。
 - テキスト: `参照<TAB>種類<TAB>幅x高さ<TAB>タイトル`（タイトルの改行・タブは空白にして表示）。先頭の列をそのまま XML に写せる。
 
 ```json

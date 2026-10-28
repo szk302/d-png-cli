@@ -537,6 +537,36 @@ impl Context {
         }
     }
 
+    /// When `library list` or `search` finds nothing because there is no
+    /// project or no library, says how to make one or add one.
+    fn hint_empty(&self) {
+        if self.project.is_none() {
+            eprintln!("hint: no project (.d-png/) here or above; run `d-png-cli init`");
+            return;
+        }
+        let (Ok(settings), Ok(listed)) = (
+            self.settings(),
+            self.with_libraries(|libraries| libraries.list()),
+        ) else {
+            return;
+        };
+        if !listed.is_empty() || !settings.dependencies.is_empty() {
+            return;
+        }
+        let install = if settings.scopes.is_empty() {
+            "or give a scope a source in [scopes] of config.toml and run `d-png-cli library install @SCOPE/NAME`".to_owned()
+        } else {
+            let scopes: Vec<String> = settings.scopes.keys().map(|s| format!("@{s}")).collect();
+            format!(
+                "or install one with `d-png-cli library install @SCOPE/NAME` (scopes with a source: {})",
+                scopes.join(", ")
+            )
+        };
+        eprintln!(
+            "hint: no libraries yet; register a file with `d-png-cli library add FILE`, {install}"
+        );
+    }
+
     /// The stores for installing, with the sources as the registry.
     fn with_stores<T>(
         &self,
@@ -958,7 +988,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             if json {
                 print_json(&Value::Array(
                     listed.iter().map(output::library_json).collect(),
-                ))
+                ))?;
             } else {
                 for listed in &listed {
                     let info = &listed.info;
@@ -975,8 +1005,12 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                         );
                     }
                 }
-                print(&listed.iter().map(output::library_line).collect::<String>())
+                print(&listed.iter().map(output::library_line).collect::<String>())?;
             }
+            if listed.is_empty() {
+                context.hint_empty();
+            }
+            Ok(())
         }
         LibraryCommand::Search {
             query,
@@ -1000,10 +1034,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             if json {
                 print_json(&Value::Array(
                     found.hits.iter().map(output::hit_json).collect(),
-                ))
+                ))?;
             } else {
-                print(&found.hits.iter().map(output::hit_line).collect::<String>())
+                print(&found.hits.iter().map(output::hit_line).collect::<String>())?;
             }
+            if found.total == 0 {
+                context.hint_empty();
+            }
+            Ok(())
         }
         LibraryCommand::Show { reference, json } => {
             let (dependencies, lock) = context.dependencies()?;
