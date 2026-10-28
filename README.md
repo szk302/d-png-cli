@@ -207,9 +207,9 @@ d-png-cli library preview postgres -o candidates.png
 
 ```toml
 [scopes]
-acme = "git+https://github.com/acme/drawio-libraries.git"
-partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }
-mine = "file:~/drawio-libraries"
+acme = "git+https://github.com/acme/d-png-libraries.git"
+partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_LIBS_TOKEN" }
+mine = "file:~/d-png-libraries"
 
 [dependencies]
 "@acme/brand" = "^1.0.0"
@@ -221,7 +221,7 @@ d-png-cli library install --frozen           # clone 後・CI で lock.json の�
 d-png-cli library update @acme/brand         # 範囲内の新しい版にする
 
 # 配布する側: 取得元のディレクトリに版を作り、git push などで公開する
-d-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./drawio-libraries
+d-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./d-png-libraries
 ```
 
 - 取得元はディレクトリ（`file:`）・Git・HTTPS のいずれかで、中身は `@<スコープ>/<名前>/versions.json` と版ごとのライブラリファイルです。公開・認証は CLI では扱いません。
@@ -269,7 +269,7 @@ d-png-cli library vscode --write          # VS Code 拡張のライブラリ欄�
 ```
 
 - 複数のリポジトリで同じ図形を使う場合は、スコープを付けて取得元から配布できます（[スコープと取得元](#スコープと取得元)）。
-- AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io 26.0.2 の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
+- AWS などの draw.io 図形名（`shape=mxgraph.*`）を使う図形の描画には、draw.io の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要です。既定の `vscode` では 26.0.2、`raw`・`desktop-compat` では 31.4.5 の資材を指定します。`desktop-app` は Desktop 自身の資材で描くため不要です。四角形・円柱・人型などの基本図形は同梱資材で描画できます。
 - 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認してください。
 
 手順の例は [usecase.md の I](docs/usecase.md#drawio-の図形をライブラリにする) にあります。

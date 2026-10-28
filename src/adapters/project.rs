@@ -106,7 +106,7 @@ const CONFIG: &str = "# d-png-cli project settings (docs/spec.md 2.4)\n\
 # allow-network = false\n\
 #\n\
 # [scopes]\n\
-# acme = \"git+https://github.com/acme/drawio-libraries.git\"\n\
+# acme = \"git+https://github.com/acme/d-png-libraries.git\"\n\
 #\n\
 # [dependencies]\n\
 # \"@acme/brand\" = \"^1.0.0\"\n";

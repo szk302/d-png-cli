@@ -121,7 +121,7 @@ flowchart LR
 
 CLI は draw.io のサイドバーの図形を同梱しない。エージェントに AWS・Azure・Kubernetes などの図形を使わせる場合は、利用者が使う図形を draw.io でライブラリにして `library add` で登録する（[usecase.md の I](usecase.md#drawio-の図形をライブラリにする)）。登録したライブラリは `customLibraries` に出るので、人も拡張のライブラリ欄から同じ図形を置ける。人は拡張の「+ その他の図形」で図形集を有効にして使ってもよいが、エージェントが参照できるのは登録した図形だけである。
 
-AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0（`DIP_DRAWIO_WEB_PATH`）と同じく `D_PNG_DRAWIO_WEB_PATH` の資材が必要である。拡張は自身の資材で描画するため、人の側の準備は不要。
+AWS などの `mxgraph.*` の図形を CLI の Chrome で描く方式（既定の `vscode` など）で描画するには、v0.1.0（`DIP_DRAWIO_WEB_PATH`）と同じく `D_PNG_DRAWIO_WEB_PATH` の資材が必要である（`vscode` では draw.io 26.0.2）。`desktop-app` と拡張は自身の資材で描画するため、この準備は不要。
 
 ## 7. 注意と未検証の事項
 

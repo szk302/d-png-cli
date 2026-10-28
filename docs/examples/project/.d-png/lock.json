@@ -3,7 +3,7 @@
   "libraries": {
     "@acme/brand": {
       "version": "1.0.0",
-      "resolved": "file:../acme-drawio-libraries",
+      "resolved": "file:../acme-d-png-libraries",
       "integrity": "sha256-sBOSRnQChE4BD7t9wykTJVDR5nb4zAIvz/Jkp2UBBYI="
     }
   }

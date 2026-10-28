@@ -6,7 +6,7 @@ use crate::{
         diagram::{Read, Written},
         install::{Change, Packed},
         libraries::Hit,
-        library::{EntryDetails, Listed, Shown},
+        library::{EntryDetails, Listed, Previewed, Shown},
         register::Added,
     },
     domain::{
@@ -253,6 +253,17 @@ pub fn hit_json(hit: &Hit) -> Value {
         value["version"] = json!(version.to_string());
     }
     value
+}
+
+/// `library preview --json`: the image and the entries it shows, as
+/// `library search --json` describes them.
+pub fn previewed_json(previewed: &Previewed, output: &str) -> Value {
+    json!({
+        "output": output,
+        "width": previewed.width,
+        "height": previewed.height,
+        "entries": previewed.entries.iter().map(hit_json).collect::<Vec<_>>(),
+    })
 }
 
 pub fn hit_line(hit: &Hit) -> String {

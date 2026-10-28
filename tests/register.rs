@@ -69,7 +69,7 @@ fn added_libraries_are_written_in_the_normalized_form() {
     assert_eq!(json["entries"][0]["width"], 240.0);
     let written = fs::read_to_string(libraries(dir.path()).join("brand.xml")).unwrap();
     let installed =
-        fs::read_to_string(examples().join("acme-drawio-libraries/@acme/brand/1.0.0.xml")).unwrap();
+        fs::read_to_string(examples().join("acme-d-png-libraries/@acme/brand/1.0.0.xml")).unwrap();
     assert_eq!(
         written.replace("title=\"brand\"", "title=\"ACME Brand\""),
         installed

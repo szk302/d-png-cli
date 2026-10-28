@@ -335,8 +335,8 @@ fallback-fonts = ["Noto Color Emoji"]
 allow-network = true
 
 [scopes]
-acme = "git+https://github.com/acme/drawio-libraries.git"
-partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_TOKEN" }
+acme = "git+https://github.com/acme/d-png-libraries.git"
+partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_TOKEN" }
 
 [dependencies]
 "@acme/brand" = "^1.0.0"
@@ -349,7 +349,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_TOKEN
         assert_eq!(
             settings.scopes["partner"].source,
             Source::Https {
-                url: "https://libs.example.com/drawio/".into(),
+                url: "https://libs.example.com/d-png/".into(),
                 token_env: Some("PARTNER_TOKEN".into())
             }
         );

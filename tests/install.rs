@@ -13,7 +13,7 @@ fn examples() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/examples")
 }
 
-/// A workspace with a source directory `acme-drawio-libraries/`, a project
+/// A workspace with a source directory `acme-d-png-libraries/`, a project
 /// `project/` whose `acme` scope points at it, and its own cache and user area.
 struct Workspace {
     dir: TempDir,
@@ -27,7 +27,7 @@ impl Workspace {
         workspace.run(&["init"]);
         fs::write(
             workspace.config(),
-            "# the company's libraries\n[scopes]\nacme = \"file:../acme-drawio-libraries\"\n",
+            "# the company's libraries\n[scopes]\nacme = \"file:../acme-d-png-libraries\"\n",
         )
         .unwrap();
         workspace
@@ -83,7 +83,7 @@ impl Workspace {
             version,
             "--to",
         ]);
-        command.arg(self.root().join("acme-drawio-libraries"));
+        command.arg(self.root().join("acme-d-png-libraries"));
         stdout(&mut command)
     }
 }
@@ -102,15 +102,10 @@ fn packed_and_installed_files_are_the_examples() {
     );
     for file in ["1.0.0.xml", "versions.json"] {
         assert_eq!(
-            fs::read(
-                w.root()
-                    .join("acme-drawio-libraries/@acme/brand")
-                    .join(file)
-            )
-            .unwrap(),
+            fs::read(w.root().join("acme-d-png-libraries/@acme/brand").join(file)).unwrap(),
             fs::read(
                 examples()
-                    .join("acme-drawio-libraries/@acme/brand")
+                    .join("acme-d-png-libraries/@acme/brand")
                     .join(file)
             )
             .unwrap(),
@@ -120,7 +115,7 @@ fn packed_and_installed_files_are_the_examples() {
     let out = w.run(&["library", "install", "@acme/brand"]);
     assert_eq!(
         out,
-        "installed @acme/brand@1.0.0 (1 entry) from file:../acme-drawio-libraries\n  @acme/brand/logo\timage\t240x120\tLogo\n"
+        "installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries\n  @acme/brand/logo\timage\t240x120\tLogo\n"
     );
     assert_eq!(
         w.lock(),
@@ -129,11 +124,11 @@ fn packed_and_installed_files_are_the_examples() {
     // The dependency is recorded, keeping what was there.
     assert_eq!(
         fs::read_to_string(w.config()).unwrap(),
-        "# the company's libraries\n[scopes]\nacme = \"file:../acme-drawio-libraries\"\n\n[dependencies]\n\"@acme/brand\" = \"^1.0.0\"\n"
+        "# the company's libraries\n[scopes]\nacme = \"file:../acme-d-png-libraries\"\n\n[dependencies]\n\"@acme/brand\" = \"^1.0.0\"\n"
     );
     assert_eq!(
         fs::read(w.installed()).unwrap(),
-        fs::read(examples().join("acme-drawio-libraries/@acme/brand/1.0.0.xml")).unwrap()
+        fs::read(examples().join("acme-d-png-libraries/@acme/brand/1.0.0.xml")).unwrap()
     );
     assert_eq!(
         w.run(&["library", "list", "--scope", "acme"]),
@@ -298,7 +293,7 @@ fn packing_keeps_published_versions_and_ids() {
     again
         .arg(logo())
         .args(["--name", "@acme/brand", "--version", "1.0.0", "--to"])
-        .arg(w.root().join("acme-drawio-libraries"));
+        .arg(w.root().join("acme-d-png-libraries"));
     assert!(stderr(&mut again, 1).contains("VERSION_EXISTS"));
     // A renamed file keeps the entry's ID when its title stays.
     let renamed = w.root().join("renamed");
@@ -316,7 +311,7 @@ fn packing_keeps_published_versions_and_ids() {
     let mut pack = w.command(&["library", "pack"]);
     pack.arg(&other)
         .args(["--name", "@acme/brand", "--version", "1.1.0", "--to"])
-        .arg(w.root().join("acme-drawio-libraries"));
+        .arg(w.root().join("acme-d-png-libraries"));
     let output = pack.assert().success().get_output().clone();
     assert!(String::from_utf8_lossy(&output.stderr).contains("warning[ENTRY_REMOVED]"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("removed: logo"));
@@ -324,7 +319,7 @@ fn packing_keeps_published_versions_and_ids() {
     let mut pack = w.command(&["library", "pack"]);
     pack.arg(logo())
         .args(["--name", "brand", "--version", "1.0.0", "--to"])
-        .arg(w.root().join("acme-drawio-libraries"));
+        .arg(w.root().join("acme-d-png-libraries"));
     stderr(&mut pack, 2);
 }
 
@@ -365,7 +360,7 @@ fn install_problems_change_nothing() {
         assert!(!w.project().join(".d-png/lock.json").exists(), "{args:?}");
     }
     // A source file that does not match versions.json is refused.
-    let file = w.root().join("acme-drawio-libraries/@acme/brand/1.0.0.xml");
+    let file = w.root().join("acme-d-png-libraries/@acme/brand/1.0.0.xml");
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, text.replace("Logo", "Changed")).unwrap();
     let error = w.fail(&["library", "install", "@acme/brand"], 1);

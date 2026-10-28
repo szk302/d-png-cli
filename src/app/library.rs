@@ -10,6 +10,7 @@ use crate::{
     domain::{
         codec,
         diagnostic::{Code, Diagnostic, Diagnostics},
+        drawio_png,
         library::{Description, EntryKind, ImageInfo, Origin},
         lock::Lock,
         preview,
@@ -220,13 +221,22 @@ pub struct PreviewRequest {
     pub query: SearchQuery,
 }
 
-/// A PNG of the chosen entries, each labelled with its reference.
+/// A rendered preview and the entries it shows, in order.
+#[derive(Clone, Debug)]
+pub struct Previewed {
+    pub png: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub entries: Vec<Hit>,
+}
+
+/// Renders the chosen entries, each labelled with its reference, into a PNG.
 pub fn preview(
     libraries: &Libraries<'_>,
     request: &PreviewRequest,
     renderer: &dyn Renderer,
     allow_network: bool,
-) -> Result<Vec<u8>, Diagnostics> {
+) -> Result<Previewed, Diagnostics> {
     let mut chosen: Vec<Ref> = Vec::new();
     let mut problems = Diagnostics::default();
     let mut words = request.query.words.clone();
@@ -302,5 +312,30 @@ pub fn preview(
     let borrowed: Vec<_> = entries.iter().map(|(r, e)| (r.clone(), e)).collect();
     let xml = preview::preview(&borrowed)
         .map_err(|e| Diagnostics::from(Diagnostic::from_error(Code::RefKind, &e)))?;
-    Ok(renderer.render(&xml, 1, allow_network)?)
+    let png = renderer.render(&xml, 1, allow_network)?;
+    let (width, height) = drawio_png::dimensions(&png)
+        .map_err(|e| Diagnostics::from(Diagnostic::from_error(Code::RenderFailed, &e)))?;
+    let versions: BTreeMap<_, _> = libraries
+        .list()?
+        .into_iter()
+        .map(|(_, info)| (info.name, info.version))
+        .collect();
+    let entries = entries
+        .into_iter()
+        .map(|(reference, entry)| Hit {
+            origin: reference.library.origin(),
+            version: versions.get(&reference.library).copied().flatten(),
+            title: entry.title.clone(),
+            kind: entry.kind(),
+            width: entry.width,
+            height: entry.height,
+            reference,
+        })
+        .collect();
+    Ok(Previewed {
+        png,
+        width,
+        height,
+        entries,
+    })
 }

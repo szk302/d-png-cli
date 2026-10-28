@@ -16,12 +16,12 @@ fn examples() -> PathBuf {
 /// installed from the example source.
 fn example_project() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    let source = dir.path().join("acme-drawio-libraries/@acme/brand");
+    let source = dir.path().join("acme-d-png-libraries/@acme/brand");
     fs::create_dir_all(&source).unwrap();
     for file in ["1.0.0.xml", "versions.json"] {
         fs::copy(
             examples()
-                .join("acme-drawio-libraries/@acme/brand")
+                .join("acme-d-png-libraries/@acme/brand")
                 .join(file),
             source.join(file),
         )

@@ -21,7 +21,7 @@ fn load(name: &str, path: PathBuf) -> Library {
 }
 
 /// The example project: three libraries of its own and @acme/brand installed
-/// from examples/acme-drawio-libraries.
+/// from examples/acme-d-png-libraries.
 fn repositories() -> (Memory, Memory) {
     let project = examples().join("project/.d-png/libraries");
     (
@@ -37,7 +37,7 @@ fn repositories() -> (Memory, Memory) {
             origin: Origin::Installed,
             libraries: vec![load(
                 "@acme/brand",
-                examples().join("acme-drawio-libraries/@acme/brand/1.0.0.xml"),
+                examples().join("acme-d-png-libraries/@acme/brand/1.0.0.xml"),
             )],
         },
     )

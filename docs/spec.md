@@ -100,7 +100,7 @@ error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
 | `IMAGE_CHANGED` | 指紋付きの画像参照に一致する画像が登録ライブラリにない |
 | `LIBRARY_EXISTS`・`LIBRARY_INVALID` | 同名のライブラリがある、ライブラリ・エントリーを解析できない |
 | `CONFIG_INVALID` | `config.toml` を解析できない・未知のキーや不正な値がある、`.vscode/settings.json` を JSONC として解析できない |
-| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（登録・取り込み・取り込んだライブラリの参照）で、`.d-png/` が見つからない |
+| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（`library add`・`install`・`remove`・`vscode` など）で、`.d-png/` が見つからない。図面の参照は解決できないため `REF_NOT_FOUND` になる（[9.1](#91-種類と探索順)） |
 | `SCOPE_UNKNOWN`・`SOURCE_FETCH` | スコープに取得元が設定されていない、取得元から取得できない |
 | `VERSION_NOT_FOUND`・`VERSION_EXISTS` | 範囲に合う版がない、`library pack` で同じ版が既にある |
 | `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 依存にあるライブラリが取り込まれていない、取り込んだファイルがロックファイルの完全性と合わない |
@@ -129,8 +129,8 @@ fallback-fonts = ["Noto Sans CJK JP", "Noto Color Emoji"]
 allow-network = false
 
 [scopes]
-acme = "git+https://github.com/acme/drawio-libraries.git"
-partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }
+acme = "git+https://github.com/acme/d-png-libraries.git"
+partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_LIBS_TOKEN" }
 
 [dependencies]
 "@acme/brand" = "^1.0.0"
@@ -138,7 +138,7 @@ partner = { url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_
 
 | セクション | 書ける場所 | 内容 |
 | --- | --- | --- |
-| `[render]` | プロジェクト・ユーザー | 描画の設定。`write` と `library preview` が使う。フォントの指定は、埋め込む XML を同じにするため `expand` にも適用する |
+| `[render]` | プロジェクト・ユーザー | 描画の設定。`write` が使う。フォントの指定は、埋め込む XML を同じにするため `expand` にも適用する。`library preview` は `allow-network` だけを使う（描画方式は常に `vscode`） |
 | `[scopes]` | プロジェクト・ユーザー | スコープと取得元の対応（[9.5](#95-スコープと取得元)）。同じスコープはプロジェクトの設定を使う |
 | `[dependencies]` | プロジェクトだけ | 取り込むライブラリと版の範囲（[9.6](#96-依存関係とロックファイル)）。`library install`・`update`・`remove` が書き換える。手で書いてもよい |
 
@@ -338,10 +338,12 @@ v0.1.0 の `--renderer` と `--chromium-mode` を 1 つにまとめ、無効な�
 
 ### 5.3 `--json` の出力
 
+[usecase.md](usecase.md) の A の円柱、E の分岐、D のロゴを 1 つの図面に置いた場合:
+
 ```json
 {
   "output": "diagram.drawio.png",
-  "width": 512, "height": 330,
+  "width": 541, "height": 221,
   "renderer": "vscode", "page": 1, "pages": 1,
   "expanded": [
     {"page": 1, "pageName": "構成図", "cell": "orders", "ref": "shapes/cylinder", "type": "cells", "ids": ["orders"]},
@@ -391,8 +393,10 @@ d-png-cli validate [INPUT] [--json]
 
 `write` の描画前までの処理（PNG の検査、ページの展開、参照の展開、[4.5](#45-展開後の検証) の検証）を行い、ファイルを書かない。登録ライブラリを読むため、参照先の存在・種類・上書きの可否まで検査できる。CI では `validate` と `library sync --check` を使う。
 
+[usecase.md](usecase.md) の H の XML の場合（`cells` は展開後の全ページのセル数で基盤セルを含む、`refs` は展開した参照の数）:
+
 ```json
-{"valid":true,"pages":1,"cells":14,"refs":7,"warnings":[]}
+{"valid":true,"pages":1,"cells":9,"refs":4,"warnings":[]}
 ```
 
 エラーがあれば終了コード `1` で、[2.3](#23-エラーと警告) の形式で標準エラーに出す。
@@ -462,9 +466,9 @@ d-png-cli validate [INPUT] [--json]
 
 | 取得元 | 書き方の例 | 取得の方法 |
 | --- | --- | --- |
-| ディレクトリ | `"file:../drawio-libraries"`、`"file:~/drawio-libraries"` | ファイルを読む。相対パスはプロジェクトのルート（`.d-png/` の親。ユーザーの設定では `D_PNG_HOME`）から |
-| Git | `"git+https://github.com/acme/drawio-libraries.git"`、`"git+ssh://git@github.com/acme/drawio-libraries.git#release"` | `git` コマンドで取得する。`#` の後はブランチまたはタグ（省略時は既定のブランチ）。認証は Git の設定（認証ヘルパー・SSH 鍵）に任せる |
-| HTTPS | `{ url = "https://libs.example.com/drawio/", token-env = "PARTNER_LIBS_TOKEN" }` | `curl` コマンドで HTTPS から取得する。`token-env` があれば、その環境変数の値を `Authorization: Bearer` で送る（コマンドラインには出さない） |
+| ディレクトリ | `"file:../d-png-libraries"`、`"file:~/d-png-libraries"` | ファイルを読む。相対パスはプロジェクトのルート（`.d-png/` の親。ユーザーの設定では `D_PNG_HOME`）から |
+| Git | `"git+https://github.com/acme/d-png-libraries.git"`、`"git+ssh://git@github.com/acme/d-png-libraries.git#release"` | `git` コマンドで取得する。`#` の後はブランチまたはタグ（省略時は既定のブランチ）。認証は Git の設定（認証ヘルパー・SSH 鍵）に任せる |
+| HTTPS | `{ url = "https://libs.example.com/d-png/", token-env = "PARTNER_LIBS_TOKEN" }` | `curl` コマンドで HTTPS から取得する。`token-env` があれば、その環境変数の値を `Authorization: Bearer` で送る（コマンドラインには出さない） |
 
 取得元の中身は、種類によらず次の構成とする。1 つの取得元に複数のスコープを置ける。CLI は設定したスコープの `@<スコープ>/` の下だけを読む。
 
@@ -477,7 +481,7 @@ d-png-cli validate [INPUT] [--json]
       1.1.0.xml
 ```
 
-`versions.json`（[例](examples/acme-drawio-libraries/@acme/brand/versions.json)）:
+`versions.json`（[例](examples/acme-d-png-libraries/@acme/brand/versions.json)）:
 
 ```json
 {
@@ -522,7 +526,7 @@ d-png-cli validate [INPUT] [--json]
   "libraries": {
     "@acme/brand": {
       "version": "1.0.0",
-      "resolved": "git+https://github.com/acme/drawio-libraries.git#<コミット>",
+      "resolved": "git+https://github.com/acme/d-png-libraries.git#<コミット>",
       "integrity": "sha256-sBOSRnQChE4BD7t9wykTJVDR5nb4zAIvz/Jkp2UBBYI="
     }
   }
@@ -543,8 +547,10 @@ d-png-cli library list [--scope SCOPE] [--json]
 
 テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクト → 取り込みの順で、それぞれ名前順。`--scope acme` でそのスコープのライブラリだけを出す。
 
+例のプロジェクトでの出力（プロジェクト専用の `components`・`shapes` は省略）:
+
 ```json
-[{"name":"simple-icons","origin":"project","title":"Simple Icons","entries":3466,"file":".d-png/libraries/simple-icons.xml","normalized":true},
+[{"name":"simple-icons","origin":"project","title":"Simple Icons","entries":1,"file":".d-png/libraries/simple-icons.xml","normalized":true},
  {"name":"@acme/brand","origin":"installed","version":"1.0.0","range":"^1.0.0","title":"ACME Brand","entries":1,"file":".d-png/libraries/@acme/brand.xml","normalized":true}]
 ```
 
@@ -599,10 +605,18 @@ d-png-cli library show REF [--json]
 ### 9.10 `library preview`
 
 ```
-d-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scope SCOPE] [--kind KIND] [--allow-network]
+d-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scope SCOPE] [--kind KIND] [--allow-network] [--json]
 ```
 
 該当するエントリーを、参照文字列とタイトル付きで並べた PNG を `vscode` レンダラーで描く。`/` を含む引数と `@` で始まる引数は参照文字列（ライブラリ名ならその全エントリー）、それ以外は検索語として扱う。60 件を超える場合は絞り込みを求めるエラーにする。
+
+`--json` は、画像の大きさと、描いたエントリーを描いた順に出す。各エントリーは `library search --json`（[9.8](#98-library-search)）と同じ形。`-o -`（標準出力）とは併用できない。
+
+```json
+{"output":"candidates.png","width":310,"height":115,
+ "entries":[{"ref":"shapes/cylinder","library":"shapes","id":"cylinder","title":"Cylinder","kind":"shape","width":60,"height":80,"origin":"project"},
+            {"ref":"simple-icons/postgresql","library":"simple-icons","id":"postgresql","title":"PostgreSQL","kind":"image","width":48,"height":48,"origin":"project"}]}
+```
 
 ### 9.11 `library add`
 
@@ -643,7 +657,7 @@ d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
 - 出力: 追加・更新・削除したライブラリの名前・版・エントリー数。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
 
 ```
-installed @acme/brand@1.0.0 (1 entry) from file:../acme-drawio-libraries
+installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries
   @acme/brand/logo	image	240x120	Logo
 hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
@@ -769,6 +783,6 @@ v0.1.0 の後に開発版（`main` ブランチ）に入り、リリースしな
 - VS Code 拡張 1.9.0（タグ `v1.9.0`）のソースで、`customLibraries` の読み込み方法と `extensionKind` を確認した。拡張が使う `xml-parser-xo` 3.1.0 と同じ手順で、例のライブラリと実物の Simple Icons for draw.io 16.35.0 を読み、CDATA 形式が失敗し、CLI の書式が成功することを確かめた。実体参照を使った書式は、パーサーのソースから読めないと判断した（実行はしていない）。
 - draw.io 26.0.2 の `app.min.js` と 31.4.6 のソースで、`data` エントリーの画像の変換（`convertDataUri`）とライブラリの保存処理を確認した。
 - B〜E・G の「CLI がない場合の XML」は、0.1.0 系の CLI で `validate` を通し、Chrome の vscode モード（draw.io 26.0.2 の Web 資材）で描画した（`expected.drawio.png`）。利用者ライブラリの部品は 0.1.0 系の `insert` でも展開し、ID・位置・サイズ・画像の値が一致することを確かめた。A・F・H は v0.2.0 の CLI の `write`（vscode、同梱資材のみ）で描画した。全ケースの展開結果は `tests/acceptance.rs` で検査している。
-- 名前空間の例（[examples/acme-drawio-libraries/](examples/acme-drawio-libraries/)・[lock.json](examples/project/.d-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
+- 名前空間の例（[examples/acme-d-png-libraries/](examples/acme-d-png-libraries/)・[lock.json](examples/project/.d-png/lock.json)）は、`library pack`・`library install` が書くファイルとバイト単位で一致することを `tests/install.rs` で検査している。npm との対応は仕様上の対応である。
 - テキストの出力例と `--json` の例は、例のプロジェクトで実行した結果と照合した。実際の `--json` はキーをアルファベット順に並べ、幅・高さを `48.0` の形で出す。
 - VS Code 上での操作、リモート環境（devcontainer・WSL）での拡張の動作は確認していない。

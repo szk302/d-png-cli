@@ -96,23 +96,23 @@ mod tests {
             }
         );
         let git = Source::parse(
-            "git+https://github.com/acme/drawio-libraries.git#release",
+            "git+https://github.com/acme/d-png-libraries.git#release",
             None,
         )
         .unwrap();
         assert_eq!(
             git,
             Source::Git {
-                url: "https://github.com/acme/drawio-libraries.git".into(),
+                url: "https://github.com/acme/d-png-libraries.git".into(),
                 reference: Some("release".into())
             }
         );
         assert_eq!(
             git.to_string(),
-            "git+https://github.com/acme/drawio-libraries.git#release"
+            "git+https://github.com/acme/d-png-libraries.git#release"
         );
-        let https = Source::parse("https://libs.example.com/drawio/", Some("TOKEN")).unwrap();
-        assert_eq!(https.to_string(), "https://libs.example.com/drawio/");
+        let https = Source::parse("https://libs.example.com/d-png/", Some("TOKEN")).unwrap();
+        assert_eq!(https.to_string(), "https://libs.example.com/d-png/");
         for (url, token) in [
             ("http://insecure/", None),
             ("git+file:///x", None),

@@ -636,7 +636,7 @@ hint: run `d-png-cli library vscode --write` to use it in VS Code
 `library install` の出力例:
 
 ```
-installed @acme/brand@1.0.0 (1 entry) from file:../acme-drawio-libraries
+installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries
   @acme/brand/logo	image	240x120	Logo
 hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
@@ -700,20 +700,20 @@ added shapes (project, 3 entries) -> .d-png/libraries/shapes.xml
 ```
 
 - 登録したファイルは VS Code 拡張にも出るので、人も同じ図形をライブラリ欄から置ける。
-- `shape=mxgraph.*` の図形（AWS など）の描画には、draw.io の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要である。この例の基本図形は同梱の資材で描ける。
+- `shape=mxgraph.*` の図形（AWS など）を Chrome で描く方式（既定の `vscode` など）で描画するには、draw.io の Web 資材（`D_PNG_DRAWIO_WEB_PATH`）が必要である（`desktop-app` では不要）。この例の基本図形は同梱の資材で描ける。
 - 図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認する。
 
 ### 共有ライブラリを取り込む
 
-**CLI に渡す設定**（[examples/project/.d-png/config.toml](examples/project/.d-png/config.toml)）。実際のチームでは `acme` に Git の取得元（`git+https://github.com/acme/drawio-libraries.git`）を書く。この例では、同じ構成のディレクトリ [examples/acme-drawio-libraries/](examples/acme-drawio-libraries/) を `file:` で指している。
+**CLI に渡す設定**（[examples/project/.d-png/config.toml](examples/project/.d-png/config.toml)）。実際のチームでは `acme` に Git の取得元（`git+https://github.com/acme/d-png-libraries.git`）を書く。この例では、同じ構成のディレクトリ [examples/acme-d-png-libraries/](examples/acme-d-png-libraries/) を `file:` で指している。
 
 ```toml
 # d-png-cli の設定（spec.md 2.4）
 
 [scopes]
-# 実際のチームでは "git+https://github.com/acme/drawio-libraries.git" のような Git の取得元を書く。
-# この例では、同じ構成のディレクトリ examples/acme-drawio-libraries を指す（相対パスはプロジェクトのルートから）。
-acme = "file:../acme-drawio-libraries"
+# 実際のチームでは "git+https://github.com/acme/d-png-libraries.git" のような Git の取得元を書く。
+# この例では、同じ構成のディレクトリ examples/acme-d-png-libraries を指す（相対パスはプロジェクトのルートから）。
+acme = "file:../acme-d-png-libraries"
 
 [dependencies]
 "@acme/brand" = "^1.0.0"
@@ -729,14 +729,14 @@ acme = "file:../acme-drawio-libraries"
   "libraries": {
     "@acme/brand": {
       "version": "1.0.0",
-      "resolved": "file:../acme-drawio-libraries",
+      "resolved": "file:../acme-d-png-libraries",
       "integrity": "sha256-sBOSRnQChE4BD7t9wykTJVDR5nb4zAIvz/Jkp2UBBYI="
     }
   }
 }
 ```
 
-取り込まれるファイルは、取得元の [1.0.0.xml](examples/acme-drawio-libraries/@acme/brand/1.0.0.xml) と同じバイト列である。
+取り込まれるファイルは、取得元の [1.0.0.xml](examples/acme-d-png-libraries/@acme/brand/1.0.0.xml) と同じバイト列である。
 
 ```xml
 <mxlibrary title="ACME Brand">[
@@ -791,10 +791,10 @@ d-png-cli library install --frozen   # lock.json と違う版を選ばない。�
 
 **依頼例:**「会社ロゴのライブラリを `@acme/brand` として社内のリポジトリに公開し、各プロジェクトで使えるようにしてください」
 
-ライブラリを配布する側の作業である。取得元は、[spec.md 9.5](spec.md#95-スコープと取得元) の構成を持つディレクトリ（ここでは Git リポジトリ `acme/drawio-libraries` の作業ツリー）とする。
+ライブラリを配布する側の作業である。取得元は、[spec.md 9.5](spec.md#95-スコープと取得元) の構成を持つディレクトリ（ここでは Git リポジトリ `acme/d-png-libraries` の作業ツリー）とする。
 
 ```sh
-cd ~/src/acme-drawio-libraries
+cd ~/src/acme-d-png-libraries
 d-png-cli library pack ../assets/Logo.svg --name @acme/brand --title "ACME Brand" --version 1.0.0 --to .
 git add @acme/brand && git commit -m "@acme/brand 1.0.0" && git push
 ```
@@ -809,7 +809,7 @@ packed @acme/brand@1.0.0 (1 entry) -> ./@acme/brand/1.0.0.xml
 
 **CLI に渡すもの:** ロゴの画像ファイル（[examples/sources/Logo.svg](examples/sources/Logo.svg)）と、名前・版。
 
-**CLI がない場合に手で作るファイル**（`library pack` が書くものと同じ）。[1.0.0.xml](examples/acme-drawio-libraries/@acme/brand/1.0.0.xml) は I に載せたもので、加えて版の一覧を書く。
+**CLI がない場合に手で作るファイル**（`library pack` が書くものと同じ）。[1.0.0.xml](examples/acme-d-png-libraries/@acme/brand/1.0.0.xml) は I に載せたもので、加えて版の一覧を書く。
 
 ```json
 {
@@ -883,5 +883,5 @@ d-png-cli validate diagram.drawio.png                        # 保存された�
 | `REF_ID_CONFLICT` | プレースホルダーの ID を変える。`set` の ID を接続先にしていれば、`library show` の `cells` から実際のセルの ID（`<ID>-n`）に直す |
 | `ID_DANGLING`・`ID_DUPLICATE` | `parent`・`source`・`target` の参照先と ID の重複を直す。報告は全件まとめて出るので一度に直す |
 | `IMAGE_CHANGED` | ライブラリの画像が抽出後に変わった。元の画像を保つなら `expand` で元の PNG から実画像を取り出して戻す。最新の画像でよいなら `@…` を消す |
-| `ASSET_MISSING`・`RENDERER_NOT_FOUND` | 報告された資材・レンダラーを用意する。別の部品への置き換えや `--metadata-only` で完了扱いにしない |
+| `ASSET_MISSING`・`RENDERER_NOT_FOUND` | 使っている描画方式に足りないもの（Chrome・draw.io Desktop・Web 資材）を確かめ、利用者に用意を依頼する（`d-png-cli skill` の準備の表）。`--renderer` を変えたり、別の部品への置き換えや `--metadata-only` で完了扱いにしたりしない |
 | VS Code でライブラリが表示されない | `library list --json` の `normalized` と `library sync --check` を確認し、図面を開き直す（[vscode.md](vscode.md#7-注意と未検証の事項)） |

@@ -48,7 +48,7 @@ mod output;
     name = "d-png-cli",
     version,
     about = "Write draw.io diagrams, given as XML on standard input, into PNG images that VS Code's draw.io extension can edit",
-    after_help = "Environment:\n  D_PNG_PROJECT          Directory holding the project area (.d-png/)\n  D_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  D_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  D_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  D_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  D_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  D_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
+    after_help = "Environment:\n  D_PNG_PROJECT          Directory holding the project area (.d-png/)\n  D_PNG_HOME             Directory of the user's config.toml\n  D_PNG_CACHE            Cache of files fetched from library sources\n  D_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  D_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  D_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  D_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  D_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  D_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
 )]
 struct Cli {
     /// Directory holding the project area (.d-png/); default: the nearest above the current directory
@@ -135,10 +135,11 @@ enum Command {
     Init {
         /// Directory to create it in (default: the current directory)
         dir: Option<PathBuf>,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
-    /// Find, inspect and preview library entries
+    /// Register, install and share libraries; find, inspect and preview their entries
     Library {
         #[command(subcommand)]
         command: LibraryCommand,
@@ -171,6 +172,7 @@ enum LibraryCommand {
         /// Leave out entries that cannot be expanded instead of failing
         #[arg(long)]
         skip_invalid: bool,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -184,6 +186,7 @@ enum LibraryCommand {
         /// Use only the cache of fetched files
         #[arg(long)]
         offline: bool,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -197,6 +200,7 @@ enum LibraryCommand {
         /// Report the changes without writing
         #[arg(long)]
         dry_run: bool,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -220,6 +224,7 @@ enum LibraryCommand {
         /// Leave out entries that cannot be expanded instead of failing
         #[arg(long)]
         skip_invalid: bool,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -231,6 +236,7 @@ enum LibraryCommand {
         /// Update .vscode/settings.json, keeping other settings, comments and items
         #[arg(long)]
         write: bool,
+        /// With --write, print a JSON summary to standard output (the setting is always JSON)
         #[arg(long)]
         json: bool,
     },
@@ -238,6 +244,7 @@ enum LibraryCommand {
     Remove {
         /// Library name or reference string
         reference: String,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -248,6 +255,7 @@ enum LibraryCommand {
         /// Only report libraries that need it, with exit code 1
         #[arg(long)]
         check: bool,
+        /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
@@ -256,6 +264,7 @@ enum LibraryCommand {
         /// Only libraries of this scope
         #[arg(long)]
         scope: Option<String>,
+        /// Print the result as JSON to standard output
         #[arg(long)]
         json: bool,
     },
@@ -268,6 +277,7 @@ enum LibraryCommand {
         /// Most results to print; 0 for all
         #[arg(long, default_value_t = 50)]
         limit: usize,
+        /// Print the result as JSON to standard output
         #[arg(long)]
         json: bool,
     },
@@ -275,6 +285,7 @@ enum LibraryCommand {
     Show {
         /// Library name or reference string
         reference: String,
+        /// Print the result as JSON to standard output
         #[arg(long)]
         json: bool,
     },
@@ -283,7 +294,7 @@ enum LibraryCommand {
         /// References, library names (all their entries) or search words
         #[arg(required_unless_present_any = ["library", "scope", "kind"])]
         targets: Vec<String>,
-        /// PNG file to write
+        /// PNG file to write ("-" for standard output)
         #[arg(short, long)]
         output: PathBuf,
         #[command(flatten)]
@@ -291,6 +302,9 @@ enum LibraryCommand {
         /// Allow external HTTP(S) images and fonts
         #[arg(long)]
         allow_network: bool,
+        /// Print the image size and the entries shown as JSON to standard output
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -373,7 +387,8 @@ impl Command {
             Command::Library { command } => match command {
                 LibraryCommand::List { json, .. }
                 | LibraryCommand::Search { json, .. }
-                | LibraryCommand::Show { json, .. } => *json,
+                | LibraryCommand::Show { json, .. }
+                | LibraryCommand::Preview { json, .. } => *json,
                 LibraryCommand::Add { json, .. }
                 | LibraryCommand::Remove { json, .. }
                 | LibraryCommand::Sync { json, .. }
@@ -381,7 +396,6 @@ impl Command {
                 | LibraryCommand::Update { json, .. }
                 | LibraryCommand::Pack { json, .. }
                 | LibraryCommand::Vscode { json, .. } => *json,
-                LibraryCommand::Preview { .. } => false,
             },
             Command::Skill | Command::Licenses => false,
         }
@@ -748,13 +762,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 skip_invalid,
             };
             let added = register::add(&store, request)?;
-            context.hint_vscode(added.location.iter().cloned().collect());
             if json {
-                print_json(&output::added_json(&added))
+                print_json(&output::added_json(&added))?;
             } else {
                 eprint!("{}", output::diagnostics(&[], &added.skipped, false));
-                print(&output::added_text(&added))
+                print(&output::added_text(&added))?;
             }
+            context.hint_vscode(added.location.iter().cloned().collect());
+            Ok(())
         }
         LibraryCommand::Install {
             names,
@@ -769,6 +784,11 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             let changes = context.with_stores(offline, |stores| {
                 install::install(stores, &install::InstallRequest { add, frozen })
             })??;
+            if json {
+                print_json(&output::changes_json(&changes))?;
+            } else {
+                print(&output::changes_text(&changes, false))?;
+            }
             context.hint_vscode(
                 changes
                     .iter()
@@ -783,11 +803,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                     })
                     .collect(),
             );
-            if json {
-                print_json(&output::changes_json(&changes))
-            } else {
-                print(&output::changes_text(&changes, false))
-            }
+            Ok(())
         }
         LibraryCommand::Update {
             names,
@@ -1005,17 +1021,33 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             output,
             filter,
             allow_network,
+            json,
         } => {
+            let to_stdout = output.as_os_str() == "-";
+            if to_stdout && json {
+                return Err(usage("--json writes to standard output; give -o a file").into());
+            }
             let request = PreviewRequest {
                 targets,
                 query: filter.query()?,
             };
             let renderer = RendererKind::Vscode.renderer();
             let allow_network = context.allow_network(allow_network)?;
-            let png = context.with_libraries(|libraries| {
+            let previewed = context.with_libraries(|libraries| {
                 library::preview(libraries, &request, renderer.as_ref(), allow_network)
             })?;
-            write_file(&output, &png)
+            if to_stdout {
+                write_stdout(&previewed.png)?;
+            } else {
+                write_file(&output, &previewed.png)?;
+            }
+            if json {
+                print_json(&output::previewed_json(
+                    &previewed,
+                    &output.display().to_string(),
+                ))?;
+            }
+            Ok(())
         }
     }
 }

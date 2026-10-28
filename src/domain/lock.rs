@@ -93,7 +93,7 @@ mod tests {
             LibraryName::parse("@acme/brand").unwrap(),
             Locked {
                 version: "1.0.0".parse().unwrap(),
-                resolved: "file:../acme-drawio-libraries".into(),
+                resolved: "file:../acme-d-png-libraries".into(),
                 integrity: "sha256-x".into(),
             },
         );

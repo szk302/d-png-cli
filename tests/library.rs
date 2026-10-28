@@ -472,6 +472,14 @@ fn preview_lays_out_labelled_entries_and_limits_their_number() {
     let none = stderr(&mut preview(&["no such shape"]), 1);
     assert!(none.contains("no entries match"), "{none}");
     stderr(&mut preview(&[]), 2);
+    // JSON and the image cannot share standard output.
+    let both = stderr(
+        cli()
+            .current_dir(directory.path())
+            .args(["library", "preview", "card", "--json", "-o", "-"]),
+        2,
+    );
+    assert!(both.contains("give -o a file"), "{both}");
     assert!(!output.exists());
 }
 

@@ -682,16 +682,39 @@ fn real_chromium_previews_a_custom_library_without_web_assets() {
     )
     .unwrap();
     let output = dir.path().join("preview.png");
-    cli()
+    let printed = cli()
         .env("D_PNG_CHROME_PATH", program)
         .env("D_PNG_CHROME_ARGS", shell_words::join(args))
         .current_dir(dir.path())
-        .args(["library", "preview", "dot", "--library", "icons", "-o"])
+        .args([
+            "library",
+            "preview",
+            "dot",
+            "--library",
+            "icons",
+            "--json",
+            "-o",
+        ])
         .arg(&output)
-        .assert()
-        .success();
+        .output()
+        .unwrap();
+    assert!(
+        printed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&printed.stderr)
+    );
     let (width, height, rgba) = pixels(&fs::read(&output).unwrap());
     assert!(width > 32 && height > 32);
+    // The summary describes the image and the entries it shows.
+    let summary: serde_json::Value = serde_json::from_slice(&printed.stdout).unwrap();
+    assert_eq!(summary["output"], output.display().to_string());
+    assert_eq!(
+        (summary["width"].as_u64(), summary["height"].as_u64()),
+        (Some(width.into()), Some(height.into()))
+    );
+    assert_eq!(summary["entries"][0]["ref"], "icons/red-dot");
+    assert_eq!(summary["entries"][0]["kind"], "image");
+    assert_eq!(summary["entries"].as_array().unwrap().len(), 1);
     // The icon itself is drawn, not only its label.
     assert!(
         rgba.chunks(4)
