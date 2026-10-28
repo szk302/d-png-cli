@@ -2,7 +2,7 @@
 
 `d-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`dpng-ref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
 
-> **v0.2.0 は未リリースです。** この README は v0.2.0（[仕様](docs/spec.md)）の使い方で、このブランチをソースからビルドすると使えます。GitHub Releases の最新版は v0.1.0（実行ファイル名は `dip`）で、コマンドが異なります（[v0.1.0 の README](https://github.com/szk302/d-png-cli/blob/v0.1.0/README.md)）。v0.1.0 からの変更は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています。
+> v0.1.0（実行ファイル名は `dip`）からは、実行ファイル名・コマンド・環境変数が変わっています。変更点は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています（[v0.1.0 の README](https://github.com/szk302/d-png-cli/blob/v0.1.0/README.md)）。
 
 ## インストール
 

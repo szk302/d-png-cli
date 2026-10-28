@@ -24,8 +24,9 @@ jobs:
             exit 1
           fi
 
-  # The same checks as for pull requests and main: licenses, formatting,
-  # lints, tests and real Chromium rendering on Linux, macOS and Windows.
+  # The same checks as for pull requests and main: licenses, then
+  # formatting, lints and tests on Linux, macOS and Windows, and real
+  # Chromium rendering on Linux.
   ci:
     uses: ./.github/workflows/ci.yml
 
