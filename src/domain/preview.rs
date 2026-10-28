@@ -67,7 +67,7 @@ pub fn preview(entries: &[(Ref, &Entry)]) -> Result<String> {
             String::new()
         };
         cells.push_str(&format!(
-            r#"<mxCell id="entry{index}" parent="1" libref="{}"><mxGeometry x="{}" y="{}"{size} as="geometry"/></mxCell>"#,
+            r#"<mxCell id="entry{index}" parent="1" dpng-ref="{}"><mxGeometry x="{}" y="{}"{size} as="geometry"/></mxCell>"#,
             codec::attribute(&reference.to_string()),
             codec::number(x + (slot - width) / 2.0),
             codec::number(y + LABEL + 4.0 + (shown - height) / 2.0),

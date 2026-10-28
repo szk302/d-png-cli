@@ -174,7 +174,7 @@ fn show_describes_libraries_and_entries() {
     );
     assert_eq!(
         card["example"],
-        r#"<mxCell id="ID" parent="1" libref="icons/card"><mxGeometry x="0" y="0" as="geometry"/></mxCell>"#
+        r#"<mxCell id="ID" parent="1" dpng-ref="icons/card"><mxGeometry x="0" y="0" as="geometry"/></mxCell>"#
     );
     let raw: serde_json::Value = serde_json::from_str(&run(
         dir.path(),
@@ -229,11 +229,11 @@ fn show_describes_libraries_and_entries() {
 #[test]
 fn diagrams_use_project_libraries() {
     let dir = project();
-    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" libref="icons/icon-a"><mxGeometry width="48" as="geometry"/></mxCell><mxCell id="c" parent="1" libref="icons/card"/></root></mxGraphModel>"#;
+    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" dpng-ref="icons/icon-a"><mxGeometry width="48" as="geometry"/></mxCell><mxCell id="c" parent="1" dpng-ref="icons/card"/></root></mxGraphModel>"#;
     let out = stdout(cli().current_dir(dir.path()).arg("expand").write_stdin(xml));
     diagram::validate(&out).unwrap();
     assert!(out.contains("owner=\"team\""));
-    assert!(!out.contains("libref"));
+    assert!(!out.contains("dpng-ref"));
     // Project references need a project.
     let elsewhere = tempdir().unwrap();
     let error = stderr(
@@ -518,7 +518,7 @@ fn preview_and_write_render_stencil_shapes_with_web_assets() {
     );
     assert!(preview.starts_with(d_png_cli::domain::drawio_png::SIGNATURE));
     // A stencil shape written by reference, on the second page.
-    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" libref="flowchart/database"/></root></mxGraphModel></diagram></mxfile>"#;
+    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" dpng-ref="flowchart/database"/></root></mxGraphModel></diagram></mxfile>"#;
     let png = render(
         &["write", "--page", "2"],
         &directory.path().join("database.png"),
@@ -527,5 +527,5 @@ fn preview_and_write_render_stencil_shapes_with_web_assets() {
     let (width, height) = d_png_cli::domain::drawio_png::dimensions(&png).unwrap();
     assert_eq!((width, height), (61, 61));
     let xml = d_png_cli::domain::drawio_png::extract(&png).unwrap();
-    assert!(xml.contains("shape=mxgraph.flowchart.database") && !xml.contains("libref"));
+    assert!(xml.contains("shape=mxgraph.flowchart.database") && !xml.contains("dpng-ref"));
 }

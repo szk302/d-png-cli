@@ -196,18 +196,18 @@ fn without_image_data(style: &str, reference: &Ref) -> String {
 /// A placeholder for the kind of entry: a size for images and shapes, ends
 /// for edges.
 fn example(reference: &Ref, kind: EntryKind, width: f64, height: f64) -> String {
-    let libref = codec::attribute(&reference.to_string());
+    let target = codec::attribute(&reference.to_string());
     match kind {
         EntryKind::Edge => format!(
-            r#"<mxCell id="ID" parent="1" source="SOURCE" target="TARGET" libref="{libref}"><mxGeometry relative="1" as="geometry"/></mxCell>"#
+            r#"<mxCell id="ID" parent="1" source="SOURCE" target="TARGET" dpng-ref="{target}"><mxGeometry relative="1" as="geometry"/></mxCell>"#
         ),
         EntryKind::Image | EntryKind::Shape => format!(
-            r#"<mxCell id="ID" parent="1" libref="{libref}"><mxGeometry x="0" y="0" width="{}" height="{}" as="geometry"/></mxCell>"#,
+            r#"<mxCell id="ID" parent="1" dpng-ref="{target}"><mxGeometry x="0" y="0" width="{}" height="{}" as="geometry"/></mxCell>"#,
             codec::number(width),
             codec::number(height)
         ),
         _ => format!(
-            r#"<mxCell id="ID" parent="1" libref="{libref}"><mxGeometry x="0" y="0" as="geometry"/></mxCell>"#
+            r#"<mxCell id="ID" parent="1" dpng-ref="{target}"><mxGeometry x="0" y="0" as="geometry"/></mxCell>"#
         ),
     }
 }

@@ -32,7 +32,7 @@ d-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
 - **確認だけなら validate。** `d-png-cli validate diagram.xml` は write の描画前までを行い、何も書かない。
 - **read は登録済みのアイコン画像を `image=lib:<参照>@<指紋>` に縮める。** Base64 を読まずに編集でき、write で元の画像に戻る。
   その値は書き換えない。ライブラリにない画像はそのまま残るので、行単位の `grep` で Base64 を読み込まないよう、
-  必要な属性だけを取り出す: `grep -oE ' (id|value|label|source|target|parent|vertex|edge|libref)="[^"]*"' "$tmp/diagram.xml"`
+  必要な属性だけを取り出す: `grep -oE ' (id|value|label|source|target|parent|vertex|edge|dpng-ref)="[^"]*"' "$tmp/diagram.xml"`
 - **画像を含む単体の XML が必要なら expand。** `d-png-cli expand diagram.drawio.png` は参照を展開した、draw.io でそのまま開ける XML を出す。
 - 終了コード: `0` 成功、`1` 入力・参照・描画・保存のエラー、`2` 引数のエラー。`--json` を付けると結果を JSON で受け取れる。
 
@@ -82,7 +82,7 @@ d-png-cli library preview cylinder -o "$tmp/candidates.png"   # 候補を並べ�
 
 ```xml
 <!-- エントリーのセルごと置く。位置・ラベル・style（キー単位で上書き）・サイズを指定できる -->
-<mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
+<mxCell id="orders" value="注文 DB" parent="1" dpng-ref="shapes/cylinder">
   <mxGeometry x="40" y="40" as="geometry"/>
 </mxCell>
 <!-- 画像だけを使う。style とサイズは自分で書く -->

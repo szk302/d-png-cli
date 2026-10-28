@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use crate::domain::{
     diagnostic::{Code, Diagnostic, Diagnostics},
     diagram,
-    expand::{LIBREF, cells, image_refs, pages},
+    expand::{REF_ATTRIBUTE, cells, image_refs, pages},
     library::inner,
 };
 
@@ -63,9 +63,9 @@ pub fn check(xml: &str) -> Result<Summary, Diagnostics> {
                     );
                 }
             }
-            if cell.attribute(LIBREF).is_some() || inner.attribute(LIBREF).is_some() {
+            if cell.attribute(REF_ATTRIBUTE).is_some() || inner.attribute(REF_ATTRIBUTE).is_some() {
                 problems.push(
-                    Diagnostic::new(Code::RefSyntax, "a libref was left after expansion")
+                    Diagnostic::new(Code::RefSyntax, "a dpng-ref was left after expansion")
                         .at(page.at(id)),
                 );
             }

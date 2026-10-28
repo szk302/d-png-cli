@@ -1,5 +1,5 @@
 //! Expansion of library references in a diagram (spec 4.3, 4.4): placeholder
-//! cells with `libref` become the entry's cells, and `image=lib:` style values
+//! cells with `dpng-ref` become the entry's cells, and `image=lib:` style values
 //! become the image data. The libraries are already resolved by the caller;
 //! this module only edits the diagram.
 use roxmltree::{Document, Node};
@@ -15,11 +15,19 @@ use crate::domain::{
 };
 
 /// The attribute marking a placeholder cell.
-pub const LIBREF: &str = "libref";
+pub const REF_ATTRIBUTE: &str = "dpng-ref";
 
 /// Attributes of a placeholder's mxCell that the expansion itself uses.
 const PLACEHOLDER_KEYS: &[&str] = &[
-    "id", "value", "style", "parent", "vertex", "edge", "source", "target", LIBREF,
+    "id",
+    "value",
+    "style",
+    "parent",
+    "vertex",
+    "edge",
+    "source",
+    "target",
+    REF_ATTRIBUTE,
 ];
 
 /// One reference found in a diagram, with where it was written.
@@ -36,7 +44,7 @@ pub struct References {
     pub images: Vec<Found<ImageRef>>,
 }
 
-/// What the caller looked up for the references: entries for `libref`, and
+/// What the caller looked up for the references: entries for `dpng-ref`, and
 /// the image value for each `image=lib:` value (the text after `lib:`).
 #[derive(Clone, Debug, Default)]
 pub struct Resolved {
@@ -156,13 +164,15 @@ pub fn references(xml: &str) -> Result<References, Diagnostics> {
             let at = page.at(id);
             let inner = inner(cell);
             match (
-                cell.attribute(LIBREF),
-                (inner != cell).then(|| inner.attribute(LIBREF)).flatten(),
+                cell.attribute(REF_ATTRIBUTE),
+                (inner != cell)
+                    .then(|| inner.attribute(REF_ATTRIBUTE))
+                    .flatten(),
             ) {
                 (Some(_), Some(_)) => problems.push(
                     Diagnostic::new(
                         Code::RefSyntax,
-                        "write libref on the wrapper or on its mxCell, not both",
+                        "write dpng-ref on the wrapper or on its mxCell, not both",
                     )
                     .at(at.clone()),
                 ),
@@ -207,9 +217,11 @@ pub fn expand(xml: &str, resolved: &Resolved) -> Result<Expansion, Diagnostics> 
             .collect();
         for cell in &cells {
             let inner = inner(*cell);
-            let text = cell
-                .attribute(LIBREF)
-                .or_else(|| (inner != *cell).then(|| inner.attribute(LIBREF)).flatten());
+            let text = cell.attribute(REF_ATTRIBUTE).or_else(|| {
+                (inner != *cell)
+                    .then(|| inner.attribute(REF_ATTRIBUTE))
+                    .flatten()
+            });
             let Some(text) = text else {
                 // An ordinary cell: only image references change.
                 if let Some(style) = inner.attribute("style")
@@ -287,7 +299,7 @@ pub fn expand(xml: &str, resolved: &Resolved) -> Result<Expansion, Diagnostics> 
 struct Placeholder {
     id: String,
     parent: String,
-    /// The wrapper element's name and its attributes besides id, label and libref.
+    /// The wrapper element's name and its attributes besides id, label and dpng-ref.
     wrapper: Option<(String, Vec<(String, String)>)>,
     label: Option<String>,
     style: Vec<(String, String)>,
@@ -326,7 +338,7 @@ impl Placeholder {
             (
                 cell.tag_name().name().to_owned(),
                 cell.attributes()
-                    .filter(|a| !["id", "label", LIBREF].contains(&a.name()))
+                    .filter(|a| !["id", "label", REF_ATTRIBUTE].contains(&a.name()))
                     .map(|a| (a.name().to_owned(), a.value().to_owned()))
                     .collect(),
             )

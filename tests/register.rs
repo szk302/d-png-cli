@@ -75,7 +75,7 @@ fn added_libraries_are_written_in_the_normalized_form() {
         installed
     );
     // Registered entries are referenced right away.
-    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" libref="simple-icons/postgresql"/><mxCell id="c" parent="1" libref="components/card"/></root></mxGraphModel>"#;
+    let xml = r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="db" parent="1" dpng-ref="simple-icons/postgresql"/><mxCell id="c" parent="1" dpng-ref="components/card"/></root></mxGraphModel>"#;
     cli()
         .current_dir(dir.path())
         .arg("validate")
@@ -145,7 +145,7 @@ fn invalid_entries_and_names_are_rejected() {
         library_file(serde_json::json!([
             {"title": "Good", "data": "data:image/png;base64,iVBORw0KGgo=", "w": 4, "h": 4},
             {"title": "Broken", "xml": "not base64!"},
-            {"title": "Nested", "xml": r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" parent="1" libref="x/y"/></root></mxGraphModel>"#},
+            {"title": "Nested", "xml": r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="2" parent="1" dpng-ref="x/y"/></root></mxGraphModel>"#},
         ])),
     )
     .unwrap();

@@ -167,7 +167,7 @@ impl Entry {
             return Some(format!("{e:#}"));
         }
         let model = self.graph_model().ok()?;
-        (model.contains("libref=") || model.contains("image=lib:"))
+        (model.contains("dpng-ref=") || model.contains("image=lib:"))
             .then(|| "an entry cannot hold library references".to_owned())
     }
 

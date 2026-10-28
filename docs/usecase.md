@@ -2,7 +2,7 @@
 
 この文書は、[v0.2.0 の仕様](spec.md)を使ってエージェントが図面を作る・直す流れを、ユースケースごとに示す。各ケースで **CLI に渡す XML** と、**CLI がない場合に書く必要がある XML** を並べ、比較できるようにした。
 
-- **CLI に渡す XML**: エージェントが書いて `d-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `libref="…"` と `image=lib:…` で参照する。
+- **CLI に渡す XML**: エージェントが書いて `d-png-cli write` の標準入力などに渡す XML。登録ライブラリの部品は `dpng-ref="…"` と `image=lib:…` で参照する。
 - **CLI がない場合の XML**: 同じ図面を、ライブラリの参照なしで draw.io の普通の XML として書いたもの。エージェントがライブラリのファイルを読み、style・画像・ID・座標を自分で写して組み立てる必要がある。`d-png-cli expand` の出力、つまり `write` が PNG に埋め込む XML と同じ内容である。
 
 B〜G は、v0.1.0 で `insert` を使わずに XML を編集する手順・v0.2.0 の前に計画した参照機能の手順と比較したときと同じ依頼・同じ比較用ライブラリを使う（どちらの比較資料もこのリポジトリには含めていない）。A は draw.io の図形を、利用者が登録したライブラリから置くケースである（F の曲線も同じライブラリから使う）。H は新しい図面を 1 回の標準入力で作るケース、I はライブラリの登録・取り込みと VS Code の設定のケース、J は名前空間（スコープ）付きの共有ライブラリを公開・更新するケースである。
@@ -13,14 +13,14 @@ B〜G は、v0.1.0 で `insert` を使わずに XML を編集する手順・v0.2
 
 | ケース | CLI に渡す XML | CLI がない場合の XML | CLI がない場合にエージェントが自分で用意するもの |
 | --- | --- | --- | --- |
-| [A](#3-a-drawio-の図形を登録したライブラリから追加する) draw.io の図形 | 353 | 451 | draw.io 固有の style（`boundedLbl`・`size` など）とサイズ。図形集によっては数百文字あり、推測では書けない |
-| [B](#4-b-利用者ライブラリの-xml-図形を追加する) 利用者の図形 | 476 | 481 | エントリーの style・ラッパー・独自データ（`note="keep"`）を読み、上書きと統合 |
-| [C](#5-c-xml-エントリーの画像アイコンを追加する) 画像アイコン | 370 | 615 | 画像の Base64（実物の PostgreSQL は 6,951 文字）、縦横比からの高さ |
+| [A](#3-a-drawio-の図形を登録したライブラリから追加する) draw.io の図形 | 355 | 451 | draw.io 固有の style（`boundedLbl`・`size` など）とサイズ。図形集によっては数百文字あり、推測では書けない |
+| [B](#4-b-利用者ライブラリの-xml-図形を追加する) 利用者の図形 | 478 | 481 | エントリーの style・ラッパー・独自データ（`note="keep"`）を読み、上書きと統合 |
+| [C](#5-c-xml-エントリーの画像アイコンを追加する) 画像アイコン | 372 | 615 | 画像の Base64（実物の PostgreSQL は 6,951 文字）、縦横比からの高さ |
 | [D](#6-d-data-エントリーの-pngjpegsvg-を追加する) data 画像 | 487 | 638 | `data` の URI を style 用に変換（`;base64,` → `,`） |
-| [E](#7-e-xml-の複数セルを追加する) 複数セル | 683 | 1,556 | 全セルの ID の振り直し、親子・接続の付け替え、移動量の計算 |
-| [F](#8-f-接続線の-xml-エントリーを使う) 接続線 | 825 | 863 | 接続線の style と、エントリーの端点・経由点を捨てる判断 |
+| [E](#7-e-xml-の複数セルを追加する) 複数セル | 687 | 1,556 | 全セルの ID の振り直し、親子・接続の付け替え、移動量の計算 |
+| [F](#8-f-接続線の-xml-エントリーを使う) 接続線 | 827 | 863 | 接続線の style と、エントリーの端点・経由点を捨てる判断 |
 | [G](#9-g-既存図面の画像を保って編集する) 既存図面の編集 | 873 | 1,000 | 読み込んだ Base64 をそのまま書き戻す（実物では 1 アイコン数 KB） |
-| [H](#10-h-新しい図面を-1-回の標準入力で作る) 新規図面 | 1,661 | 2,202 | A〜D の作業をすべて |
+| [H](#10-h-新しい図面を-1-回の標準入力で作る) 新規図面 | 1,667 | 2,202 | A〜D の作業をすべて |
 
 サイズはバイト数。比較用の画像は、Base64 を省略せず載せるために数百バイトの検証用 SVG（青い正方形・長方形）にしている。**これらは正式な PostgreSQL や会社のロゴではない。** 実物の [Simple Icons for draw.io](https://github.com/mondeja/simple-icons-drawio) 16.35.0 では、画像の値は 1 アイコンあたり中央値 1,199 文字、PostgreSQL で 6,951 文字、最大 72,235 文字あり、C・G・H の差はその分だけ広がる。
 
@@ -88,7 +88,7 @@ d-png-cli library search cylinder
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
+        <mxCell id="orders" value="注文 DB" parent="1" dpng-ref="shapes/cylinder">
           <mxGeometry x="40" y="40" as="geometry"/>
         </mxCell>
       </root>
@@ -139,7 +139,7 @@ d-png-cli library show components/service --json
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <object id="service" label="決済サービス" owner="payments" libref="components/service">
+        <object id="service" label="決済サービス" owner="payments" dpng-ref="components/service">
           <mxCell style="fillColor=#dae8fc;" parent="1">
             <mxGeometry x="200" y="40" width="120" height="60" as="geometry"/>
           </mxCell>
@@ -192,7 +192,7 @@ d-png-cli library search postgres
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="db" value="PostgreSQL" parent="1" libref="simple-icons/postgresql">
+        <mxCell id="db" value="PostgreSQL" parent="1" dpng-ref="simple-icons/postgresql">
           <mxGeometry x="400" y="40" width="64" as="geometry"/>
         </mxCell>
       </root>
@@ -232,7 +232,7 @@ d-png-cli library search logo --kind image
 
 会社ロゴは、社内の取得元から取り込んだ `@acme/brand` にある（[I](#11-i-ライブラリを登録取り込みvs-code-でも使う)）。参照文字列にスコープ `@acme/` が付くだけで、書き方はプロジェクト専用のライブラリと同じである。
 
-ここでは画像だけを参照する `image=lib:` を使い、style とサイズを自分で決める。エントリーの style ごと使うなら `libref="@acme/brand/logo"` でもよい。
+ここでは画像だけを参照する `image=lib:` を使い、style とサイズを自分で決める。エントリーの style ごと使うなら `dpng-ref="@acme/brand/logo"` でもよい。
 
 **CLI に渡す XML**（[examples/d-data-image/cli.xml](examples/d-data-image/cli.xml)）
 
@@ -302,10 +302,10 @@ d-png-cli library show components/branch --json   # kind: set
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="card" value="決済処理" parent="1" libref="components/card">
+        <mxCell id="card" value="決済処理" parent="1" dpng-ref="components/card">
           <mxGeometry x="40" y="200" as="geometry"/>
         </mxCell>
-        <mxCell id="branch" parent="1" libref="components/branch">
+        <mxCell id="branch" parent="1" dpng-ref="components/branch">
           <mxGeometry x="320" y="200" as="geometry"/>
         </mxCell>
         <mxCell id="card-to-branch" style="endArrow=block;html=1;" edge="1" parent="1" source="card" target="branch-1">
@@ -381,7 +381,7 @@ d-png-cli library search curve --kind edge
         <mxCell id="b" value="終了" style="rounded=1;" vertex="1" parent="1">
           <mxGeometry x="240" y="400" width="120" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="connection" parent="1" source="a" target="b" libref="shapes/curve">
+        <mxCell id="connection" parent="1" source="a" target="b" dpng-ref="shapes/curve">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="200" y="480"/>
@@ -519,15 +519,15 @@ d-png-cli write -o payments.drawio.png --json < payments.xml
         <mxCell id="title" value="決済 API 構成図" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="140" y="20" width="300" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="users" value="利用者" parent="1" libref="shapes/actor">
+        <mxCell id="users" value="利用者" parent="1" dpng-ref="shapes/actor">
           <mxGeometry x="55" y="110" as="geometry"/>
         </mxCell>
-        <object id="api" label="決済 API" owner="payments" libref="components/service">
+        <object id="api" label="決済 API" owner="payments" dpng-ref="components/service">
           <mxCell parent="1">
             <mxGeometry x="180" y="110" as="geometry"/>
           </mxCell>
         </object>
-        <mxCell id="db" value="決済 DB" parent="1" libref="simple-icons/postgresql">
+        <mxCell id="db" value="決済 DB" parent="1" dpng-ref="simple-icons/postgresql">
           <mxGeometry x="380" y="116" width="48" as="geometry"/>
         </mxCell>
         <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="users" target="api">

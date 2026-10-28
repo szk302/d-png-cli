@@ -1,4 +1,4 @@
-//! Expanding `libref` placeholders and `image=lib:` values (spec 4.3, 4.4).
+//! Expanding `dpng-ref` placeholders and `image=lib:` values (spec 4.3, 4.4).
 mod support;
 
 use d_png_cli::{
@@ -70,7 +70,7 @@ fn codes(cells: &str) -> Vec<Code> {
 #[test]
 fn a_single_cell_is_placed_resized_and_relabelled() {
     let xml = expand(
-        r#"<mxCell id="before" vertex="1" parent="1"/><mxCell id="icon" value="Label &amp; &lt;b&gt;" parent="1" libref="lib/icon"><mxGeometry x="200" y="30" width="48" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="before" vertex="1" parent="1"/><mxCell id="icon" value="Label &amp; &lt;b&gt;" parent="1" dpng-ref="lib/icon"><mxGeometry x="200" y="30" width="48" as="geometry"/></mxCell>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -78,7 +78,7 @@ fn a_single_cell_is_placed_resized_and_relabelled() {
     assert_eq!(icon.attribute("value"), Some("Label & <b>"));
     assert_eq!(icon.attribute("parent"), Some("1"));
     assert_eq!(icon.attribute("vertex"), Some("1"));
-    assert_eq!(icon.attribute("libref"), None);
+    assert_eq!(icon.attribute("dpng-ref"), None);
     assert!(
         icon.attribute("style")
             .unwrap()
@@ -95,7 +95,7 @@ fn a_single_cell_is_placed_resized_and_relabelled() {
     assert!(xml.contains(r#"<mxCell id="before" vertex="1" parent="1"/>"#));
     // Negative positions work.
     let xml = expand(
-        r#"<mxCell id="neg" parent="1" libref="lib/icon"><mxGeometry x="-10" y="-20.5" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="neg" parent="1" dpng-ref="lib/icon"><mxGeometry x="-10" y="-20.5" as="geometry"/></mxCell>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -111,7 +111,7 @@ fn a_set_gets_numbered_ids_with_parents_and_edges_remapped() {
     let project = project();
     let libraries = Libraries::new(vec![&project]);
     let expanded = diagram::expand(
-        page(r#"<mxCell id="grp" parent="1" libref="lib/group"><mxGeometry x="100" y="200" as="geometry"/></mxCell>"#)
+        page(r#"<mxCell id="grp" parent="1" dpng-ref="lib/group"><mxGeometry x="100" y="200" as="geometry"/></mxCell>"#)
             .as_bytes(),
         None,
         &libraries,
@@ -166,10 +166,10 @@ fn a_set_gets_numbered_ids_with_parents_and_edges_remapped() {
     );
     // A set takes no label, style, custom data or size.
     for placeholder in [
-        r#"<mxCell id="s" value="x" parent="1" libref="lib/group"/>"#,
-        r#"<mxCell id="s" style="fillColor=red;" parent="1" libref="lib/group"/>"#,
-        r#"<object id="s" owner="me" libref="lib/group"><mxCell parent="1"/></object>"#,
-        r#"<mxCell id="s" parent="1" libref="lib/group"><mxGeometry width="10" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="s" value="x" parent="1" dpng-ref="lib/group"/>"#,
+        r#"<mxCell id="s" style="fillColor=red;" parent="1" dpng-ref="lib/group"/>"#,
+        r#"<object id="s" owner="me" dpng-ref="lib/group"><mxCell parent="1"/></object>"#,
+        r#"<mxCell id="s" parent="1" dpng-ref="lib/group"><mxGeometry width="10" as="geometry"/></mxCell>"#,
     ] {
         assert!(
             codes(placeholder).contains(&Code::RefOverride),
@@ -183,20 +183,20 @@ fn expansion_ids_never_collide() {
     // A generated ID already on the page.
     assert_eq!(
         codes(
-            r#"<mxCell id="card-1" vertex="1" parent="1"/><mxCell id="card" parent="1" libref="lib/card"/>"#
+            r#"<mxCell id="card-1" vertex="1" parent="1"/><mxCell id="card" parent="1" dpng-ref="lib/card"/>"#
         ),
         [Code::RefIdConflict]
     );
     // A set loses its placeholder ID, so nothing may refer to it.
     assert_eq!(
         codes(
-            r#"<mxCell id="grp" parent="1" libref="lib/group"/><mxCell id="x" edge="1" parent="1" source="grp"/>"#
+            r#"<mxCell id="grp" parent="1" dpng-ref="lib/group"/><mxCell id="x" edge="1" parent="1" source="grp"/>"#
         ),
         [Code::RefIdConflict]
     );
     // The same entry twice gets distinct IDs from distinct placeholders.
     let xml = expand(
-        r#"<mxCell id="one" parent="1" libref="lib/card"/><mxCell id="two" parent="1" libref="lib/card"><mxGeometry x="200" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="one" parent="1" dpng-ref="lib/card"/><mxCell id="two" parent="1" dpng-ref="lib/card"><mxGeometry x="200" as="geometry"/></mxCell>"#,
     )
     .unwrap();
     for id in ["one", "one-1", "one-3", "two", "two-1", "two-3"] {
@@ -204,7 +204,7 @@ fn expansion_ids_never_collide() {
     }
     // Generated IDs can be connected to.
     expand(
-        r#"<mxCell id="card" parent="1" libref="lib/card"/><mxCell id="e" edge="1" parent="1" source="card-1" target="card"><mxGeometry relative="1" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="card" parent="1" dpng-ref="lib/card"/><mxCell id="e" edge="1" parent="1" source="card-1" target="card"><mxGeometry relative="1" as="geometry"/></mxCell>"#,
     )
     .unwrap();
 }
@@ -212,7 +212,7 @@ fn expansion_ids_never_collide() {
 #[test]
 fn a_label_changes_only_the_top_level_cell() {
     let xml =
-        expand(r#"<mxCell id="new" value="New Group" parent="1" libref="lib/card"/>"#).unwrap();
+        expand(r#"<mxCell id="new" value="New Group" parent="1" dpng-ref="lib/card"/>"#).unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
     assert_eq!(cell(&doc, "new").attribute("value"), Some("New Group"));
     assert_eq!(cell(&doc, "new-1").attribute("value"), Some("Child A"));
@@ -224,7 +224,7 @@ fn a_label_changes_only_the_top_level_cell() {
 #[test]
 fn image_entries_become_image_cells() {
     let xml = expand(
-        r#"<mxCell id="raw" parent="1" libref="lib/raw"><mxGeometry x="1" y="2" as="geometry"/></mxCell><mxCell id="linked" parent="1" libref="lib/linked"/>"#,
+        r#"<mxCell id="raw" parent="1" dpng-ref="lib/raw"><mxGeometry x="1" y="2" as="geometry"/></mxCell><mxCell id="linked" parent="1" dpng-ref="lib/linked"/>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -277,7 +277,7 @@ fn image_references_replace_only_the_image() {
 
 #[test]
 fn edge_ports_follow_the_new_cell_ids() {
-    let xml = expand(r#"<mxCell id="pp" parent="1" libref="lib/ports"/>"#).unwrap();
+    let xml = expand(r#"<mxCell id="pp" parent="1" dpng-ref="lib/ports"/>"#).unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
     // v, p, w, q, e in document order.
     let edge = cell(&doc, "pp-5");
@@ -293,7 +293,7 @@ fn edge_ports_follow_the_new_cell_ids() {
 fn edges_connect_to_the_placeholder_ends() {
     // Both ends: the placeholder geometry replaces the entry's points.
     let xml = expand(
-        r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="b" vertex="1" parent="1"/><mxCell id="l" value="uses" parent="1" source="a" target="b" libref="lib/line"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="5" y="5"/></Array></mxGeometry></mxCell>"#,
+        r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="b" vertex="1" parent="1"/><mxCell id="l" value="uses" parent="1" source="a" target="b" dpng-ref="lib/line"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="5" y="5"/></Array></mxGeometry></mxCell>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -314,7 +314,7 @@ fn edges_connect_to_the_placeholder_ends() {
     assert_eq!(points, [None]);
     // One end: the other end keeps the entry's point, moved into place.
     let xml = expand(
-        r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="l" parent="1" source="a" libref="lib/line"><mxGeometry x="100" y="100" as="geometry"/></mxCell>"#,
+        r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="l" parent="1" source="a" dpng-ref="lib/line"><mxGeometry x="100" y="100" as="geometry"/></mxCell>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -327,7 +327,7 @@ fn edges_connect_to_the_placeholder_ends() {
     // Ends need an edge entry.
     assert_eq!(
         codes(
-            r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="x" parent="1" source="a" libref="lib/card"/>"#
+            r#"<mxCell id="a" vertex="1" parent="1"/><mxCell id="x" parent="1" source="a" dpng-ref="lib/card"/>"#
         ),
         [Code::RefOverride]
     );
@@ -337,7 +337,7 @@ fn edges_connect_to_the_placeholder_ends() {
 fn wrappers_and_custom_data_merge() {
     // The placeholder's custom data wins; the entry's stays; no double wrapper.
     let xml = expand(
-        r#"<object id="s" label="Payments" owner="payments" libref="lib/object"><mxCell style="fillColor=#dae8fc;" parent="1"><mxGeometry x="200" y="40" as="geometry"/></mxCell></object>"#,
+        r#"<object id="s" label="Payments" owner="payments" dpng-ref="lib/object"><mxCell style="fillColor=#dae8fc;" parent="1"><mxGeometry x="200" y="40" as="geometry"/></mxCell></object>"#,
     )
     .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -360,11 +360,12 @@ fn wrappers_and_custom_data_merge() {
     );
     assert_eq!(inner.attribute("id"), None);
     // A plain placeholder relabels the entry's wrapper.
-    let xml = expand(r#"<mxCell id="s" value="Renamed" parent="1" libref="lib/object"/>"#).unwrap();
+    let xml =
+        expand(r#"<mxCell id="s" value="Renamed" parent="1" dpng-ref="lib/object"/>"#).unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
     assert_eq!(cell(&doc, "s").attribute("label"), Some("Renamed"));
     // A wrapper around a plain entry carries its label.
-    let xml = expand(r#"<UserObject id="u" label="Tagged" tag="x" libref="lib/icon"><mxCell parent="1"/></UserObject>"#)
+    let xml = expand(r#"<UserObject id="u" label="Tagged" tag="x" dpng-ref="lib/icon"><mxCell parent="1"/></UserObject>"#)
         .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
     let wrapper = cell(&doc, "u");
@@ -380,38 +381,38 @@ fn wrappers_and_custom_data_merge() {
 #[test]
 fn misuse_of_an_entry_is_reported_with_codes() {
     assert_eq!(
-        codes(r#"<mxCell id="x" vertex="1" parent="1" libref="lib/line"/>"#),
+        codes(r#"<mxCell id="x" vertex="1" parent="1" dpng-ref="lib/line"/>"#),
         [Code::RefKind]
     );
     assert_eq!(
-        codes(r#"<mxCell id="x" edge="1" parent="1" libref="lib/icon"/>"#),
+        codes(r#"<mxCell id="x" edge="1" parent="1" dpng-ref="lib/icon"/>"#),
         [Code::RefKind]
     );
     assert_eq!(
         codes(
-            r#"<mxCell id="x" parent="1" libref="lib/card"><mxGeometry width="10" as="geometry"/></mxCell>"#
+            r#"<mxCell id="x" parent="1" dpng-ref="lib/card"><mxGeometry width="10" as="geometry"/></mxCell>"#
         ),
         [Code::RefOverride]
     );
     assert_eq!(
-        codes(r#"<mxCell id="x" style="ellipse" parent="1" libref="lib/icon"/>"#),
+        codes(r#"<mxCell id="x" style="ellipse" parent="1" dpng-ref="lib/icon"/>"#),
         [Code::RefOverride]
     );
     assert_eq!(
-        codes(r#"<mxCell id="x" parent="1" libref="lib/icon"><mxPoint as="extra"/></mxCell>"#),
+        codes(r#"<mxCell id="x" parent="1" dpng-ref="lib/icon"><mxPoint as="extra"/></mxCell>"#),
         [Code::RefOverride]
     );
     assert_eq!(
-        codes(r#"<mxCell id="x" parent="1" libref="lib/broken"/>"#),
+        codes(r#"<mxCell id="x" parent="1" dpng-ref="lib/broken"/>"#),
         [Code::RefKind]
     );
     assert_eq!(
-        codes(r#"<mxCell id="x" parent="1" libref="Lib/icon"/>"#),
+        codes(r#"<mxCell id="x" parent="1" dpng-ref="Lib/icon"/>"#),
         [Code::RefSyntax]
     );
     // Every missing reference is reported at once, with where it is.
     let problems = expand(
-        r#"<mxCell id="x" parent="1" libref="lib/missing"/><mxCell id="y" parent="1" libref="other/thing"/>"#,
+        r#"<mxCell id="x" parent="1" dpng-ref="lib/missing"/><mxCell id="y" parent="1" dpng-ref="other/thing"/>"#,
     )
     .unwrap_err();
     assert_eq!(problems.0.len(), 2);
@@ -422,7 +423,7 @@ fn misuse_of_an_entry_is_reported_with_codes() {
 
 #[test]
 fn placeholders_on_any_page_expand_there() {
-    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" libref="lib/icon"/></root></mxGraphModel></diagram></mxfile>"#;
+    let two = r#"<mxfile><diagram name="A"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram><diagram name="B"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="i" parent="1" dpng-ref="lib/icon"/></root></mxGraphModel></diagram></mxfile>"#;
     let project = project();
     let libraries = Libraries::new(vec![&project]);
     let expanded = diagram::expand(two.as_bytes(), None, &libraries).unwrap();

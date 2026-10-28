@@ -1,6 +1,6 @@
 # d-png-cli
 
-`d-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`libref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
+`d-png-cli` は、draw.io の XML を標準入力で受け取り、VS Code の draw.io 拡張で開いて編集できる `.drawio.png` を作る Rust 製 CLI です。AI エージェントは図面全体を XML で書き、図形・アイコンはライブラリの参照文字列（`dpng-ref="simple-icons/postgresql"` など）で指定できます。既存の `.drawio.png` から編集用の XML を取り出し、検証してから書き戻せます。
 
 > **v0.2.0 は未リリースです。** この README は v0.2.0（[仕様](docs/spec.md)）の使い方で、このブランチをソースからビルドすると使えます。GitHub Releases の最新版は v0.1.0（実行ファイル名は `dip`）で、コマンドが異なります（[v0.1.0 の README](https://github.com/szk302/d-png-cli/blob/v0.1.0/README.md)）。v0.1.0 からの変更は [仕様の 12 章](docs/spec.md#12-v010-からの変更) にまとめています。
 
@@ -64,7 +64,7 @@ d-png-cli expand diagram.drawio.png -o diagram.drawio
 d-png-cli validate diagram.xml
 ```
 
-XML の中では、部品を `libref` のプレースホルダーで書きます。`write` は参照を展開し、検証・描画してから、参照を含まない普通の draw.io XML を PNG に埋め込みます。
+XML の中では、部品を `dpng-ref` のプレースホルダーで書きます。`write` は参照を展開し、検証・描画してから、参照を含まない普通の draw.io XML を PNG に埋め込みます。
 
 ```sh
 d-png-cli write -o arch.drawio.png <<'EOF'
@@ -74,10 +74,10 @@ d-png-cli write -o arch.drawio.png <<'EOF'
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="orders" value="注文 DB" parent="1" libref="shapes/cylinder">
+        <mxCell id="orders" value="注文 DB" parent="1" dpng-ref="shapes/cylinder">
           <mxGeometry x="40" y="40" as="geometry"/>
         </mxCell>
-        <mxCell id="db" value="DB" parent="1" libref="simple-icons/postgresql">
+        <mxCell id="db" value="DB" parent="1" dpng-ref="simple-icons/postgresql">
           <mxGeometry x="200" y="56" width="48" as="geometry"/>
         </mxCell>
         <mxCell id="e" style="endArrow=block;html=1;" edge="1" parent="1" source="orders" target="db">
@@ -167,7 +167,7 @@ EOF
 
 | 書き方 | 展開されるもの |
 | --- | --- |
-| セルの属性 `libref="<参照>"` | エントリーのセル群（style・ラベル・独自データ・子セル・接続線）。プレースホルダーの位置・ラベル・style・サイズなどで上書きできる |
+| セルの属性 `dpng-ref="<参照>"` | エントリーのセル群（style・ラベル・独自データ・子セル・接続線）。プレースホルダーの位置・ラベル・style・サイズなどで上書きできる |
 | style の `image=lib:<参照>` | `image` の値（実画像）だけ。ラベル・サイズ・他の style は書いたとおりに残る |
 
 - 参照文字列は `library search` の結果からそのまま写します。タイトルや番号では指定しません。

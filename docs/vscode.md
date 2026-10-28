@@ -16,7 +16,7 @@ v0.2.0 では、CLI に登録したライブラリを VS Code の draw.io 拡張
 | 拡張の設定（`customLibraries`）の生成 | CLI（`library vscode --write`） |
 | XML からの PNG 作成・参照の展開・検証 | CLI（`write`・`validate`） |
 | 図面の目視での編集・微調整 | 人（VS Code 拡張） |
-| 登録ライブラリの部品の配置 | 人は拡張のライブラリ欄から、エージェントは XML の `libref`・`image=lib:` で |
+| 登録ライブラリの部品の配置 | 人は拡張のライブラリ欄から、エージェントは XML の `dpng-ref`・`image=lib:` で |
 
 `write` が保存する PNG の XML は参照を含まない普通の draw.io XML なので、拡張で開くために CLI は不要である。
 
@@ -126,7 +126,7 @@ AWS などの `mxgraph.*` の図形を CLI で描画するには、v0.1.0（`DIP
 ## 7. 注意と未検証の事項
 
 - **ライブラリの更新の反映**: 拡張はライブラリファイルを図面を開くときに読み込む。`library add`・`library sync` の後は図面を開き直す（ファイルの変更を監視するかは未確認）。
-- **拡張上でのライブラリの編集**: 設定から読み込んだライブラリを拡張上で編集・保存する流れは想定しない。部品の追加・変更は CLI（`library add --merge`）か draw.io Desktop で行い、Desktop で保存した場合は `library sync` を実行する。
+- **拡張上でのライブラリの編集**: 設定から読み込んだライブラリを拡張上で編集・保存する流れは想定しない。部品の追加・変更は CLI（`library add --merge`）か draw.io Desktop で行い、Desktop で保存した場合は `library sync` を実行する。Desktop のライブラリの編集ダイアログは画像のエントリーの `id` を消すため、そこでタイトルを変えると ID も変わる（[spec.md 9.2](spec.md#92-名前とエントリー-id)）。
 - **リモート環境**: 拡張の `extensionKind` は `["ui", "workspace"]` で、リモート（devcontainer・WSL・SSH）では既定でローカル側で動く。拡張は `${workspaceFolder}` を `workspaceFolder.uri.fsPath` に置き換え、`Uri.file()` で読むため、ローカル側で動く場合はリモートのパスを読めない可能性がある。`"remote.extensionKind": {"hediet.vscode-drawio": ["workspace"]}` でリモート側で動かせば読める見込みだが、どちらも未検証である。
 - **大きなライブラリ**: 拡張は設定したライブラリをすべて読み込んで webview に渡す。数 MB のライブラリを多数登録すると図面を開く時間が延びる。使うライブラリだけを登録する。
 - **CI**: `library install --frozen` で取り込んだライブラリを復元し、`library sync --check` で、人が draw.io Desktop で保存して拡張で読めなくなったライブラリと、取り込みの漏れ・完全性の不一致を検出できる。

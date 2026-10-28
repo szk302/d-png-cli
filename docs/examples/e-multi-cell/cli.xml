@@ -4,10 +4,10 @@
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="card" value="決済処理" parent="1" libref="components/card">
+        <mxCell id="card" value="決済処理" parent="1" dpng-ref="components/card">
           <mxGeometry x="40" y="200" as="geometry"/>
         </mxCell>
-        <mxCell id="branch" parent="1" libref="components/branch">
+        <mxCell id="branch" parent="1" dpng-ref="components/branch">
           <mxGeometry x="320" y="200" as="geometry"/>
         </mxCell>
         <mxCell id="card-to-branch" style="endArrow=block;html=1;" edge="1" parent="1" source="card" target="branch-1">
