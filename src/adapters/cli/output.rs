@@ -445,11 +445,7 @@ pub fn changes_json(changes: &[Change]) -> Value {
                     "action": "installed",
                     "version": version.to_string(),
                     "resolved": resolved,
-                    "entries": entries.iter().map(|e| json!({
-                        "ref": e.reference.to_string(),
-                        "kind": e.kind.as_str(),
-                        "title": e.title,
-                    })).collect::<Vec<_>>(),
+                    "entries": entries,
                 }),
                 Change::Updated {
                     name,
@@ -490,24 +486,9 @@ pub fn changes_text(changes: &[Change], dry_run: bool) -> String {
                 entries,
             } => {
                 text.push_str(&format!(
-                    "{would}install {name}@{version} ({} {}) from {resolved}\n",
-                    entries.len(),
-                    if entries.len() == 1 {
-                        "entry"
-                    } else {
-                        "entries"
-                    }
+                    "{would}install {name}@{version} ({entries} {}) from {resolved}\n",
+                    if *entries == 1 { "entry" } else { "entries" }
                 ));
-                for e in entries {
-                    text.push_str(&format!(
-                        "  {}\t{}\t{}x{}\t{}\n",
-                        e.reference,
-                        e.kind,
-                        size(e.width),
-                        size(e.height),
-                        one_line(&e.title)
-                    ));
-                }
             }
             Change::Updated {
                 name,

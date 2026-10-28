@@ -654,11 +654,10 @@ d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
 - `--offline`: 取得元に接続せず、キャッシュ（2.2）だけを使う。
 - 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.d-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
 - 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）。
-- 出力: 追加・更新・削除したライブラリの名前・版・エントリー数。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
+- 出力: 追加・更新・削除したライブラリの名前・版・エントリー数（ライブラリごとに 1 行。`--json` の `entries` も数）。エントリーの一覧は `library search --library <名前>` で見る。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
 
 ```
 installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries
-  @acme/brand/logo	image	240x120	Logo
 hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 

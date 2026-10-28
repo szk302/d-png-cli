@@ -637,7 +637,6 @@ hint: run `d-png-cli library vscode --write` to use it in VS Code
 
 ```
 installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries
-  @acme/brand/logo	image	240x120	Logo
 hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 

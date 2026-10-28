@@ -3,16 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    app::{
-        ports::{DependencyStore, InstalledStore, LockStore, Publication, Registry},
-        register::Written,
-    },
+    app::ports::{DependencyStore, InstalledStore, LockStore, Publication, Registry},
     domain::{
         diagnostic::{Code, Diagnostic, Diagnostics},
         library::{Entry, Library},
         library_file::{self, Source},
         lock::Locked,
-        reference::{EntryId, LibraryName, Ref},
+        reference::{EntryId, LibraryName},
         registry::{Release, Versions, integrity},
         settings::{Scope, Settings},
         version::{Range, Version},
@@ -34,7 +31,8 @@ pub enum Change {
         name: LibraryName,
         version: Version,
         resolved: String,
-        entries: Vec<Written>,
+        /// The number of entries.
+        entries: usize,
     },
     Updated {
         name: LibraryName,
@@ -100,23 +98,6 @@ fn checked(name: &LibraryName, bytes: &[u8], expected: &str) -> Result<Library, 
         ));
     }
     Ok(library)
-}
-
-fn written(library: &Library) -> Vec<Written> {
-    library
-        .entries
-        .iter()
-        .map(|entry| Written {
-            reference: Ref {
-                library: library.name.clone(),
-                entry: entry.id.clone(),
-            },
-            kind: entry.kind(),
-            title: entry.title.clone(),
-            width: entry.width,
-            height: entry.height,
-        })
-        .collect()
 }
 
 pub struct InstallRequest {
@@ -286,7 +267,7 @@ fn plan(
                 name: name.clone(),
                 version: locked.version,
                 resolved: locked.resolved.clone(),
-                entries: written(&library),
+                entries: library.entries.len(),
             },
         });
     }
@@ -329,7 +310,7 @@ fn plan(
             name: name.clone(),
             version,
             resolved,
-            entries: written(&library),
+            entries: library.entries.len(),
         },
     };
     Ok(Plan {
@@ -446,7 +427,7 @@ pub fn update(stores: &Stores<'_>, request: &UpdateRequest) -> Result<Vec<Change
                     name: name.clone(),
                     version: target,
                     resolved: resolved.clone(),
-                    entries: written(&new),
+                    entries: new.entries.len(),
                 },
             };
             Ok(Some((
