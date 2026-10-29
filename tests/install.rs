@@ -436,7 +436,7 @@ fn global_installs_go_to_the_user_area() {
         "installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries\n"
     );
     assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
-    let installed = home.join("libraries/@acme/brand.xml");
+    let installed = home.join("libraries").join("@acme").join("brand.xml");
     assert_eq!(
         fs::read(&installed).unwrap(),
         fs::read(examples().join("acme-d-png-libraries/@acme/brand/1.0.0.xml")).unwrap()

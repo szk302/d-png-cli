@@ -73,7 +73,6 @@ impl Project {
     pub fn library_area(&self) -> LibraryArea {
         LibraryArea {
             directory: self.area(),
-            shown: format!("{AREA}/libraries"),
             global: false,
         }
     }
@@ -96,8 +95,6 @@ impl Project {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LibraryArea {
     directory: PathBuf,
-    /// The `libraries/` directory as listings and messages show it.
-    shown: String,
     global: bool,
 }
 
@@ -106,7 +103,6 @@ impl LibraryArea {
     pub fn global(user_area: &Path) -> Self {
         Self {
             directory: user_area.to_owned(),
-            shown: user_area.join("libraries").display().to_string(),
             global: true,
         }
     }
@@ -114,7 +110,6 @@ impl LibraryArea {
     pub fn libraries(&self) -> ProjectLibraries {
         ProjectLibraries {
             directory: self.directory.join("libraries"),
-            shown: self.shown.clone(),
             global: self.global,
             cache: RefCell::default(),
         }
@@ -130,7 +125,6 @@ impl LibraryArea {
     pub fn installed(&self) -> InstalledLibraries {
         InstalledLibraries {
             directory: self.directory.join("libraries"),
-            shown: self.shown.clone(),
             global: self.global,
             lock: self.lock(),
             locked: OnceCell::new(),
@@ -193,8 +187,6 @@ pub fn init(directory: &Path) -> Result<Initialized, Diagnostic> {
 /// The unscoped libraries of the project, or the global ones.
 pub struct ProjectLibraries {
     directory: PathBuf,
-    /// `directory` as listings show it.
-    shown: String,
     global: bool,
     /// Each library read, and whether its file is normalized.
     cache: RefCell<HashMap<LibraryName, (Library, bool)>>,
@@ -203,6 +195,16 @@ pub struct ProjectLibraries {
 impl ProjectLibraries {
     fn path(&self, name: &LibraryName) -> PathBuf {
         self.directory.join(format!("{}.xml", name.name()))
+    }
+
+    /// The file as listings show it: from the project root with `/`, as
+    /// VS Code's settings name it, or the full path of a global library.
+    fn location(&self, name: &LibraryName) -> String {
+        if self.global {
+            self.path(name).display().to_string()
+        } else {
+            format!("{AREA}/libraries/{}.xml", name.name())
+        }
     }
 
     /// Library names of the `*.xml` files, in name order; other files are
@@ -265,7 +267,7 @@ impl LibraryRepository for ProjectLibraries {
         for name in self.names()? {
             if let Some((library, normalized)) = self.read(&name)? {
                 infos.push(LibraryInfo {
-                    location: Some(format!("{}/{}.xml", self.shown, name.name())),
+                    location: Some(self.location(&name)),
                     title: library.title.clone(),
                     entries: library.entries.len(),
                     normalized,
@@ -359,8 +361,6 @@ impl LockStore for ProjectLock {
 /// against `lock.json` when read (spec 9.6).
 pub struct InstalledLibraries {
     directory: PathBuf,
-    /// `directory` as listings and messages show it.
-    shown: String,
     global: bool,
     lock: ProjectLock,
     locked: OnceCell<Lock>,
@@ -373,10 +373,14 @@ impl InstalledLibraries {
             .join(format!("{}.xml", name.name()))
     }
 
+    /// The file as listings and messages show it, as `ProjectLibraries`
+    /// shows its files.
     fn location(&self, name: &LibraryName) -> String {
+        if self.global {
+            return self.path(name).display().to_string();
+        }
         format!(
-            "{}/@{}/{}.xml",
-            self.shown,
+            "{AREA}/libraries/@{}/{}.xml",
             name.scope().unwrap_or(""),
             name.name()
         )
