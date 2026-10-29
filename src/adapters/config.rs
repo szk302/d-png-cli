@@ -1,6 +1,7 @@
 //! `config.toml` (spec 2.4) in the project area and the user area: read into
-//! settings, and the project's `[dependencies]` edited in place, keeping
-//! comments, key order and the other sections.
+//! settings, and `[dependencies]` (the project's, or the global libraries' in
+//! the user's file) edited in place, keeping comments, key order and the
+//! other sections.
 use std::{
     env,
     path::{Path, PathBuf},
@@ -112,11 +113,6 @@ impl ConfigFile {
                     }
                 }
                 "dependencies" => {
-                    if self.layer == Layer::User {
-                        return Err(self.invalid(
-                            "[dependencies] belongs in the project's .d-png/config.toml",
-                        ));
-                    }
                     for (name, value) in table.iter() {
                         let name = LibraryName::parse(name)
                             .ok()
@@ -260,11 +256,14 @@ impl ConfigFile {
 }
 
 /// The project's `config.toml` over the user's, as one store of settings
-/// whose project `[dependencies]` can change.
+/// whose project `[dependencies]` can change; or, for the global libraries,
+/// the user's alone with its `[dependencies]`.
 pub struct Configuration {
     /// The project's file, if there is a project.
     pub project: Option<PathBuf>,
     pub user: Option<PathBuf>,
+    /// Whether the dependencies are the global libraries' (the user's file).
+    pub global: bool,
 }
 
 impl Configuration {
@@ -273,16 +272,31 @@ impl Configuration {
         Self {
             project: area.map(|a| a.join(FILE)),
             user: user_area().map(|a| a.join(FILE)),
+            global: false,
+        }
+    }
+
+    /// The user's file, whose `[dependencies]` are the global libraries'.
+    pub fn global() -> Self {
+        Self {
+            project: None,
+            user: user_area().map(|a| a.join(FILE)),
+            global: true,
         }
     }
 }
 
 impl DependencyStore for Configuration {
     fn settings(&self) -> Result<Settings, Diagnostic> {
-        let user = match &self.user {
+        let mut user = match &self.user {
             Some(path) => ConfigFile::load(path, Layer::User)?.settings()?,
             None => Settings::default(),
         };
+        if self.global {
+            return Ok(user);
+        }
+        // The user's dependencies are the global libraries', not the project's.
+        user.dependencies.clear();
         Ok(match &self.project {
             Some(path) => ConfigFile::load(path, Layer::Project)?
                 .settings()?
@@ -292,13 +306,27 @@ impl DependencyStore for Configuration {
     }
 
     fn change(&self, changes: &[(LibraryName, Option<Range>)]) -> Result<(), Diagnostic> {
-        let path = self.project.as_ref().ok_or_else(|| {
-            Diagnostic::new(
-                Code::ProjectNotFound,
-                "no project (.d-png/) here or above; run `d-png-cli init`",
-            )
-        })?;
-        let mut file = ConfigFile::load(path, Layer::Project)?;
+        let (path, layer) = if self.global {
+            let path = self.user.as_ref().ok_or_else(no_user_area)?;
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| {
+                    Diagnostic::new(
+                        Code::OutputWrite,
+                        format!("cannot create {}: {e}", dir.display()),
+                    )
+                })?;
+            }
+            (path, Layer::User)
+        } else {
+            let path = self.project.as_ref().ok_or_else(|| {
+                Diagnostic::new(
+                    Code::ProjectNotFound,
+                    "no project (.d-png/) here or above; run `d-png-cli init`, or use --global",
+                )
+            })?;
+            (path, Layer::Project)
+        };
+        let mut file = ConfigFile::load(path, layer)?;
         // Check the file before changing it.
         file.settings()?;
         for (name, range) in changes {
@@ -311,6 +339,14 @@ impl DependencyStore for Configuration {
         }
         file.save()
     }
+}
+
+/// The error when neither `D_PNG_HOME` nor the OS gives a user area.
+pub fn no_user_area() -> Diagnostic {
+    Diagnostic::new(
+        Code::ProjectNotFound,
+        "no user area for the global libraries; set D_PNG_HOME",
+    )
 }
 
 #[cfg(test)]
@@ -376,16 +412,53 @@ partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_TOKEN"
             ),
             ("[dependencies]\n\"@acme/brand\" = \"^1\"\n", Layer::Project),
             ("[dependencies]\nbrand = \"^1.0.0\"\n", Layer::Project),
-            (
-                "[dependencies]\n\"@acme/brand\" = \"^1.0.0\"\n",
-                Layer::User,
-            ),
+            ("[dependencies]\nbrand = \"^1.0.0\"\n", Layer::User),
             ("not toml", Layer::Project),
         ] {
             let error = file(text, layer).unwrap_err();
             assert_eq!(error.code, Code::ConfigInvalid, "{text}");
             assert!(error.message.contains(FILE), "{}", error.message);
         }
+    }
+
+    #[test]
+    fn the_users_dependencies_are_the_global_libraries() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::write(
+            project.join(FILE),
+            "[dependencies]\n\"@acme/brand\" = \"^1.0.0\"\n",
+        )
+        .unwrap();
+        let user = dir.path().join("user").join(FILE);
+        std::fs::create_dir(user.parent().unwrap()).unwrap();
+        std::fs::write(&user, "[dependencies]\n\"@mine/icons\" = \"^2.0.0\"\n").unwrap();
+        let configuration = |project: Option<&Path>, global| Configuration {
+            project: project.map(|p| p.join(FILE)),
+            user: Some(user.clone()),
+            global,
+        };
+        let names = |c: Configuration| -> Vec<String> {
+            let settings = c.settings().unwrap();
+            settings
+                .dependencies
+                .keys()
+                .map(|n| n.to_string())
+                .collect()
+        };
+        assert_eq!(names(configuration(Some(&project), false)), ["@acme/brand"]);
+        assert!(names(configuration(None, false)).is_empty());
+        assert_eq!(names(configuration(None, true)), ["@mine/icons"]);
+        // A global change writes the user's file.
+        let icons = LibraryName::parse("@mine/icons").unwrap();
+        configuration(None, true)
+            .change(&[(icons, Some("^2.1.0".parse().unwrap()))])
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&user).unwrap(),
+            "[dependencies]\n\"@mine/icons\" = \"^2.1.0\"\n"
+        );
     }
 
     #[test]

@@ -121,7 +121,8 @@ fn empty_list_and_search_say_what_to_do() {
         let (out, err) = outputs(elsewhere.path(), args);
         assert!(out.is_empty() || out == "[]\n", "{out}");
         assert_eq!(
-            err, "hint: no project (.d-png/) here or above; run `d-png-cli init`\n",
+            err,
+            "hint: no project (.d-png/) here or above, and no global libraries; run `d-png-cli init`, or register a file for every project with `d-png-cli library add --global FILE`\n",
             "{args:?}"
         );
     }
@@ -145,6 +146,18 @@ fn empty_list_and_search_say_what_to_do() {
             "`d-png-cli library install @SCOPE/NAME` (scopes with a source: @acme, @mine)\n"
         ),
         "{err}"
+    );
+    // The global libraries' hint names the user's scopes only.
+    fs::write(
+        empty.path().join(".d-png/config.toml"),
+        "[scopes]\nteam = \"file:../team\"\n",
+    )
+    .unwrap();
+    let (out, err) = outputs(empty.path(), &["library", "list", "--global"]);
+    assert_eq!(out, "");
+    assert_eq!(
+        err,
+        "hint: no global libraries yet; register a file for every project with `d-png-cli library add --global FILE`, or install one with `d-png-cli library install --global @SCOPE/NAME` (scopes with a source: @acme, @mine)\n"
     );
     // No hint when libraries exist and only the query or scope finds nothing.
     let dir = project();

@@ -1,6 +1,7 @@
 //! The project area (spec 2.2): the nearest `.d-png/` above the current
 //! directory, its unscoped libraries in `libraries/<name>.xml`, the installed
-//! ones in `libraries/@<scope>/<name>.xml`, and `lock.json`.
+//! ones in `libraries/@<scope>/<name>.xml`, and `lock.json`. The user area
+//! keeps the global libraries in the same layout.
 use anyhow::{Context, Result};
 use std::{
     cell::{OnceCell, RefCell},
@@ -68,25 +69,81 @@ impl Project {
         self.root.join(AREA)
     }
 
+    /// The project's libraries and `lock.json`.
+    pub fn library_area(&self) -> LibraryArea {
+        LibraryArea {
+            directory: self.area(),
+            shown: format!("{AREA}/libraries"),
+            global: false,
+        }
+    }
+
+    pub fn libraries(&self) -> ProjectLibraries {
+        self.library_area().libraries()
+    }
+
+    pub fn lock(&self) -> ProjectLock {
+        self.library_area().lock()
+    }
+
+    pub fn installed(&self) -> InstalledLibraries {
+        self.library_area().installed()
+    }
+}
+
+/// Where libraries are kept: `libraries/` and `lock.json` in a project area,
+/// or in the user area for the global libraries (spec 2.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibraryArea {
+    directory: PathBuf,
+    /// The `libraries/` directory as listings and messages show it.
+    shown: String,
+    global: bool,
+}
+
+impl LibraryArea {
+    /// The global libraries in the user area.
+    pub fn global(user_area: &Path) -> Self {
+        Self {
+            directory: user_area.to_owned(),
+            shown: user_area.join("libraries").display().to_string(),
+            global: true,
+        }
+    }
+
     pub fn libraries(&self) -> ProjectLibraries {
         ProjectLibraries {
-            directory: self.root.join(AREA).join("libraries"),
+            directory: self.directory.join("libraries"),
+            shown: self.shown.clone(),
+            global: self.global,
             cache: RefCell::default(),
         }
     }
 
     pub fn lock(&self) -> ProjectLock {
         ProjectLock {
-            path: self.area().join("lock.json"),
+            path: self.directory.join("lock.json"),
+            global: self.global,
         }
     }
 
     pub fn installed(&self) -> InstalledLibraries {
         InstalledLibraries {
-            directory: self.area().join("libraries"),
+            directory: self.directory.join("libraries"),
+            shown: self.shown.clone(),
+            global: self.global,
             lock: self.lock(),
             locked: OnceCell::new(),
         }
+    }
+}
+
+/// The command that installs the libraries of an area, for messages.
+fn install_command(global: bool) -> &'static str {
+    if global {
+        "d-png-cli library install --global"
+    } else {
+        "d-png-cli library install"
     }
 }
 
@@ -133,9 +190,12 @@ pub fn init(directory: &Path) -> Result<Initialized, Diagnostic> {
     Ok(Initialized { area, created })
 }
 
-/// The project's unscoped libraries.
+/// The unscoped libraries of the project, or the global ones.
 pub struct ProjectLibraries {
     directory: PathBuf,
+    /// `directory` as listings show it.
+    shown: String,
+    global: bool,
     /// Each library read, and whether its file is normalized.
     cache: RefCell<HashMap<LibraryName, (Library, bool)>>,
 }
@@ -196,16 +256,21 @@ impl LibraryRepository for ProjectLibraries {
         Origin::Project
     }
 
+    fn global(&self) -> bool {
+        self.global
+    }
+
     fn list(&self) -> Result<Vec<LibraryInfo>, Diagnostic> {
         let mut infos = Vec::new();
         for name in self.names()? {
             if let Some((library, normalized)) = self.read(&name)? {
                 infos.push(LibraryInfo {
-                    location: Some(format!("{AREA}/libraries/{}.xml", name.name())),
+                    location: Some(format!("{}/{}.xml", self.shown, name.name())),
                     title: library.title.clone(),
                     entries: library.entries.len(),
                     normalized,
                     version: None,
+                    global: self.global,
                     name,
                 });
             }
@@ -259,9 +324,10 @@ impl LibraryStore for ProjectLibraries {
     }
 }
 
-/// `.d-png/lock.json`.
+/// `lock.json` of the project, or of the global libraries.
 pub struct ProjectLock {
     path: PathBuf,
+    global: bool,
 }
 
 impl LockStore for ProjectLock {
@@ -275,8 +341,9 @@ impl LockStore for ProjectLock {
             Diagnostic::new(
                 Code::LockOutdated,
                 format!(
-                    "{}: {e:#}; run `d-png-cli library install`",
-                    self.path.display()
+                    "{}: {e:#}; run `{}`",
+                    self.path.display(),
+                    install_command(self.global)
                 ),
             )
         })
@@ -292,6 +359,9 @@ impl LockStore for ProjectLock {
 /// against `lock.json` when read (spec 9.6).
 pub struct InstalledLibraries {
     directory: PathBuf,
+    /// `directory` as listings and messages show it.
+    shown: String,
+    global: bool,
     lock: ProjectLock,
     locked: OnceCell<Lock>,
 }
@@ -303,9 +373,10 @@ impl InstalledLibraries {
             .join(format!("{}.xml", name.name()))
     }
 
-    fn location(name: &LibraryName) -> String {
+    fn location(&self, name: &LibraryName) -> String {
         format!(
-            "{AREA}/libraries/@{}/{}.xml",
+            "{}/@{}/{}.xml",
+            self.shown,
             name.scope().unwrap_or(""),
             name.name()
         )
@@ -324,7 +395,7 @@ impl InstalledLibraries {
     fn checked(&self, name: &LibraryName) -> Result<Option<(Library, Vec<u8>)>, Diagnostic> {
         let path = self.path(name);
         let locked = self.lock()?.libraries.get(name);
-        let install = "; run `d-png-cli library install`";
+        let install = format!("; run `{}`", install_command(self.global));
         let bytes = match (path.is_file(), locked) {
             (false, None) => return Ok(None),
             (false, Some(locked)) => {
@@ -339,7 +410,7 @@ impl InstalledLibraries {
             (true, None) => {
                 return Err(Diagnostic::new(
                     Code::LibraryNotInstalled,
-                    format!("{} is not in lock.json{install}", Self::location(name)),
+                    format!("{} is not in lock.json{install}", self.location(name)),
                 ));
             }
             (true, Some(_)) => {
@@ -352,7 +423,7 @@ impl InstalledLibraries {
                 Code::LibraryIntegrity,
                 format!(
                     "{} does not match lock.json ({name}@{}){install}",
-                    Self::location(name),
+                    self.location(name),
                     locked.version
                 ),
             ));
@@ -360,7 +431,7 @@ impl InstalledLibraries {
         let library = library_file::parse(name.clone(), &bytes).map_err(|e| {
             Diagnostic::new(
                 Code::LibraryInvalid,
-                format!("{}: {e:#}", Self::location(name)),
+                format!("{}: {e:#}", self.location(name)),
             )
         })?;
         Ok(Some((library, bytes)))
@@ -407,26 +478,32 @@ impl LibraryRepository for InstalledLibraries {
         Origin::Installed
     }
 
+    fn global(&self) -> bool {
+        self.global
+    }
+
     fn list(&self) -> Result<Vec<LibraryInfo>, Diagnostic> {
         let mut infos = Vec::new();
         for name in self.files()? {
             let version = self.lock()?.libraries.get(&name).map(|l| l.version);
             match self.checked(&name) {
                 Ok(Some((library, bytes))) => infos.push(LibraryInfo {
-                    location: Some(Self::location(&name)),
+                    location: Some(self.location(&name)),
                     title: library.title.clone(),
                     entries: library.entries.len(),
                     normalized: library_file::serialize(&library).as_bytes() == bytes.as_slice(),
                     version,
+                    global: self.global,
                     name,
                 }),
                 // Listed so that it shows up; reading it reports why.
                 _ => infos.push(LibraryInfo {
-                    location: Some(Self::location(&name)),
+                    location: Some(self.location(&name)),
                     title: None,
                     entries: 0,
                     normalized: false,
                     version,
+                    global: self.global,
                     name,
                 }),
             }

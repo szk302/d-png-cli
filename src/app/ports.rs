@@ -20,18 +20,24 @@ pub struct LibraryInfo {
     pub name: LibraryName,
     pub title: Option<String>,
     pub entries: usize,
-    /// Where the library is kept, for people (a path relative to the project).
+    /// Where the library is kept, for people (a path relative to the project,
+    /// or the full path of a global library).
     pub location: Option<String>,
     /// Whether the stored file has the normalized form of spec 9.3.
     pub normalized: bool,
     /// The installed version.
     pub version: Option<Version>,
+    /// Whether it is one of the global libraries in the user area.
+    pub global: bool,
 }
 
-/// Read access to the libraries of one namespace: the project's unscoped
-/// libraries or the installed ones.
+/// Read access to the libraries of one namespace in one area: the unscoped
+/// libraries or the installed ones, of the project or the global ones.
 pub trait LibraryRepository {
     fn origin(&self) -> Origin;
+
+    /// Whether these are the global libraries in the user area (spec 2.2).
+    fn global(&self) -> bool;
 
     /// Every library, in name order.
     fn list(&self) -> Result<Vec<LibraryInfo>, Diagnostic>;

@@ -152,7 +152,8 @@ fn size(value: f64) -> String {
 }
 
 /// A library of `library list` (spec 9.7); `version` and `range` only for
-/// installed libraries, and a dependency that is not installed only by name.
+/// installed libraries, `global` only for global ones, and a dependency that
+/// is not installed only by name.
 pub fn library_json(listed: &Listed) -> Value {
     let info = &listed.info;
     let mut value = json!({
@@ -160,6 +161,9 @@ pub fn library_json(listed: &Listed) -> Value {
         "origin": listed.origin.as_str(),
     });
     let object = value.as_object_mut().expect("object");
+    if info.global {
+        object.insert("global".into(), json!(true));
+    }
     if let Some(version) = info.version {
         object.insert("version".into(), json!(version.to_string()));
     }
@@ -178,7 +182,7 @@ pub fn library_json(listed: &Listed) -> Value {
 }
 
 pub fn added_json(added: &Added) -> Value {
-    json!({
+    let mut value = json!({
         "name": added.name.to_string(),
         "action": added.action,
         "file": added.location,
@@ -190,14 +194,19 @@ pub fn added_json(added: &Added) -> Value {
             "height": e.height,
         })).collect::<Vec<_>>(),
         "skipped": added.skipped.iter().map(diagnostic_json).collect::<Vec<_>>(),
-    })
+    });
+    if added.global {
+        value["global"] = json!(true);
+    }
+    value
 }
 
 pub fn added_text(added: &Added) -> String {
     let mut text = format!(
-        "{} {} (project, {} {}) -> {}\n",
+        "{} {} ({}, {} {}) -> {}\n",
         added.action,
         added.name,
+        if added.global { "global" } else { "project" },
         added.entries.len(),
         if added.entries.len() == 1 {
             "entry"
@@ -249,6 +258,9 @@ pub fn hit_json(hit: &Hit) -> Value {
         "height": hit.height,
         "origin": hit.origin.as_str(),
     });
+    if hit.global {
+        value["global"] = json!(true);
+    }
     if let Some(version) = hit.version {
         value["version"] = json!(version.to_string());
     }
@@ -295,6 +307,9 @@ fn entry_json(details: &EntryDetails) -> Value {
         "example": details.example,
     });
     let object = value.as_object_mut().expect("object");
+    if details.global {
+        object.insert("global".into(), json!(true));
+    }
     if let Some(version) = details.version {
         object.insert("version".into(), json!(version.to_string()));
     }
@@ -356,6 +371,9 @@ pub fn shown_text(shown: &Shown) -> String {
                 ));
             }
             text.push_str(&format!("origin: {}\n", listed.origin.as_str()));
+            if info.global {
+                text.push_str("global: true\n");
+            }
             if let Some(version) = info.version {
                 text.push_str(&format!("version: {version}\n"));
             }
@@ -363,7 +381,10 @@ pub fn shown_text(shown: &Shown) -> String {
                 text.push_str(&format!("range: {range}\n"));
             }
             if !listed.installed {
-                text.push_str("installed: no; run `d-png-cli library install`\n");
+                text.push_str(&format!(
+                    "installed: no; run `d-png-cli library install{}`\n",
+                    if info.global { " --global" } else { "" }
+                ));
                 return text;
             }
             text.push_str(&format!(
@@ -383,6 +404,9 @@ pub fn shown_text(shown: &Shown) -> String {
                 size(details.height),
                 details.origin.as_str(),
             );
+            if details.global {
+                text.push_str("global: true\n");
+            }
             if let Some(version) = details.version {
                 text.push_str(&format!("version: {version}\n"));
             }
