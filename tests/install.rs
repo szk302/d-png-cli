@@ -402,3 +402,106 @@ fn removing_uninstalls_everywhere() {
     assert_eq!(w.run(&["library", "install"]), "removed @acme/brand\n");
     assert!(!w.installed().exists());
 }
+
+#[test]
+fn global_installs_go_to_the_user_area() {
+    let w = Workspace::new();
+    w.pack("1.0.0", &[&logo()]);
+    // The user's scope; a relative source is resolved from the user area.
+    let home = w.root().join("home");
+    fs::create_dir(&home).unwrap();
+    fs::write(
+        home.join("config.toml"),
+        "[scopes]\nacme = \"file:../acme-d-png-libraries\"\n",
+    )
+    .unwrap();
+    let elsewhere = w.root().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    let mut command = w.command(&["library", "install", "@acme/brand"]);
+    let error = stderr(command.current_dir(&elsewhere), 1);
+    assert!(
+        error.contains("PROJECT_NOT_FOUND") && error.contains("--global"),
+        "{error}"
+    );
+
+    let mut command = w.command(&["library", "install", "--global", "@acme/brand"]);
+    let output = command
+        .current_dir(&elsewhere)
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries\n"
+    );
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), "");
+    let installed = home.join("libraries").join("@acme").join("brand.xml");
+    assert_eq!(
+        fs::read(&installed).unwrap(),
+        fs::read(examples().join("acme-d-png-libraries/@acme/brand/1.0.0.xml")).unwrap()
+    );
+    assert_eq!(
+        fs::read_to_string(home.join("lock.json")).unwrap(),
+        fs::read_to_string(examples().join("project/.d-png/lock.json")).unwrap()
+    );
+    assert_eq!(
+        fs::read_to_string(home.join("config.toml")).unwrap(),
+        "[scopes]\nacme = \"file:../acme-d-png-libraries\"\n\n[dependencies]\n\"@acme/brand\" = \"^1.0.0\"\n"
+    );
+
+    // The project records nothing, yet its diagrams can use it.
+    assert!(!w.project().join(".d-png/lock.json").exists());
+    assert!(!w.installed().exists());
+    let mut expand = w.command(&["expand"]);
+    expand.arg(examples().join("d-data-image/cli.xml"));
+    support::assert_same_cells(
+        &stdout(&mut expand),
+        &fs::read_to_string(examples().join("d-data-image/no-cli.xml")).unwrap(),
+    );
+    assert_eq!(
+        json(&w, &["library", "list", "--json"]),
+        serde_json::json!([{"name": "@acme/brand", "origin": "installed", "global": true, "version": "1.0.0", "range": "^1.0.0", "title": "ACME Brand", "entries": 1, "file": installed.display().to_string(), "normalized": true}])
+    );
+
+    w.pack("1.1.0", &[&logo()]);
+    let updated = w.run(&["library", "update", "--global"]);
+    assert!(
+        updated.starts_with("updated @acme/brand 1.0.0 -> 1.1.0"),
+        "{updated}"
+    );
+    w.run(&["library", "sync", "--global", "--check"]);
+    // A changed file is reported with the command that restores it.
+    fs::write(&installed, "changed").unwrap();
+    let mut validate = w.command(&["validate"]);
+    validate.arg(examples().join("d-data-image/cli.xml"));
+    let error = stderr(&mut validate, 1);
+    assert!(
+        error.contains("LIBRARY_INTEGRITY")
+            && error.contains("`d-png-cli library install --global`"),
+        "{error}"
+    );
+    w.run(&["library", "install", "--global", "--frozen"]);
+    // A library the project's lock.json records is never taken from the
+    // global ones, even when its file is missing.
+    w.run(&["library", "install", "@acme/brand@1.0.0"]);
+    fs::remove_file(w.installed()).unwrap();
+    let mut validate = w.command(&["validate"]);
+    validate.arg(examples().join("d-data-image/cli.xml"));
+    let error = stderr(&mut validate, 1);
+    assert!(
+        error.contains("LIBRARY_NOT_INSTALLED") && error.contains("`d-png-cli library install`"),
+        "{error}"
+    );
+
+    assert_eq!(
+        w.run(&["library", "remove", "--global", "@acme/brand"]),
+        "removed @acme/brand\n"
+    );
+    assert!(!installed.exists());
+    assert!(
+        !fs::read_to_string(home.join("config.toml"))
+            .unwrap()
+            .contains("@acme/brand")
+    );
+}

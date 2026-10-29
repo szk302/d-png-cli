@@ -15,7 +15,7 @@ use crate::{
     adapters::{
         config::{self, Configuration},
         fs,
-        project::{self, Project, ProjectLibraries},
+        project::{self, InstalledLibraries, LibraryArea, Project, ProjectLibraries},
         render::RendererKind,
         sources::{self, Cache, SourceDirectory, Sources},
         vscode::VsCodeSettings,
@@ -24,7 +24,7 @@ use crate::{
         diagram::{self, Pixels, WriteRequest},
         install,
         libraries::{Libraries, SearchQuery},
-        library::{self, PreviewRequest},
+        library::{self, Declared, PreviewRequest},
         ports::{DependencyStore, LibraryRepository, LockStore},
         register,
         vscode::{self, EntryIds},
@@ -34,9 +34,8 @@ use crate::{
         fonts::{self, FontPolicy},
         library::EntryKind,
         library_file::Source,
-        lock::Lock,
         reference::LibraryName,
-        settings::Settings,
+        settings::{Scope, Settings},
         version::Range,
     },
 };
@@ -48,7 +47,7 @@ mod output;
     name = "d-png-cli",
     version,
     about = "Write draw.io diagrams, given as XML on standard input, into PNG images that VS Code's draw.io extension can edit",
-    after_help = "Environment:\n  D_PNG_PROJECT          Directory holding the project area (.d-png/)\n  D_PNG_HOME             Directory of the user's config.toml\n  D_PNG_CACHE            Cache of files fetched from library sources\n  D_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  D_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  D_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  D_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  D_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  D_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
+    after_help = "Environment:\n  D_PNG_PROJECT          Directory holding the project area (.d-png/)\n  D_PNG_HOME             User area: the user's config.toml and the global libraries\n  D_PNG_CACHE            Cache of files fetched from library sources\n  D_PNG_RENDERER         Default renderer: vscode, desktop-compat, raw, desktop-app\n  D_PNG_CHROME_PATH      Chromium or Chrome executable (or CHROME_PATH)\n  D_PNG_CHROME_ARGS      Additional POSIX-quoted Chromium options (no shell expansion)\n  D_PNG_DRAWIO_PATH      draw.io Desktop executable (desktop-app)\n  D_PNG_DRAWIO_ARGS      Additional draw.io Desktop options\n  D_PNG_DRAWIO_WEB_PATH  Local draw.io webapp directory (default: bundled assets)"
 )]
 struct Cli {
     /// Directory holding the project area (.d-png/); default: the nearest above the current directory
@@ -152,7 +151,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum LibraryCommand {
-    /// Register library or image files as a project library (no scope)
+    /// Register library or image files as a project library (no scope), or a global one
     Add {
         /// <mxlibrary> files or PNG, JPEG, GIF, SVG and WebP images ("-" for standard input)
         #[arg(required = true)]
@@ -172,6 +171,9 @@ enum LibraryCommand {
         /// Leave out entries that cannot be expanded instead of failing
         #[arg(long)]
         skip_invalid: bool,
+        /// Use the global libraries in the user area, for every project, instead of the project's
+        #[arg(short, long)]
+        global: bool,
         /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
@@ -186,6 +188,9 @@ enum LibraryCommand {
         /// Use only the cache of fetched files
         #[arg(long)]
         offline: bool,
+        /// Use the global libraries in the user area, for every project, instead of the project's
+        #[arg(short, long)]
+        global: bool,
         /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
@@ -200,6 +205,9 @@ enum LibraryCommand {
         /// Report the changes without writing
         #[arg(long)]
         dry_run: bool,
+        /// Use the global libraries in the user area, for every project, instead of the project's
+        #[arg(short, long)]
+        global: bool,
         /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
@@ -240,21 +248,27 @@ enum LibraryCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Remove a project library or one of its entries, or uninstall a scoped library
+    /// Remove an unscoped library or one of its entries, or uninstall a scoped library
     Remove {
         /// Library name or reference string
         reference: String,
+        /// Use the global libraries in the user area, for every project, instead of the project's
+        #[arg(short, long)]
+        global: bool,
         /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
     },
-    /// Rewrite project libraries in the form draw.io and VS Code both read, giving entries IDs
+    /// Rewrite unscoped libraries in the form draw.io and VS Code both read, giving entries IDs
     Sync {
         /// Libraries to rewrite (default: all)
         names: Vec<String>,
         /// Only report libraries that need it, with exit code 1
         #[arg(long)]
         check: bool,
+        /// Use the global libraries in the user area, for every project, instead of the project's
+        #[arg(short, long)]
+        global: bool,
         /// Print a JSON summary to standard output
         #[arg(long)]
         json: bool,
@@ -264,6 +278,9 @@ enum LibraryCommand {
         /// Only libraries of this scope
         #[arg(long)]
         scope: Option<String>,
+        /// Only the global libraries in the user area
+        #[arg(short, long)]
+        global: bool,
         /// Print the result as JSON to standard output
         #[arg(long)]
         json: bool,
@@ -405,6 +422,8 @@ impl Command {
 /// The adapters a command works with.
 struct Context {
     project: Option<Project>,
+    /// The global libraries in the user area.
+    global: Option<LibraryArea>,
 }
 
 impl Context {
@@ -414,6 +433,7 @@ impl Context {
             .map_err(|e| Diagnostic::new(Code::InputRead, format!("no current directory: {e}")))?;
         Ok(Self {
             project: Project::discover(explicit.as_deref(), &current)?,
+            global: config::user_area().as_deref().map(LibraryArea::global),
         })
     }
 
@@ -486,36 +506,65 @@ impl Context {
         Ok(option || self.settings()?.render.allow_network.unwrap_or(false))
     }
 
-    /// The project's libraries, which commands that write need.
-    fn store(&self) -> Result<ProjectLibraries, Diagnostic> {
+    /// The project's libraries, or with `global` the global ones, which
+    /// commands that change libraries need.
+    fn area(&self, global: bool) -> Result<LibraryArea, Diagnostic> {
+        if global {
+            return self.global.clone().ok_or_else(config::no_user_area);
+        }
         self.project
             .as_ref()
-            .map(Project::libraries)
+            .map(Project::library_area)
             .ok_or_else(|| {
                 Diagnostic::new(
                     Code::ProjectNotFound,
-                    "no project (.d-png/) here or above; run `d-png-cli init`",
+                    "no project (.d-png/) here or above; run `d-png-cli init`, or use --global for the global libraries",
                 )
             })
     }
 
-    /// `[dependencies]` and `lock.json`, which `library list` and `show`
-    /// describe installed libraries with; none without a project.
-    fn dependencies(&self) -> Result<(BTreeMap<LibraryName, Range>, Lock), Diagnostic> {
-        let Some(project) = &self.project else {
-            return Ok(Default::default());
-        };
-        Ok((self.settings()?.dependencies, project.lock().load()?))
+    /// The unscoped libraries that `library add`, `remove` and `sync` change.
+    fn store(&self, global: bool) -> Result<ProjectLibraries, Diagnostic> {
+        Ok(self.area(global)?.libraries())
     }
 
-    fn with_libraries<T>(&self, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
-        let project: Option<ProjectLibraries> = self.project.as_ref().map(Project::libraries);
-        let installed = self.project.as_ref().map(Project::installed);
-        let mut repositories: Vec<&dyn LibraryRepository> = Vec::new();
-        if let Some(project) = &project {
-            repositories.push(project);
+    /// `[dependencies]` and `lock.json` of the project and of the global
+    /// libraries (only these with `only_global`), which `library list` and
+    /// `show` describe installed libraries with.
+    fn declared(&self, only_global: bool) -> Result<Vec<Declared>, Diagnostic> {
+        let mut declared = Vec::new();
+        if let Some(project) = self.project.as_ref().filter(|_| !only_global) {
+            declared.push(Declared {
+                global: false,
+                ranges: self.settings()?.dependencies,
+                lock: project.lock().load()?,
+            });
         }
-        if let Some(installed) = &installed {
+        if let Some(area) = &self.global {
+            declared.push(Declared {
+                global: true,
+                ranges: Configuration::global().settings()?.dependencies,
+                lock: area.lock().load()?,
+            });
+        }
+        Ok(declared)
+    }
+
+    /// The libraries references can name: the project's, then the global
+    /// ones; only these with `only_global`.
+    fn with_libraries<T>(&self, only_global: bool, run: impl FnOnce(&Libraries<'_>) -> T) -> T {
+        let areas: Vec<LibraryArea> = self
+            .project
+            .iter()
+            .filter(|_| !only_global)
+            .map(Project::library_area)
+            .chain(self.global.clone())
+            .collect();
+        let unscoped: Vec<ProjectLibraries> = areas.iter().map(LibraryArea::libraries).collect();
+        let installed: Vec<InstalledLibraries> = areas.iter().map(LibraryArea::installed).collect();
+        let mut repositories: Vec<&dyn LibraryRepository> = Vec::new();
+        for (unscoped, installed) in unscoped.iter().zip(&installed) {
+            repositories.push(unscoped);
             repositories.push(installed);
         }
         run(&Libraries::new(repositories))
@@ -538,47 +587,64 @@ impl Context {
     }
 
     /// When `library list` or `search` finds nothing because there is no
-    /// project or no library, says how to make one or add one.
-    fn hint_empty(&self) {
-        if self.project.is_none() {
-            eprintln!("hint: no project (.d-png/) here or above; run `d-png-cli init`");
-            return;
-        }
-        let (Ok(settings), Ok(listed)) = (
-            self.settings(),
-            self.with_libraries(|libraries| libraries.list()),
+    /// library, says how to add one: to the project, or to the global
+    /// libraries (only these with `only_global`).
+    fn hint_empty(&self, only_global: bool) {
+        let (Ok(listed), Ok(declared)) = (
+            self.with_libraries(only_global, |libraries| libraries.list()),
+            self.declared(only_global),
         ) else {
             return;
         };
-        if !listed.is_empty() || !settings.dependencies.is_empty() {
+        if !listed.is_empty() || declared.iter().any(|d| !d.ranges.is_empty()) {
             return;
         }
-        let install = if settings.scopes.is_empty() {
-            "or give a scope a source in [scopes] of config.toml and run `d-png-cli library install @SCOPE/NAME`".to_owned()
-        } else {
-            let scopes: Vec<String> = settings.scopes.keys().map(|s| format!("@{s}")).collect();
-            format!(
-                "or install one with `d-png-cli library install @SCOPE/NAME` (scopes with a source: {})",
-                scopes.join(", ")
-            )
-        };
-        eprintln!(
-            "hint: no libraries yet; register a file with `d-png-cli library add FILE`, {install}"
-        );
+        if only_global {
+            let Ok(settings) = Configuration::global().settings() else {
+                return;
+            };
+            eprintln!(
+                "hint: no global libraries yet; register a file for every project with `d-png-cli library add --global FILE`, {}",
+                install_hint(&settings.scopes, " --global", "the user's config.toml")
+            );
+        } else if self.project.is_none() {
+            eprintln!(
+                "hint: no project (.d-png/) here or above, and no global libraries; run `d-png-cli init`, or register a file for every project with `d-png-cli library add --global FILE`"
+            );
+        } else if let Ok(settings) = self.settings() {
+            eprintln!(
+                "hint: no libraries yet; register a file with `d-png-cli library add FILE`, {}",
+                install_hint(&settings.scopes, "", "config.toml")
+            );
+        }
     }
 
-    /// The stores for installing, with the sources as the registry.
+    /// The stores for installing into the project, or with `global` into
+    /// the global libraries, with the sources as the registry.
     fn with_stores<T>(
         &self,
+        global: bool,
         offline: bool,
         run: impl FnOnce(&install::Stores<'_>) -> T,
     ) -> Result<T, Diagnostic> {
-        let project = self.project()?;
-        let configuration = self.configuration();
-        let lock = project.lock();
-        let installed = project.installed();
+        let area = self.area(global)?;
+        let (configuration, root, command) = if global {
+            (
+                Configuration::global(),
+                None,
+                "d-png-cli library install --global",
+            )
+        } else {
+            (
+                self.configuration(),
+                self.project.as_ref().map(|p| p.root().to_owned()),
+                "d-png-cli library install",
+            )
+        };
+        let lock = area.lock();
+        let installed = area.installed();
         let registry = Sources::new(
-            Some(project.root().to_owned()),
+            root,
             config::user_area(),
             Cache::new(sources::cache_dir()),
             offline,
@@ -588,7 +654,24 @@ impl Context {
             lock: &lock,
             installed: &installed,
             registry: &registry,
+            command,
         }))
+    }
+}
+
+/// How to install a scoped library: the scopes that have a source, or where
+/// to give one a source.
+fn install_hint(scopes: &BTreeMap<String, Scope>, flag: &str, config: &str) -> String {
+    if scopes.is_empty() {
+        format!(
+            "or give a scope a source in [scopes] of {config} and run `d-png-cli library install{flag} @SCOPE/NAME`"
+        )
+    } else {
+        let scopes: Vec<String> = scopes.keys().map(|s| format!("@{s}")).collect();
+        format!(
+            "or install one with `d-png-cli library install{flag} @SCOPE/NAME` (scopes with a source: {})",
+            scopes.join(", ")
+        )
     }
 }
 
@@ -625,7 +708,8 @@ fn run(cli: Cli) -> Outcome {
             require_output_for_json(json, output.as_deref())?;
             let bytes = read_input(input.as_deref())?;
             let context = Context::new(cli.project)?;
-            let read = context.with_libraries(|libraries| diagram::read(&bytes, raw, libraries))?;
+            let read =
+                context.with_libraries(false, |libraries| diagram::read(&bytes, raw, libraries))?;
             write_text_output(output.as_deref(), &read.xml)?;
             if !raw && !json {
                 eprintln!(
@@ -650,8 +734,9 @@ fn run(cli: Cli) -> Outcome {
             let bytes = read_input(input.as_deref())?;
             let context = Context::new(cli.project)?;
             let fonts = context.fonts(default_font, &fallback_font)?;
-            let expanded = context
-                .with_libraries(|libraries| diagram::expand(&bytes, fonts.as_ref(), libraries))?;
+            let expanded = context.with_libraries(false, |libraries| {
+                diagram::expand(&bytes, fonts.as_ref(), libraries)
+            })?;
             write_text_output(output.as_deref(), &expanded.xml)?;
             if json {
                 print_json(&json!({
@@ -667,7 +752,7 @@ fn run(cli: Cli) -> Outcome {
             let bytes = read_input(input.as_deref())?;
             let context = Context::new(cli.project)?;
             let validation =
-                context.with_libraries(|libraries| diagram::validate(&bytes, libraries))?;
+                context.with_libraries(false, |libraries| diagram::validate(&bytes, libraries))?;
             if json {
                 print_json(&json!({
                     "valid": true,
@@ -719,7 +804,7 @@ fn run(cli: Cli) -> Outcome {
                     allow_network,
                 }
             };
-            let written = context.with_libraries(|libraries| {
+            let written = context.with_libraries(false, |libraries| {
                 diagram::write(
                     WriteRequest {
                         input: &bytes,
@@ -762,9 +847,10 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             replace,
             merge,
             skip_invalid,
+            global,
             json,
         } => {
-            let store = context.store()?;
+            let store = context.store(global)?;
             let mut files = Vec::new();
             for path in &sources {
                 let file_name = (path.as_os_str() != "-")
@@ -798,26 +884,32 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 eprint!("{}", output::diagnostics(&[], &added.skipped, false));
                 print(&output::added_text(&added))?;
             }
-            context.hint_vscode(added.location.iter().cloned().collect());
+            if !global {
+                context.hint_vscode(added.location.iter().cloned().collect());
+            }
             Ok(())
         }
         LibraryCommand::Install {
             names,
             frozen,
             offline,
+            global,
             json,
         } => {
             let add = names
                 .iter()
                 .map(|n| requested(n))
                 .collect::<Result<Vec<_>, _>>()?;
-            let changes = context.with_stores(offline, |stores| {
+            let changes = context.with_stores(global, offline, |stores| {
                 install::install(stores, &install::InstallRequest { add, frozen })
             })??;
             if json {
                 print_json(&output::changes_json(&changes))?;
             } else {
                 print(&output::changes_text(&changes, false))?;
+            }
+            if global {
+                return Ok(());
             }
             context.hint_vscode(
                 changes
@@ -839,13 +931,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             names,
             latest,
             dry_run,
+            global,
             json,
         } => {
             let names = names
                 .iter()
                 .map(|n| LibraryName::parse(n))
                 .collect::<Result<Vec<_>, _>>()?;
-            let changes = context.with_stores(false, |stores| {
+            let changes = context.with_stores(global, false, |stores| {
                 install::update(
                     stores,
                     &install::UpdateRequest {
@@ -916,14 +1009,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             let ids = EntryIds::new(entry_id.as_deref())?;
             if !write {
                 let items = context
-                    .with_libraries(|libraries| vscode::custom_libraries(libraries, &ids))?;
+                    .with_libraries(false, |libraries| vscode::custom_libraries(libraries, &ids))?;
                 return print(&crate::adapters::vscode::value(&items));
             }
             let settings = VsCodeSettings {
                 path: project.root().join(".vscode/settings.json"),
             };
-            let items =
-                context.with_libraries(|libraries| vscode::write(&settings, libraries, &ids))?;
+            let items = context
+                .with_libraries(false, |libraries| vscode::write(&settings, libraries, &ids))?;
             if json {
                 print_json(&json!({"file": ".vscode/settings.json", "libraries": items.len()}))
             } else {
@@ -938,18 +1031,23 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 ))
             }
         }
-        LibraryCommand::Remove { reference, json } => {
+        LibraryCommand::Remove {
+            reference,
+            global,
+            json,
+        } => {
             if let Ok(name) = LibraryName::parse(&reference)
                 && name.scope().is_some()
             {
-                context.with_stores(false, |stores| install::uninstall(stores, &name))??;
+                context
+                    .with_stores(global, false, |stores| install::uninstall(stores, &name))??;
                 return if json {
                     print_json(&json!({"removed": name.to_string(), "type": "installed"}))
                 } else {
                     print(&format!("removed {name}\n"))
                 };
             }
-            let store = context.store()?;
+            let store = context.store(global)?;
             let removed = register::remove(&store, &reference)?;
             let (kind, name) = match &removed {
                 register::Removed::Library(name) => ("library", name.to_string()),
@@ -961,12 +1059,17 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 print(&format!("removed {name}\n"))
             }
         }
-        LibraryCommand::Sync { names, check, json } => {
-            let store = context.store()?;
+        LibraryCommand::Sync {
+            names,
+            check,
+            global,
+            json,
+        } => {
+            let store = context.store(global)?;
             let synced = register::sync(&store, &names, check)?;
             if check {
                 // Installed libraries must match lock.json too.
-                context.with_stores(true, install::verify)??;
+                context.with_stores(global, true, install::verify)??;
             }
             let names: Vec<String> = synced.normalized.iter().map(|n| n.to_string()).collect();
             if json {
@@ -980,10 +1083,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 )
             }
         }
-        LibraryCommand::List { scope, json } => {
-            let (dependencies, lock) = context.dependencies()?;
-            let listed = context.with_libraries(|libraries| {
-                library::list(libraries, &dependencies, &lock, scope.as_deref())
+        LibraryCommand::List {
+            scope,
+            global,
+            json,
+        } => {
+            let declared = context.declared(global)?;
+            let listed = context.with_libraries(global, |libraries| {
+                library::list(libraries, &declared, scope.as_deref())
             })?;
             if json {
                 print_json(&Value::Array(
@@ -994,8 +1101,9 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                     let info = &listed.info;
                     if !listed.installed {
                         eprintln!(
-                            "warning: {} is not installed; run `d-png-cli library install`",
-                            info.name
+                            "warning: {} is not installed; run `d-png-cli library install{}`",
+                            info.name,
+                            if info.global { " --global" } else { "" }
                         );
                     } else if !info.normalized {
                         eprintln!(
@@ -1008,7 +1116,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 print(&listed.iter().map(output::library_line).collect::<String>())?;
             }
             if listed.is_empty() {
-                context.hint_empty();
+                context.hint_empty(global);
             }
             Ok(())
         }
@@ -1022,8 +1130,8 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 words: query,
                 ..filter.query()?
             };
-            let found =
-                context.with_libraries(|libraries| library::search(libraries, &query, limit))?;
+            let found = context
+                .with_libraries(false, |libraries| library::search(libraries, &query, limit))?;
             if found.hits.len() < found.total {
                 eprintln!(
                     "{} of {} entries shown; narrow the search or use --limit 0",
@@ -1039,14 +1147,14 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
                 print(&found.hits.iter().map(output::hit_line).collect::<String>())?;
             }
             if found.total == 0 {
-                context.hint_empty();
+                context.hint_empty(false);
             }
             Ok(())
         }
         LibraryCommand::Show { reference, json } => {
-            let (dependencies, lock) = context.dependencies()?;
-            let shown = context.with_libraries(|libraries| {
-                library::show(libraries, &dependencies, &lock, &reference)
+            let declared = context.declared(false)?;
+            let shown = context.with_libraries(false, |libraries| {
+                library::show(libraries, &declared, &reference)
             })?;
             if json {
                 print_json(&output::shown_json(&shown))
@@ -1071,7 +1179,7 @@ fn library_command(context: &Context, command: LibraryCommand) -> Outcome {
             };
             let renderer = RendererKind::Vscode.renderer();
             let allow_network = context.allow_network(allow_network)?;
-            let previewed = context.with_libraries(|libraries| {
+            let previewed = context.with_libraries(false, |libraries| {
                 library::preview(libraries, &request, renderer.as_ref(), allow_network)
             })?;
             if to_stdout {

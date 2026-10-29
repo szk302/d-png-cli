@@ -107,8 +107,8 @@ EOF
 | `library search [QUERY...]` | エントリーを検索し、参照文字列・種類・サイズ・タイトルを出す |
 | `library show REF` | ライブラリ・エントリーの詳細（style・セル構成・配置例） |
 | `library preview QUERY... -o PNG` | 該当するエントリーを並べた PNG を描く（最大 60 件） |
-| `library add SOURCE...` | ライブラリ・画像ファイルを、プロジェクト専用のライブラリとして登録する |
-| `library install [NAME[@範囲]...]` | スコープ付きのライブラリを取得元から取り込む |
+| `library add SOURCE...` | ライブラリ・画像ファイルを、プロジェクト専用（`--global` ではグローバル）のライブラリとして登録する |
+| `library install [NAME[@範囲]...]` | スコープ付きのライブラリを取得元から取り込む（`--global` ではユーザー領域に） |
 | `library update [NAME...]` | 取り込んだライブラリを新しい版にする |
 | `library pack SOURCE... --to DIR` | 取得元に置くライブラリの版を作る |
 | `library remove REF` | ライブラリ・エントリーの登録、取り込みを消す |
@@ -117,7 +117,7 @@ EOF
 | `skill` | AI エージェント向けの手順書を出す |
 | `licenses` | d-png-cli・依存クレート・同梱資材のライセンスと通知を出す |
 
-`read`・`write`・`expand`・`validate` は、XML（`<mxfile>`・`<mxGraphModel>`）と `.drawio.png` のどちらも受け付け、拡張子ではなく内容で判別します。
+`read`・`write`・`expand`・`validate` は、XML（`<mxfile>`・`<mxGraphModel>`）と `.drawio.png` のどちらも受け付け、拡張子ではなく内容で判別します。ライブラリを変える `library add`・`install`・`update`・`remove`・`sync` は、`--global`（`-g`）でグローバルのライブラリを対象にします。
 
 ## 共通の規約
 
@@ -178,7 +178,7 @@ EOF
 
 ## ライブラリ
 
-ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリだけで、任意のパスのファイルや環境変数で指したファイルは使いません。同じ XML が、どの環境でも同じ部品に展開されるようにするためです。d-png-cli はライブラリを同梱しません（[draw.io の図形を使う](#drawio-の図形を使う)）。
+ライブラリは draw.io のカスタムライブラリ（`<mxlibrary>` 形式の XML）です。参照できるのはプロジェクトに登録・取り込みしたライブラリと、ユーザー領域のグローバルのライブラリ（[個人のライブラリをすべてのプロジェクトで使う](#個人のライブラリをすべてのプロジェクトで使うグローバル)）だけで、任意のパスのファイルや環境変数で指したファイルは使いません。プロジェクトのライブラリなら、同じ XML がどの環境でも同じ部品に展開されます。d-png-cli はライブラリを同梱しません（[draw.io の図形を使う](#drawio-の図形を使う)）。
 
 ライブラリ名には npm と同じ名前空間（スコープ）があります。
 
@@ -186,6 +186,8 @@ EOF
 | --- | --- | --- | --- |
 | プロジェクト専用 | `components` | `library add` | `.d-png/libraries/components.xml`（Git にコミットする） |
 | 取り込み | `@acme/brand` | `library install` | `.d-png/libraries/@acme/brand.xml`（Git から除外し、`lock.json` から復元する） |
+
+どちらも `--global` を付けると、プロジェクトではなくユーザー領域の `libraries/` に置き、すべてのプロジェクトから使えます。
 
 ```sh
 d-png-cli init
@@ -203,7 +205,7 @@ d-png-cli library preview postgres -o candidates.png
 
 ### スコープと取得元
 
-複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.d-png/config.toml`（個人の取得元はユーザーの `config.toml`。[個人のライブラリを複数のプロジェクトで使う](#個人のライブラリを複数のプロジェクトで使う)）にスコープごとに書きます。
+複数のリポジトリで使うライブラリは、スコープを付けて取得元から取り込みます。取得元は `.d-png/config.toml`（個人の取得元はユーザーの `config.toml`。[個人のライブラリをすべてのプロジェクトで使う](#個人のライブラリをすべてのプロジェクトで使うグローバル)）にスコープごとに書きます。
 
 ```toml
 [scopes]
@@ -230,34 +232,38 @@ d-png-cli library pack ./Logo.svg --name @acme/brand --version 1.0.0 --to ./d-pn
 
 詳細は [仕様の 9 章](docs/spec.md#9-ライブラリ) を参照してください。
 
-### 個人のライブラリを複数のプロジェクトで使う
+### 個人のライブラリをすべてのプロジェクトで使う（グローバル）
 
-ライブラリをグローバルにインストールする仕組みはありません。ユーザー領域に置けるのは `config.toml` だけで、ライブラリは各プロジェクトの `.d-png/libraries/` に入れます。どのプロジェクトでも使う個人のライブラリは、ユーザーの `config.toml` に `file:` の取得元を書いておき、プロジェクトごとに取り込みます。
+プロジェクトごとに `init` や登録をせずに使いたい個人のライブラリは、`--global`（`-g`）を付けてユーザー領域にグローバルのライブラリとして置きます。プロジェクトがない場所でも、どのプロジェクトからでも参照できます。
 
-1. ユーザーの `config.toml` にスコープと取得元を書きます。ファイルの場所は Linux が `~/.config/d-png-cli/config.toml`（`$XDG_CONFIG_HOME` があればその下）、macOS が `~/Library/Application Support/d-png-cli/config.toml`、Windows が `%APPDATA%\d-png-cli\config.toml` です（`D_PNG_HOME` で変えられます）。
+```sh
+d-png-cli library add --global ./my-icons.xml    # ユーザー領域の libraries/my-icons.xml に登録する
+d-png-cli library search postgres                # プロジェクトとグローバルのライブラリを探す
+d-png-cli library list --global                  # グローバルのライブラリだけを出す
+d-png-cli library remove --global my-icons
+```
 
-   ```toml
-   [scopes]
-   mine = "file:~/d-png-libraries"
-   ```
+スコープ付きのライブラリも、取得元から版を固定してグローバルに取り込めます。取得元はユーザーの `config.toml` の `[scopes]` に書きます。依存関係はユーザーの `config.toml` の `[dependencies]` に、版はユーザー領域の `lock.json` に記録します。
 
-2. 取得元のディレクトリに、ライブラリの版を作ります。プロジェクトの外でも実行できます。
+```toml
+# ユーザーの config.toml
+[scopes]
+mine = "file:~/d-png-libraries"
+```
 
-   ```sh
-   d-png-cli library pack ./my-icons.xml ./Logo.svg --name @mine/icons --version 1.0.0 --to ~/d-png-libraries
-   ```
+```sh
+# 取得元のディレクトリに版を作る（プロジェクトの外でも実行できる）
+d-png-cli library pack ./my-icons.xml ./Logo.svg --name @mine/icons --version 1.0.0 --to ~/d-png-libraries
+d-png-cli library install --global @mine/icons
+d-png-cli library update --global @mine/icons    # 取得元で新しい版を作った後
+```
 
-3. 使うプロジェクトで取り込みます。
-
-   ```sh
-   d-png-cli library install @mine/icons    # .d-png/config.toml の [dependencies] と lock.json に記録する
-   d-png-cli library vscode --write         # VS Code 拡張でも使う場合
-   ```
-
-部品を足すときは、取得元で新しい版を作り（`library pack … --version 1.1.0`）、各プロジェクトで `library update @mine/icons` を実行します。
-
-- `~/` は環境変数 `HOME`（なければ `USERPROFILE`）のディレクトリです。相対パスは、ユーザーの `config.toml` を置いたディレクトリ（`D_PNG_HOME`）から解決します。
-- 取得元はユーザーの設定にしかないため、そのリポジトリを clone したほかの人や CI では `library install --frozen` で復元できません（`SCOPE_UNKNOWN`）。ほかの人と共有するリポジトリでは、Git など全員が読める取得元をプロジェクトの `.d-png/config.toml` に書いてください。
+- ユーザー領域は、Linux が `~/.config/d-png-cli/`（`$XDG_CONFIG_HOME` があればその下）、macOS が `~/Library/Application Support/d-png-cli/`、Windows が `%APPDATA%\d-png-cli\` です（`D_PNG_HOME` で変えられます）。ライブラリはその下の `libraries/` に置きます。
+- 参照は、プロジェクトのライブラリ → グローバルのライブラリの順に探します。プロジェクトに同じ名前のライブラリがあれば、そちらを使います。
+- `~/` は環境変数 `HOME`（なければ `USERPROFILE`）のディレクトリです。相対パスは、ユーザー領域（`D_PNG_HOME`）から解決します。
+- グローバルのライブラリは、登録した人の環境にしかありません。それでも、保存した PNG は参照を含まない普通の draw.io の図面なので、ほかの人も開けます。ほかの人が `read` → 編集 → `write` する場合も、その人のライブラリにない画像は `read` がそのまま残すので失敗しません。
+- `REF_NOT_FOUND` になるのは、参照（`dpng-ref`・`image=lib:`）を含む XML を、そのライブラリを持たない環境（ほかの人・CI）で `write`・`validate` する場合だけです。参照を含む XML をリポジトリで共有する場合は、ライブラリをプロジェクトに登録するか、Git など全員が読める取得元から取り込んでください（[スコープと取得元](#スコープと取得元)）。
+- VS Code 拡張の設定（`library vscode`）には、グローバルのライブラリを書きません。
 
 ### VS Code 拡張との共有
 
@@ -463,7 +469,7 @@ exec xvfb-run -a /opt/drawio/drawio "$@"
 | 環境変数 | 内容 |
 | --- | --- |
 | `D_PNG_PROJECT` | プロジェクト領域（`.d-png/`）を含むディレクトリ。既定はカレントディレクトリから親へ探す |
-| `D_PNG_HOME` | ユーザー領域（個人の `config.toml`）。既定は Linux が `$XDG_CONFIG_HOME/d-png-cli`、macOS が `~/Library/Application Support/d-png-cli`、Windows が `%APPDATA%\d-png-cli` |
+| `D_PNG_HOME` | ユーザー領域（個人の `config.toml` とグローバルのライブラリ）。既定は Linux が `$XDG_CONFIG_HOME/d-png-cli`、macOS が `~/Library/Application Support/d-png-cli`、Windows が `%APPDATA%\d-png-cli` |
 | `D_PNG_RENDERER` | 既定のレンダラー（`vscode`・`desktop-compat`・`raw`・`desktop-app`） |
 | `D_PNG_CHROME_PATH` / `CHROME_PATH` | Chromium / Chrome の実行ファイル |
 | `D_PNG_CHROME_ARGS` | Chromium の追加引数（POSIX 形式のクォート。シェル展開はしない） |

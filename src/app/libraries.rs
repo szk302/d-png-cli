@@ -1,6 +1,7 @@
 //! Every library a reference can name, across repositories: the scope of a
-//! name chooses the repository (spec 9.1). Resolves references for the
-//! domain's expansion and searches entries.
+//! name chooses the repositories, and the project's come before the global
+//! ones (spec 9.1). Resolves references for the domain's expansion and
+//! searches entries.
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -25,7 +26,8 @@ const CANDIDATES: usize = 5;
 type ImageIndex = HashMap<String, (Ref, String)>;
 
 pub struct Libraries<'a> {
-    /// In search order: project, installed.
+    /// In search order: the project's unscoped and installed libraries, then
+    /// the global ones.
     repositories: Vec<&'a dyn LibraryRepository>,
     cache: RefCell<HashMap<LibraryName, Option<Rc<Library>>>>,
     index: RefCell<Option<Rc<ImageIndex>>>,
@@ -36,6 +38,8 @@ pub struct Libraries<'a> {
 pub struct Hit {
     pub reference: Ref,
     pub origin: Origin,
+    /// Whether the library is a global one.
+    pub global: bool,
     /// The installed version, for an installed library's entry.
     pub version: Option<Version>,
     pub title: String,
@@ -45,11 +49,16 @@ pub struct Hit {
 }
 
 impl<'a> Libraries<'a> {
-    /// `repositories` in search order; at most one per origin.
+    /// `repositories` in any order; at most one per origin and area.
     pub fn new(repositories: Vec<&'a dyn LibraryRepository>) -> Self {
-        let order = |r: &&dyn LibraryRepository| match r.origin() {
-            Origin::Project => 0,
-            Origin::Installed => 1,
+        let order = |r: &&dyn LibraryRepository| {
+            (
+                r.global(),
+                match r.origin() {
+                    Origin::Project => 0,
+                    Origin::Installed => 1,
+                },
+            )
         };
         let mut repositories = repositories;
         repositories.sort_by_key(order);
@@ -60,23 +69,33 @@ impl<'a> Libraries<'a> {
         }
     }
 
-    fn repository(&self, origin: Origin) -> Option<&'a dyn LibraryRepository> {
+    /// The repositories of a namespace: the project's, then the global one.
+    fn repositories(&self, origin: Origin) -> impl Iterator<Item = &'a dyn LibraryRepository> {
         self.repositories
             .iter()
             .copied()
-            .find(|r| r.origin() == origin)
+            .filter(move |r| r.origin() == origin)
     }
 
-    /// The library with this name, or `None`; a missing project or installed
-    /// area reads as an empty one.
+    fn has_project(&self) -> bool {
+        self.repositories.iter().any(|r| !r.global())
+    }
+
+    /// The library with this name, or `None`; a missing area reads as an
+    /// empty one. The project's library hides a global one of the same name;
+    /// a project library that cannot be read is an error, not a reason to
+    /// use the global one.
     pub fn load(&self, name: &LibraryName) -> Result<Option<Rc<Library>>, Diagnostic> {
         if let Some(found) = self.cache.borrow().get(name) {
             return Ok(found.clone());
         }
-        let found = match self.repository(name.origin()) {
-            Some(repository) => repository.load(name)?.map(Rc::new),
-            None => None,
-        };
+        let mut found = None;
+        for repository in self.repositories(name.origin()) {
+            if let Some(library) = repository.load(name)? {
+                found = Some(Rc::new(library));
+                break;
+            }
+        }
         self.cache.borrow_mut().insert(name.clone(), found.clone());
         Ok(found)
     }
@@ -87,12 +106,15 @@ impl<'a> Libraries<'a> {
             .and_then(|library| library.entry(&reference.entry).cloned()))
     }
 
-    /// Every library, in search order, with where it comes from.
+    /// Every library a reference can name, in search order, with where it
+    /// comes from; a global library hidden by the project's is left out.
     pub fn list(&self) -> Result<Vec<(Origin, LibraryInfo)>, Diagnostic> {
-        let mut all = Vec::new();
+        let mut all: Vec<(Origin, LibraryInfo)> = Vec::new();
         for repository in &self.repositories {
             for info in repository.list()? {
-                all.push((repository.origin(), info));
+                if !all.iter().any(|(_, listed)| listed.name == info.name) {
+                    all.push((repository.origin(), info));
+                }
             }
         }
         Ok(all)
@@ -179,8 +201,8 @@ impl<'a> Libraries<'a> {
         .reference(text))
     }
 
-    /// Images of the project's and installed libraries by fingerprint, the
-    /// first in search order winning.
+    /// Images of the libraries by fingerprint, the first in search order
+    /// winning.
     fn image_index(&self) -> Result<Rc<ImageIndex>, Diagnostic> {
         if let Some(index) = self.index.borrow().as_ref() {
             return Ok(index.clone());
@@ -216,13 +238,20 @@ impl<'a> Libraries<'a> {
 
     /// REF_NOT_FOUND with close references that exist.
     fn not_found(&self, reference: &Ref, text: &str) -> Diagnostic {
+        let project = self.has_project();
         let message = match reference.library.origin() {
-            origin if self.repository(origin).is_none() => {
+            origin if self.repositories(origin).next().is_none() => {
                 format!("{reference} is not found: no project (.d-png/) here; run `d-png-cli init`")
             }
             Origin::Installed if matches!(self.load(&reference.library), Ok(None)) => format!(
-                "{reference} is not found: {} is not installed; add it with `d-png-cli library install {}`",
-                reference.library, reference.library
+                "{reference} is not found: {} is not installed; add it with `d-png-cli library install{} {}`",
+                reference.library,
+                if project { "" } else { " --global" },
+                reference.library
+            ),
+            Origin::Project if !project => format!(
+                "{reference} is not found: no project (.d-png/) here, and no global library {}; run `d-png-cli init`, or register it for every project with `d-png-cli library add --global`",
+                reference.library
             ),
             _ => format!("{reference} is not found"),
         };
@@ -325,6 +354,7 @@ impl<'a> Libraries<'a> {
                             entry: entry.id.clone(),
                         },
                         origin,
+                        global: info.global,
                         version: info.version,
                         title: entry.title.clone(),
                         kind,

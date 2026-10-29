@@ -87,6 +87,10 @@ impl LibraryRepository for Memory {
         self.origin
     }
 
+    fn global(&self) -> bool {
+        false
+    }
+
     fn list(&self) -> Result<Vec<LibraryInfo>, Diagnostic> {
         Ok(self
             .libraries
@@ -98,6 +102,7 @@ impl LibraryRepository for Memory {
                 location: None,
                 normalized: true,
                 version: None,
+                global: false,
             })
             .collect())
     }

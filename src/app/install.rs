@@ -16,12 +16,16 @@ use crate::{
     },
 };
 
-/// The adapters `library install`, `update` and `remove` work with.
+/// The adapters `library install`, `update` and `remove` work with: the
+/// project's, or the global libraries'.
 pub struct Stores<'a> {
     pub dependencies: &'a dyn DependencyStore,
     pub lock: &'a dyn LockStore,
     pub installed: &'a dyn InstalledStore,
     pub registry: &'a dyn Registry,
+    /// The command that installs into these stores, for messages, such as
+    /// `d-png-cli library install`.
+    pub command: &'a str,
 }
 
 /// What happened to one library.
@@ -166,7 +170,7 @@ pub fn install(stores: &Stores<'_>, request: &InstallRequest) -> Result<Vec<Chan
         if !problems.is_empty() {
             problems.push(Diagnostic::new(
                 Code::LockOutdated,
-                "run `d-png-cli library install` and commit lock.json",
+                format!("run `{}` and commit lock.json", stores.command),
             ));
             return Err(problems);
         }
@@ -358,7 +362,10 @@ pub fn update(stores: &Stores<'_>, request: &UpdateRequest) -> Result<Vec<Change
             if !settings.dependencies.contains_key(name) {
                 problems.push(Diagnostic::new(
                     Code::RefNotFound,
-                    format!("{name} is not a dependency; add it with `library install {name}`"),
+                    format!(
+                        "{name} is not a dependency; add it with `{} {name}`",
+                        stores.command
+                    ),
                 ));
             }
         }
@@ -639,7 +646,7 @@ pub fn verify(stores: &Stores<'_>) -> Result<(), Diagnostics> {
     let lock = stores.lock.load()?;
     let present = stores.installed.installed()?;
     let mut problems = Diagnostics::default();
-    let install = "run `d-png-cli library install`";
+    let install = format!("run `{}`", stores.command);
     for name in settings.dependencies.keys() {
         if !lock.libraries.contains_key(name) {
             problems.push(Diagnostic::new(

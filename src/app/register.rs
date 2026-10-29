@@ -1,5 +1,5 @@
-//! The use cases that change the project's own libraries (spec 9.11, 9.15,
-//! 9.16): add, remove and sync.
+//! The use cases that change unscoped libraries, the project's or the global
+//! ones (spec 9.11, 9.15, 9.16): add, remove and sync.
 use crate::{
     app::ports::LibraryStore,
     domain::{
@@ -42,6 +42,8 @@ pub struct Written {
 pub struct Added {
     pub name: LibraryName,
     pub location: Option<String>,
+    /// Whether it is a global library.
+    pub global: bool,
     /// `added`, `replaced` or `merged`.
     pub action: &'static str,
     /// The entries this command wrote.
@@ -78,7 +80,7 @@ fn name_for(request: &AddRequest<'_>) -> Result<LibraryName, Diagnostic> {
     Ok(name)
 }
 
-/// Registers sources as a project library (spec 9.11).
+/// Registers sources as an unscoped library of the store (spec 9.11).
 pub fn add(store: &dyn LibraryStore, request: AddRequest<'_>) -> Result<Added, Diagnostics> {
     let name = name_for(&request)?;
     let (source_title, entries) = library_file::read_sources(&request.sources)
@@ -170,6 +172,7 @@ pub fn add(store: &dyn LibraryStore, request: AddRequest<'_>) -> Result<Added, D
             .collect(),
         name,
         location,
+        global: store.global(),
         action,
         skipped,
     })
@@ -182,7 +185,7 @@ pub enum Removed {
     Entry(Ref),
 }
 
-/// Removes a project library or one of its entries (spec 9.15).
+/// Removes an unscoped library or one of its entries (spec 9.15).
 pub fn remove(store: &dyn LibraryStore, target: &str) -> Result<Removed, Diagnostics> {
     if let Ok(reference) = Ref::parse(target) {
         if reference.library.scope().is_some() {
@@ -239,7 +242,7 @@ pub struct Synced {
     pub checked: usize,
 }
 
-/// Rewrites project libraries in the normalized form, giving entries IDs;
+/// Rewrites unscoped libraries in the normalized form, giving entries IDs;
 /// with `check`, only reports the ones that need it (spec 9.16).
 pub fn sync(
     store: &dyn LibraryStore,

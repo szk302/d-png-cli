@@ -31,45 +31,67 @@ pub struct Listed {
     pub installed: bool,
 }
 
+/// The dependencies of the project or of the global libraries, and what
+/// their `lock.json` records, which describe installed libraries.
+#[derive(Clone, Debug, Default)]
+pub struct Declared {
+    pub global: bool,
+    pub ranges: BTreeMap<LibraryName, Range>,
+    pub lock: Lock,
+}
+
 /// Libraries in search order, optionally of one scope, with the
 /// dependencies that are not installed among the installed ones.
 pub fn list(
     libraries: &Libraries<'_>,
-    dependencies: &BTreeMap<LibraryName, Range>,
-    lock: &Lock,
+    declared: &[Declared],
     scope: Option<&str>,
 ) -> Result<Vec<Listed>, Diagnostic> {
+    let ranges = |global: bool| {
+        declared
+            .iter()
+            .find(|d| d.global == global)
+            .map(|d| &d.ranges)
+    };
     let mut listed: Vec<Listed> = libraries
         .list()?
         .into_iter()
         .map(|(origin, info)| Listed {
-            range: dependencies.get(&info.name).copied(),
+            range: ranges(info.global).and_then(|r| r.get(&info.name)).copied(),
             origin,
             info,
             installed: true,
         })
         .collect();
-    for (name, range) in dependencies {
-        if listed.iter().any(|l| l.info.name == *name) {
-            continue;
+    for area in declared {
+        for (name, range) in &area.ranges {
+            // A global dependency is hidden by the project's library too.
+            if listed
+                .iter()
+                .any(|l| l.info.name == *name && (area.global || !l.info.global))
+            {
+                continue;
+            }
+            listed.push(Listed {
+                origin: Origin::Installed,
+                info: LibraryInfo {
+                    name: name.clone(),
+                    title: None,
+                    entries: 0,
+                    location: None,
+                    normalized: false,
+                    version: area.lock.libraries.get(name).map(|l| l.version),
+                    global: area.global,
+                },
+                range: Some(*range),
+                installed: false,
+            });
         }
-        listed.push(Listed {
-            origin: Origin::Installed,
-            info: LibraryInfo {
-                name: name.clone(),
-                title: None,
-                entries: 0,
-                location: None,
-                normalized: false,
-                version: lock.libraries.get(name).map(|l| l.version),
-            },
-            range: Some(*range),
-            installed: false,
-        });
     }
-    // Project, then installed; each in name order.
+    // The project's, then the global ones; unscoped, then installed; each
+    // in name order.
     listed.sort_by(|a, b| {
-        let rank = |l: &Listed| matches!(l.origin, Origin::Installed);
+        let rank = |l: &Listed| (l.info.global, matches!(l.origin, Origin::Installed));
         (rank(a), &a.info.name).cmp(&(rank(b), &b.info.name))
     });
     listed.retain(|l| scope.is_none_or(|s| l.info.name.scope() == Some(s)));
@@ -108,6 +130,8 @@ pub enum Shown {
 pub struct EntryDetails {
     pub reference: Ref,
     pub origin: Origin,
+    /// Whether the library is a global one.
+    pub global: bool,
     /// The installed version, for an installed library's entry.
     pub version: Option<Version>,
     pub title: String,
@@ -120,12 +144,11 @@ pub struct EntryDetails {
     pub example: String,
 }
 
-/// `target` is a library name or a reference string. `dependencies` and
-/// `lock` describe a library as `library list` does.
+/// `target` is a library name or a reference string. `declared` describes a
+/// library as `library list` does.
 pub fn show(
     libraries: &Libraries<'_>,
-    dependencies: &BTreeMap<LibraryName, Range>,
-    lock: &Lock,
+    declared: &[Declared],
     target: &str,
 ) -> Result<Shown, Diagnostics> {
     if let Ok(reference) = Ref::parse(target) {
@@ -146,15 +169,16 @@ pub fn show(
         {
             *style = without_image_data(style, &reference);
         }
-        let version = libraries
+        let info = libraries
             .list()?
             .into_iter()
             .find(|(_, info)| info.name == reference.library)
-            .and_then(|(_, info)| info.version);
+            .map(|(_, info)| info);
         return Ok(Shown::Entry(EntryDetails {
             example: example(&reference, kind, entry.width, entry.height),
             origin: reference.library.origin(),
-            version,
+            global: info.as_ref().is_some_and(|i| i.global),
+            version: info.and_then(|i| i.version),
             title: entry.title.clone(),
             kind,
             width: entry.width,
@@ -165,7 +189,7 @@ pub fn show(
         }));
     }
     let name = LibraryName::parse(target).map_err(|d| d.reference(target))?;
-    let listed = list(libraries, dependencies, lock, None)?
+    let listed = list(libraries, declared, None)?
         .into_iter()
         .find(|l| l.info.name == name)
         .ok_or_else(|| {
@@ -315,16 +339,17 @@ pub fn preview(
     let png = renderer.render(&xml, 1, allow_network)?;
     let (width, height) = drawio_png::dimensions(&png)
         .map_err(|e| Diagnostics::from(Diagnostic::from_error(Code::RenderFailed, &e)))?;
-    let versions: BTreeMap<_, _> = libraries
+    let listed: BTreeMap<_, _> = libraries
         .list()?
         .into_iter()
-        .map(|(_, info)| (info.name, info.version))
+        .map(|(_, info)| (info.name, (info.global, info.version)))
         .collect();
     let entries = entries
         .into_iter()
         .map(|(reference, entry)| Hit {
             origin: reference.library.origin(),
-            version: versions.get(&reference.library).copied().flatten(),
+            global: listed.get(&reference.library).is_some_and(|l| l.0),
+            version: listed.get(&reference.library).and_then(|l| l.1),
             title: entry.title.clone(),
             kind: entry.kind(),
             width: entry.width,

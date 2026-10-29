@@ -57,6 +57,10 @@ pub fn custom_libraries(
 ) -> Result<Vec<CustomLibrary>, Diagnostic> {
     let mut items = Vec::new();
     for (origin, info) in libraries.list()? {
+        // The editor reads the project's files, not the user's.
+        if info.global {
+            continue;
+        }
         let entry_id = match origin {
             Origin::Project => ids.base.clone(),
             Origin::Installed => format!("{} @{}", ids.base, info.name.scope().unwrap_or("")),

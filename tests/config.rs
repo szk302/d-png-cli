@@ -4,7 +4,7 @@ mod support;
 
 use d_png_cli::domain::drawio_png;
 use std::{fs, path::Path};
-use support::{cli, stderr};
+use support::{cli, stderr, stdout};
 use tempfile::tempdir;
 
 const MODEL: &str = include_str!("fixtures/model.xml");
@@ -128,7 +128,7 @@ fn invalid_settings_are_reported_where_they_are_used() {
             .assert()
             .success();
     }
-    // Dependencies belong to the project.
+    // The user's dependencies are the global libraries', not the project's.
     let user = tempdir().unwrap();
     fs::write(
         user.path().join("config.toml"),
@@ -136,17 +136,22 @@ fn invalid_settings_are_reported_where_they_are_used() {
     )
     .unwrap();
     let dir = project("");
-    let error = stderr(
-        cli()
+    let command = |args: &[&str]| {
+        let mut command = cli();
+        command
             .current_dir(dir.path())
             .env("D_PNG_HOME", user.path())
-            .arg("expand")
-            .write_stdin(MODEL),
-        1,
+            .args(args);
+        command
+    };
+    command(&["expand"]).write_stdin(MODEL).assert().success();
+    assert_eq!(
+        stdout(&mut command(&["library", "list", "--json"])),
+        "[{\"global\":true,\"installed\":false,\"name\":\"@acme/brand\",\"origin\":\"installed\",\"range\":\"^1.0.0\"}]\n"
     );
-    assert!(
-        error.contains("[dependencies] belongs in the project"),
-        "{error}"
+    assert_eq!(
+        fs::read_to_string(dir.path().join(".d-png/config.toml")).unwrap(),
+        ""
     );
 }
 
