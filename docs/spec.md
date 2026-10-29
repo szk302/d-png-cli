@@ -15,7 +15,7 @@
 
 1. **`insert` を廃止し、XML に参照を書く。** エージェントは図面全体を XML で書くため、1 図形ずつコマンドで挿入して ID を受け取る流れは合わない。部品は `dpng-ref="<ライブラリ>/<ID>"` のプレースホルダーとして書き、`write` が展開する。1 回の呼び出しで図面ができ、中間ファイルも要らない。
 2. **参照は 1 つの文字列にする。** 登録時にエントリーへ安定した ID を付けるため、タイトルの重複・空・`/` を含むタイトル・番号のずれを考えずに済む。PRD 4.2 で計画していた「ライブラリ名・タイトル・番号」と「画像ハッシュ」の 2 系統の指定は、同じ参照文字列の 2 つの書き方（セル群の `dpng-ref` と画像だけの `image=lib:`）にまとめた。
-3. **ライブラリの登録を必須にし、ライブラリを同梱しない。** 参照はプロジェクトに登録・取り込みしたライブラリだけで解決する。draw.io のサイドバーの図形（AWS・Azure など）も同梱せず、使う図形は利用者が draw.io でライブラリにして登録する。図形集・アイコンにはそれぞれのライセンス・商標の条件があり、何を使うかは利用者が決めるためである。環境変数で任意のパスを指すのをやめ、どこで実行しても（CI・他の開発者の環境でも）同じ部品になるようにした。登録したファイルはそのまま VS Code 拡張の設定から読ませる。
+3. **ライブラリの登録を必須にし、ライブラリを同梱しない。** 参照は登録・取り込みしたライブラリ（プロジェクトのもの、なければユーザー領域のグローバルのもの）だけで解決する。draw.io のサイドバーの図形（AWS・Azure など）も同梱せず、使う図形は利用者が draw.io でライブラリにして登録する。図形集・アイコンにはそれぞれのライセンス・商標の条件があり、何を使うかは利用者が決めるためである。環境変数で任意のパスを指すのをやめ、プロジェクトのライブラリなら、どこで実行しても（CI・他の開発者の環境でも）同じ部品になるようにした。登録したファイルはそのまま VS Code 拡張の設定から読ませる。
 4. **ライブラリ名に npm と同じ名前空間を入れる。** スコープのない名前（`components`）はそのプロジェクト専用、スコープ付きの名前（`@acme/brand`）は取得元から取り込む共有ライブラリとする。スコープごとに取得元（ディレクトリ・Git・HTTPS）を設定し、`library install` で取り込んで版を `lock.json` に固定する。同じ名前の部品集が社内・個人にあっても参照が衝突せず、版を上げるまで部品が変わらない。公開・認証を扱うレジストリーサーバーは作らず、Git などの既存の手段で配布する（[9.5](#95-スコープと取得元)）。
 5. **登録ファイルは VS Code 拡張が読める書式で書く。** 拡張 1.9.0 は `<mxlibrary>` の中身を実体参照を解かずに `JSON.parse` するため、CDATA や `&lt;` を使ったライブラリは draw.io で読めても拡張では読めない。CLI は XML の特殊文字を JSON 側のエスケープ（`\u003c` など）で書き、draw.io と拡張の両方で同じ内容になるようにする（[vscode.md](vscode.md#3-ライブラリファイルの書式の制約)）。
 6. **保存する XML には参照を残さない。** PNG の中は普通の draw.io XML なので、VS Code・draw.io で開くのに CLI もライブラリも要らない。
@@ -23,6 +23,7 @@
 8. **既定のレンダラーを VS Code 互換にする。** `--renderer` と `--chromium-mode` を 1 つにまとめ、既定を `vscode` にした。draw.io Desktop が入っているかどうかで結果が変わらない。
 9. **PNG を読む・書くコマンドを `read`・`write` と呼ぶ。** `.drawio.png` を読む・書く動詞で、標準出力・標準入力との向きも名前どおりになる。描画しない `write --metadata-only` でも名前と矛盾しない。`write` が描画を伴うことはヘルプと手順書で明記する（[3 章](#3-コマンド一覧)）。
 10. **入出力・出力形式・エラーを全コマンドで揃える。** 入力は位置引数か標準入力、出力は `-o`、機械向けは `--json`、エラーはコード付きで全件をまとめて報告する（[2 章](#2-共通の規約)）。
+11. **グローバルのライブラリをユーザー領域に置けるようにする。** 個人のライブラリを、プロジェクトごとに `init` して登録・取り込みしなくても使えるよう、`library add --global`・`library install --global` でユーザー領域に置く（npm の `-g` に当たる）。プロジェクトがなくても参照でき、プロジェクトに同じ名前のライブラリがあればプロジェクトのものを使う（[9.1](#91-種類と探索順)）。グローバルのライブラリは、登録した人の環境にしかない。影響を受けるのは、参照（`dpng-ref`・`image=lib:`）を含む XML を、そのライブラリを持たない環境（ほかの人・CI）で `write`・`expand`・`validate` する場合だけで、`REF_NOT_FOUND` になる。PNG には参照を残さないので、保存済みの図面はだれでも開ける。ほかの人が PNG を `read` → 編集 → `write` する場合も、その人のライブラリにない画像は `read` が実データのまま残すので失敗しない。参照を含む XML をリポジトリに置いて共有する場合は、部品をプロジェクトに置く。
 
 ## 2. 共通の規約
 
@@ -48,12 +49,12 @@ d-png-cli library <操作> [引数] [オプション]
 
 ### 2.2 プロジェクト領域とユーザー領域
 
-ライブラリはプロジェクト領域だけに置き、ユーザー領域には個人の設定だけを置く。
+ライブラリはプロジェクト領域に置く。すべてのプロジェクトで使う個人のライブラリは、ユーザー領域にグローバルのライブラリとして置ける（`--global`）。
 
 | 領域 | 場所 | 置くもの |
 | --- | --- | --- |
 | プロジェクト | カレントディレクトリから親へ向かって最初に見つかる `.d-png/`。`--project DIR` または `D_PNG_PROJECT` で指定できる | ライブラリ、依存関係、ロックファイル、描画の設定。Git で共有する。VS Code では `${workspaceFolder}` から参照する |
-| ユーザー | `D_PNG_HOME`。未設定なら Linux は `$XDG_CONFIG_HOME/d-png-cli`（未設定なら `~/.config/d-png-cli`）、macOS は `~/Library/Application Support/d-png-cli`、Windows は `%APPDATA%\d-png-cli` | `config.toml` だけ（描画の既定値、個人・社内のスコープの取得元） |
+| ユーザー | `D_PNG_HOME`。未設定なら Linux は `$XDG_CONFIG_HOME/d-png-cli`（未設定なら `~/.config/d-png-cli`）、macOS は `~/Library/Application Support/d-png-cli`、Windows は `%APPDATA%\d-png-cli` | `config.toml`（描画の既定値、個人・社内のスコープの取得元、グローバルの依存ライブラリ）と、グローバルのライブラリ。Git では共有しない |
 
 ```
 .d-png/
@@ -65,7 +66,16 @@ d-png-cli library <操作> [引数] [オプション]
     @<スコープ>/<名前>.xml    # library install で取り込んだライブラリ（9.3 の書式）
 ```
 
-ユーザー領域にライブラリを置かないのは、同じ XML がどの環境でも同じ部品に展開されるようにするためである。個人のライブラリも、`file:` の取得元（[9.5](#95-スコープと取得元)）から各プロジェクトに取り込む。
+```
+<ユーザー領域>/
+  config.toml                # 描画の既定値・スコープの取得元・グローバルの依存ライブラリ（2.4）
+  lock.json                  # グローバルに取り込んだライブラリの版と完全性（9.6）
+  libraries/
+    <名前>.xml               # library add --global で登録したライブラリ（9.3 の書式）
+    @<スコープ>/<名前>.xml    # library install --global で取り込んだライブラリ（9.3 の書式）
+```
+
+グローバルのライブラリは、プロジェクトがなくても、どのプロジェクトからでも参照できる（[9.1](#91-種類と探索順)）。ただし、その参照を含む XML（`dpng-ref`・`image=lib:`）は、同じライブラリを持たない環境（ほかの人・CI）では展開できない。保存済みの PNG を開くことや、PNG の `read` → `write` には影響しない（[1.1](#11-主な設計判断) の 11）。参照を含む XML を共有するリポジトリでは、ライブラリをプロジェクトに置く。個人のライブラリも、`file:` などの取得元（[9.5](#95-スコープと取得元)）からプロジェクトに取り込める。
 
 取得元から取得したファイルは、プロジェクト内には置かず、キャッシュ（`D_PNG_CACHE`、未設定なら OS のキャッシュディレクトリ）に完全性をキーにして置く。`library install --offline` はこのキャッシュだけを使う。
 
@@ -100,7 +110,7 @@ error[REF_NOT_FOUND] page 1 "構成図", cell "db": shapes/cylnder is not found
 | `IMAGE_CHANGED` | 指紋付きの画像参照に一致する画像が登録ライブラリにない |
 | `LIBRARY_EXISTS`・`LIBRARY_INVALID` | 同名のライブラリがある、ライブラリ・エントリーを解析できない |
 | `CONFIG_INVALID` | `config.toml` を解析できない・未知のキーや不正な値がある、`.vscode/settings.json` を JSONC として解析できない |
-| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（`library add`・`install`・`remove`・`vscode` など）で、`.d-png/` が見つからない。図面の参照は解決できないため `REF_NOT_FOUND` になる（[9.1](#91-種類と探索順)） |
+| `PROJECT_NOT_FOUND` | プロジェクト領域が必要な操作（`--global` のない `library add`・`install`・`remove`、`library vscode` など）で、`.d-png/` が見つからない。図面の参照はグローバルのライブラリだけで解決し、なければ `REF_NOT_FOUND` になる（[9.1](#91-種類と探索順)）。ユーザー領域を決められない（`D_PNG_HOME`・`HOME` などがない）まま `--global` を使った場合も、このコードになる |
 | `SCOPE_UNKNOWN`・`SOURCE_FETCH` | スコープに取得元が設定されていない、取得元から取得できない |
 | `VERSION_NOT_FOUND`・`VERSION_EXISTS` | 範囲に合う版がない、`library pack` で同じ版が既にある |
 | `LIBRARY_NOT_INSTALLED`・`LIBRARY_INTEGRITY` | 依存にあるライブラリが取り込まれていない、取り込んだファイルがロックファイルの完全性と合わない |
@@ -139,8 +149,8 @@ partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_LIBS_T
 | セクション | 書ける場所 | 内容 |
 | --- | --- | --- |
 | `[render]` | プロジェクト・ユーザー | 描画の設定。`write` が使う。フォントの指定は、埋め込む XML を同じにするため `expand` にも適用する。`library preview` は `allow-network` だけを使う（描画方式は常に `vscode`） |
-| `[scopes]` | プロジェクト・ユーザー | スコープと取得元の対応（[9.5](#95-スコープと取得元)）。同じスコープはプロジェクトの設定を使う |
-| `[dependencies]` | プロジェクトだけ | 取り込むライブラリと版の範囲（[9.6](#96-依存関係とロックファイル)）。`library install`・`update`・`remove` が書き換える。手で書いてもよい |
+| `[scopes]` | プロジェクト・ユーザー | スコープと取得元の対応（[9.5](#95-スコープと取得元)）。同じスコープはプロジェクトの設定を使う。`--global` の取り込みはユーザーの設定だけを使う |
+| `[dependencies]` | プロジェクト・ユーザー | 取り込むライブラリと版の範囲（[9.6](#96-依存関係とロックファイル)）。ユーザーの設定ではグローバルのライブラリのもので、プロジェクトの依存関係にはならない。`library install`・`update`・`remove`（ユーザーの設定は `--global` 付き）が書き換える。手で書いてもよい |
 
 優先順位は、コマンドのオプション → 環境変数 → プロジェクトの `config.toml` → ユーザーの `config.toml` → 既定値。未知のキーはエラーにする。CLI が `config.toml` を書き換えるときは、コメント・キーの順序・他のセクションを保持する。トークンなどの秘密の値は書かない（`token-env` には環境変数の名前を書く）。
 
@@ -149,7 +159,7 @@ partner = { url = "https://libs.example.com/d-png/", token-env = "PARTNER_LIBS_T
 | 環境変数 | 内容 |
 | --- | --- |
 | `D_PNG_PROJECT` | プロジェクト領域を含むディレクトリ |
-| `D_PNG_HOME` | ユーザー領域（個人の `config.toml` を置くディレクトリ） |
+| `D_PNG_HOME` | ユーザー領域（個人の `config.toml` とグローバルのライブラリを置くディレクトリ） |
 | `[scopes]` の `token-env` で指定した名前 | HTTPS の取得元に送るトークン（[9.5](#95-スコープと取得元)） |
 | `D_PNG_CACHE` | 取得元から取得したファイルのキャッシュ。未設定なら OS のキャッシュディレクトリ（Linux は `$XDG_CACHE_HOME/d-png-cli`、macOS は `~/Library/Caches/d-png-cli`、Windows は `%LOCALAPPDATA%\d-png-cli`） |
 | `D_PNG_RENDERER` | 既定のレンダラー（[5.2](#52-レンダラー)） |
@@ -172,8 +182,8 @@ v0.1.0 の環境変数は `DIP_` で始まる。描画の 5 つは接頭辞を�
 | `library search [QUERY...]` | — | エントリーの検索 |
 | `library show REF` | — | ライブラリ・エントリーの詳細（style・セル構成・配置例） |
 | `library preview QUERY... -o PNG` | — | 該当するエントリーを並べた PNG |
-| `library add SOURCE...` | — | ライブラリ・画像ファイルを、プロジェクト専用のライブラリ（スコープなし）として登録する |
-| `library install [NAME[@範囲]...]` | — | スコープ付きのライブラリを取得元から取り込む |
+| `library add SOURCE...` | — | ライブラリ・画像ファイルを、プロジェクト専用（`--global` ではグローバル）のライブラリ（スコープなし）として登録する |
+| `library install [NAME[@範囲]...]` | — | スコープ付きのライブラリを取得元からプロジェクト（`--global` ではユーザー領域）に取り込む |
 | `library update [NAME...]` | — | 取り込んだライブラリを新しい版にする |
 | `library pack SOURCE... --to DIR` | — | 取得元に置くライブラリの版を作る |
 | `library remove REF` | — | ライブラリ・エントリーの登録、取り込みを消す |
@@ -181,6 +191,8 @@ v0.1.0 の環境変数は `DIP_` で始まる。描画の 5 つは接頭辞を�
 | `library vscode` | — | VS Code 拡張の設定を出力・更新する |
 | `skill` | — | エージェント向けの手順書 |
 | `licenses` | — | ライセンスと通知 |
+
+ライブラリを変える `library add`・`install`・`update`・`remove`・`sync` は、`--global`（`-g`）でプロジェクトの代わりにユーザー領域のグローバルのライブラリを対象にする。`library list --global` はグローバルのライブラリだけを出す。参照を解決するコマンドはプロジェクトとグローバルの両方を使うため、`--global` を取らない。
 
 図面を受け取る 4 コマンドの関係:
 
@@ -215,12 +227,13 @@ v0.1.0 の環境変数は `DIP_` で始まる。描画の 5 つは接頭辞を�
 
 | 例 | 意味 |
 | --- | --- |
-| `simple-icons/postgresql` | プロジェクトに登録したライブラリ `simple-icons` のエントリー `postgresql` |
+| `simple-icons/postgresql` | 登録したライブラリ `simple-icons`（プロジェクトのもの、なければグローバルのもの）のエントリー `postgresql` |
 | `@acme/brand/logo` | スコープ `acme` の取得元から取り込んだライブラリ `@acme/brand` のエントリー `logo` |
 | `shapes/cylinder` | プロジェクトに登録したライブラリ `shapes`（draw.io の図形を利用者がまとめたもの）のエントリー `cylinder` |
 
 - `@` で始まれば `@<スコープ>/<ライブラリ名>/<エントリー ID>` の 3 つ、そうでなければ `<ライブラリ名>/<エントリー ID>` の 2 つに `/` で分ける。数が合わなければ `REF_SYNTAX`。
-- 版は書かない。取り込んだライブラリのどの版を使うかは、プロジェクトのロックファイルで決まる（[9.6](#96-依存関係とロックファイル)）。
+- 版は書かない。取り込んだライブラリのどの版を使うかは、ロックファイルで決まる（[9.6](#96-依存関係とロックファイル)）。
+- 参照がプロジェクトのライブラリかグローバルのライブラリかは書かない。プロジェクト → グローバルの順に探す（[9.1](#91-種類と探索順)）。
 - 大文字小文字を含め完全一致で解決する。タイトルや番号での指定、あいまいな一致はしない。見つからなければ `REF_NOT_FOUND` とし、近い参照を候補に示す。スコープは補わない（`brand/logo` を `@acme/brand/logo` に読み替えない。候補には示す）。
 - 名前と ID の規則は [9.2](#92-名前とエントリー-id)。
 
@@ -285,7 +298,7 @@ style の `image` の値に `lib:<参照>` を書くと、その値だけをエ�
 
 - 参照できるのは種類 `image` のエントリーだけ。それ以外は `REF_KIND`。
 - 画像の値は、`xml` のエントリーではセルの style の `image` の値そのもの、`data` のエントリーでは draw.io がサイドバーから配置するときと同じ変換（`convertDataUri`: 最初の `;` から次の `,` の手前までを削る。例 `data:image/png;base64,AAA` → `data:image/png,AAA`）をした値とする。VS Code 拡張のライブラリ欄から人が置いた画像と同じ値になる。
-- `lib:<参照>@<指紋>` の形は `read` が書く（[7 章](#7-read)）。指紋は画像の値（UTF-8）の SHA-256 の先頭 12 桁（小文字の 16 進数）。スコープ付きの参照でも指紋は最後の `@` の後に付く（例 `lib:@acme/brand/logo@37483e4b7f30`）。エントリー ID は `@` を含まないため、先頭の `@`（スコープ）と区別できる。指紋付きの参照は、プロジェクトのライブラリ（登録・取り込み）の全エントリーから同じ指紋の画像を探して戻す。参照先のエントリーを先に調べるが、ID が変わっていても画像が同じなら戻せる。見つからなければ `IMAGE_CHANGED` で失敗し、別の画像に置き換えない。指紋のない参照は、参照先の現在の画像を使う。
+- `lib:<参照>@<指紋>` の形は `read` が書く（[7 章](#7-read)）。指紋は画像の値（UTF-8）の SHA-256 の先頭 12 桁（小文字の 16 進数）。スコープ付きの参照でも指紋は最後の `@` の後に付く（例 `lib:@acme/brand/logo@37483e4b7f30`）。エントリー ID は `@` を含まないため、先頭の `@`（スコープ）と区別できる。指紋付きの参照は、参照できるライブラリ（[9.1](#91-種類と探索順)。プロジェクトとグローバルの登録・取り込み）の全エントリーから同じ指紋の画像を探して戻す。参照先のエントリーを先に調べるが、ID が変わっていても画像が同じなら戻せる。見つからなければ `IMAGE_CHANGED` で失敗し、別の画像に置き換えない。指紋のない参照は、参照先の現在の画像を使う。
 - `dpng-ref` のプレースホルダーの style で `image=lib:` を上書きした場合も同じく展開する。
 - 対象は style の `image` キーだけとする。
 
@@ -375,7 +388,7 @@ d-png-cli read [INPUT] [-o OUTPUT] [--raw] [--json]
 エージェントが編集するための XML を出力する。
 
 - 圧縮されたページを展開する。ページ順・名前・属性・未知の要素は保持する。
-- style の `image` が `data:` で始まるセル（ラッパー付き・グループの子を含む）について、指紋がプロジェクトのライブラリ（登録・取り込み）の種類 `image` のエントリーと一致すれば、値を `lib:<参照>@<指紋>`（例 `lib:@acme/brand/logo@37483e4b7f30`）に置き換える。一致が複数あれば [9.8](#98-library-search) と同じ順で最初のもの。一致しない画像は実データのまま残す。
+- style の `image` が `data:` で始まるセル（ラッパー付き・グループの子を含む）について、指紋が参照できるライブラリ（[9.1](#91-種類と探索順)。プロジェクトとグローバルの登録・取り込み）の種類 `image` のエントリーと一致すれば、値を `lib:<参照>@<指紋>`（例 `lib:@acme/brand/logo@37483e4b7f30`）に置き換える。一致が複数あれば [9.8](#98-library-search) と同じ順で最初のもの。一致しない画像は実データのまま残す。
 - 既に `image=lib:` を含む XML を入力した場合はそのまま出す（何度実行しても同じ結果）。
 - 置き換えた件数を標準エラーに 1 行で出し、画像を残すには `expand` を使うよう案内する。
 - `--raw` は PNG に保存された XML を、ページの展開・置き換えをせずに出す（診断用）。
@@ -413,9 +426,13 @@ d-png-cli validate [INPUT] [--json]
 | 取り込み（`installed`） | `@<スコープ>/<名前>` | `.d-png/libraries/@<スコープ>/<名前>.xml` | `library install`。取得元は `[scopes]`、版はロックファイルで決まる |
 
 - 名前空間が違えば別のライブラリである。`components` と `@acme/components` は共存でき、参照も別になる。
-- 参照はプロジェクト領域のライブラリだけを解決する。ユーザー領域・任意のパスのライブラリファイルを直接参照する手段は設けない（同じ XML がどこでも同じ部品になるようにし、ファイルを VS Code 拡張と共有するため）。
+- どちらの種類も、`--global` を付けるとユーザー領域（[2.2](#22-プロジェクト領域とユーザー領域)）にグローバルのライブラリとして置く。場所は `<ユーザー領域>/libraries/<名前>.xml`・`<ユーザー領域>/libraries/@<スコープ>/<名前>.xml`。JSON では `"global": true` を付ける（`origin` は名前空間の種類を表し、置き場所は表さない）。
+- 参照は、プロジェクトのライブラリ → グローバルのライブラリの順にライブラリ名で探す。プロジェクトに同じ名前のライブラリがあれば、グローバルのものは使わず、一覧・検索にも出さない（エントリー単位では混ぜない）。
+- プロジェクトの `lock.json` にあるライブラリは、ファイルがなくてもグローバルのものに切り替えず `LIBRARY_NOT_INSTALLED` にする（9.6）。プロジェクトが記録した版と別の版で展開しないためである。
+- 任意のパスのライブラリファイルを直接参照する手段は設けない（どこで実行しても同じ部品になるようにし、ファイルを VS Code 拡張と共有するため）。
 - CLI はライブラリを同梱しない。draw.io のサイドバーの図形（AWS・Azure・UML など）を使う場合は、利用者が draw.io で使う図形をライブラリのファイルにし、`library add` で登録する（手順は [usecase.md の I](usecase.md#drawio-の図形をライブラリにする)）。図形集・アイコンのライセンスと商標の条件は、登録する利用者が確認する。
-- プロジェクト領域がなければ、参照は解決できない（`REF_NOT_FOUND` で `init` を案内する）。`library list`・`library search` は何も出さない。
+- プロジェクト領域がなければ、グローバルのライブラリだけで参照を解決する。見つからなければ `REF_NOT_FOUND` で `init` と `library add --global` を案内する。
+- グローバルのライブラリの参照を含む XML は、そのライブラリを持たない環境（ほかの人・CI）では展開できない。保存済みの PNG には影響しない（[1.1](#11-主な設計判断) の 11）。VS Code 拡張の設定にも書かない（[9.17](#917-library-vscode)）。
 
 ### 9.2 名前とエントリー ID
 
@@ -501,6 +518,7 @@ d-png-cli validate [INPUT] [--json]
 - 取得元に接続するのは `library install`・`library update` だけである。`write` などの他のコマンドはネットワークに接続しない。
 - トークンは、`https:` 以外の URL と、設定したホストと別のホストへのリダイレクト先には送らない。
 - 参照・取り込みで使ったスコープに取得元がなければ `SCOPE_UNKNOWN`。
+- `library install --global`・`update --global` は、ユーザーの `config.toml` の `[scopes]` だけを使う。プロジェクトの中で実行しても、プロジェクトの取得元は使わない。
 
 ### 9.6 依存関係とロックファイル
 
@@ -538,14 +556,15 @@ d-png-cli validate [INPUT] [--json]
 - 参照を解決するコマンド（`write`・`expand`・`validate`・`read`・`library search` など）は、使うライブラリのファイルを `lock.json` の完全性と照合する。合わなければ `LIBRARY_INTEGRITY`、ファイルがなければ `LIBRARY_NOT_INSTALLED` とし、どちらも `library install` を案内する。取得元には接続しない。
 - 保存済みの PNG は参照を含まないため、ライブラリの版を上げても既存の図面は変わらない。影響を受けるのは、これから `write` する XML の参照と、`read` が出した指紋付きの画像参照（画像が変わっていれば `IMAGE_CHANGED`）だけである。
 - 依存関係は 1 段だけで、ライブラリが別のライブラリに依存する仕組みはない。
+- グローバルのライブラリ（`--global`）は、依存関係をユーザーの `config.toml` の `[dependencies]` に、版と完全性を `<ユーザー領域>/lock.json` に記録する。書式と照合の規則はプロジェクトと同じで、案内するコマンドには `--global` を付ける。プロジェクトとグローバルの依存関係は混ざらない。
 
 ### 9.7 `library list`
 
 ```
-d-png-cli library list [--scope SCOPE] [--json]
+d-png-cli library list [--scope SCOPE] [--global] [--json]
 ```
 
-テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクト → 取り込みの順で、それぞれ名前順。`--scope acme` でそのスコープのライブラリだけを出す。
+テキスト: `名前<TAB>版<TAB>エントリー数<TAB>表示名`（版はスコープ付きのライブラリだけ）。プロジェクトのもの → グローバルのもの、それぞれプロジェクト専用 → 取り込みの順で、名前順。プロジェクトのライブラリに隠れたグローバルのライブラリは出さない（9.1）。`--scope acme` でそのスコープのライブラリだけを、`--global` でグローバルのライブラリだけ（隠れているものも含む）を出す。
 
 例のプロジェクトでの出力（プロジェクト専用の `components`・`shapes` は省略）:
 
@@ -554,9 +573,9 @@ d-png-cli library list [--scope SCOPE] [--json]
  {"name":"@acme/brand","origin":"installed","version":"1.0.0","range":"^1.0.0","title":"ACME Brand","entries":1,"file":".d-png/libraries/@acme/brand.xml","normalized":true}]
 ```
 
-`normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリ（clone の直後など）は、`--json` では名前・版・範囲に `"installed":false` を付けて出し、テキストではエントリー数を `-`、表示名を `(not installed)` として、標準エラーで `library install` を案内する。
+`normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。グローバルのライブラリには `"global":true` を付け、`file` はユーザー領域のファイルの絶対パスとする。依存にあって取り込まれていないライブラリ（clone の直後など）は、`--json` では名前・版・範囲に `"installed":false` を付けて出し、テキストではエントリー数を `-`、表示名を `(not installed)` として、標準エラーで `library install` を案内する。
 
-ライブラリが 1 つもなければ、終了コード `0` のまま標準エラーで案内する。プロジェクトがなければ `init` を、あれば `library add` と `library install`（取得元のあるスコープがあればその名前）を示す。
+ライブラリが 1 つもなければ、終了コード `0` のまま標準エラーで案内する。プロジェクトがなければ `init` と `library add --global` を、あれば `library add` と `library install`（取得元のあるスコープがあればその名前）を示す。`--global` では `library add --global` と `library install --global`（ユーザーの設定で取得元のあるスコープ）を示す。
 
 ```
 hint: no libraries yet; register a file with `d-png-cli library add FILE`, or install one with `d-png-cli library install @SCOPE/NAME` (scopes with a source: @acme)
@@ -569,7 +588,7 @@ d-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIN
 ```
 
 - 語を空白で区切り、すべての語がタイトルか ID に含まれる（大文字小文字を区別しない）エントリーを出す。語を省略すると全エントリー。
-- 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位はプロジェクト → 取り込み、ライブラリ名順、エントリー順。
+- 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位は 9.7 の一覧の順（プロジェクト → グローバル、それぞれプロジェクト専用 → 取り込み、ライブラリ名順）、エントリー順。
 - `--limit` の既定は `50`（`0` で無制限）。打ち切った場合は全件数を標準エラーに出す。
 - 1 件もなく、プロジェクトかライブラリがなければ、9.7 と同じ案内を標準エラーに出す。
 - テキスト: `参照<TAB>種類<TAB>幅x高さ<TAB>タイトル`（タイトルの改行・タブは空白にして表示）。先頭の列をそのまま XML に写せる。
@@ -579,7 +598,7 @@ d-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIN
  {"ref":"@acme/brand/logo","library":"@acme/brand","id":"logo","title":"Logo","kind":"image","width":240,"height":120,"origin":"installed","version":"1.0.0"}]
 ```
 
-画像データ・style は出さない。
+グローバルのライブラリのエントリーには `"global":true` を付ける。画像データ・style は出さない。
 
 ### 9.9 `library show`
 
@@ -606,7 +625,7 @@ d-png-cli library show REF [--json]
 - `cells` は展開後の ID の付き方（`<ID>` はプレースホルダーの ID）と各セルの種類・ラベル・親を示す。
 - `style` は最上位のセルが 1 つのときだけ出す（開発版の `library style` の代わり）。最上位のセルがラッパーで包まれていれば、その独自データを `data`（例 `{"owner":"library","note":"keep"}`）に出す。
 - 種類 `image` には `"image":{"fingerprint":"224afa6bb926","mediaType":"image/svg+xml","bytes":109}` を付ける（`bytes` はデコードした画像の大きさ）。画像データは出さない。`style` の `image` の値は `lib:<参照>` に置き換えて出すので、`style` はそのまま XML に写せる（例 `shape=image;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;image=lib:simple-icons/postgresql;`）。
-- 取り込んだライブラリのエントリーには `version` を付ける。
+- 取り込んだライブラリのエントリーには `version` を、グローバルのライブラリのエントリーには `"global":true`（テキストでは `global: true` の行）を付ける。
 - `example` は種類に合わせたプレースホルダーの例（`image`・`shape` は幅・高さ付き、`edge` は `source`・`target` 付き）。
 
 ### 9.10 `library preview`
@@ -629,10 +648,10 @@ d-png-cli library preview [QUERY...|REF...] -o PNG [--library NAME] [--scope SCO
 
 ```
 d-png-cli library add SOURCE... [--name NAME] [--title TEXT]
-                                     [--replace | --merge] [--skip-invalid] [--json]
+                                     [--replace | --merge] [--skip-invalid] [--global] [--json]
 ```
 
-プロジェクト専用のライブラリ（スコープなし）を登録する。
+プロジェクト専用のライブラリ（スコープなし）を登録する。`--global` ではグローバルのライブラリとして登録する。
 
 | SOURCE | 扱い |
 | --- | --- |
@@ -640,17 +659,17 @@ d-png-cli library add SOURCE... [--name NAME] [--title TEXT]
 | 画像ファイル（PNG・JPEG・GIF・SVG・WebP） | 1 ファイルを 1 つの `data` エントリー（`data:<type>;base64,…`、`aspect` は `fixed`）にする。タイトルはファイル名から拡張子を除いたもの。幅・高さは画像から読み、読めなければ `LIBRARY_INVALID` |
 | `-` | 標準入力の `<mxlibrary>` |
 
-- 登録先は `.d-png/libraries/<名前>.xml`。プロジェクト領域が見つからなければ `PROJECT_NOT_FOUND`（`init` を案内する）。
+- 登録先は `.d-png/libraries/<名前>.xml`（`--global` では `<ユーザー領域>/libraries/<名前>.xml`。ディレクトリがなければ作る）。プロジェクト領域が見つからなければ `PROJECT_NOT_FOUND`（`init` と `--global` を案内する）。
 - `--name` の既定は最初の SOURCE のファイル名（拡張子を除く）を 9.2 の規則で整えたもの。スコープ付きの名前（`@acme/brand`）は指定できない（`USAGE`。`library pack` と `library install` を案内する）。`--title` の既定はソースの `title` 属性、なければ名前。
 - 同名のライブラリがあれば `LIBRARY_EXISTS`。`--replace` で全体を置き換え、`--merge` で同じ ID のエントリーを置き換えて新しいエントリーを末尾に追加する。
 - エントリーを検査し、`xml` が `<mxGraphModel>` でない、`data` が画像の URI でないなど解析できないものがあれば `LIBRARY_INVALID` で何も書かない。`--skip-invalid` で除外して登録する。
 - URL を SOURCE に取らない。ネットワークからは取得しない。
-- 出力: 名前・ファイル・エントリー数・各エントリーの参照文字列と種類。`--json` では同じ内容を 1 つのオブジェクト（`entries` に各エントリー）で出す。最後に `library vscode --write` を案内する。
+- 出力: 名前・場所（`project` か `global`）・ファイル・エントリー数・各エントリーの参照文字列と種類。`--json` では同じ内容を 1 つのオブジェクト（`entries` に各エントリー、グローバルなら `"global":true`）で出す。プロジェクトに登録した場合は、最後に `library vscode --write` を案内する。
 
 ### 9.12 `library install`
 
 ```
-d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
+d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--global] [--json]
 ```
 
 スコープ付きのライブラリを取得元から取り込む（npm の `npm install`）。
@@ -659,6 +678,7 @@ d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
 - 引数あり（例 `@acme/brand`、`@acme/brand@^1.2.0`）: `[dependencies]` に追加・更新して取り込む。範囲を省略すると、最新の版 `X.Y.Z` を取り込み `^X.Y.Z` と記録する。
 - `--frozen`: `config.toml`・`lock.json` を変えない。依存と `lock.json` が合わなければ `LOCK_OUTDATED` で何もしない（CI 用。npm の `npm ci`）。
 - `--offline`: 取得元に接続せず、キャッシュ（2.2）だけを使う。
+- `--global`: グローバルのライブラリとして、`<ユーザー領域>/libraries/@<スコープ>/<名前>.xml` に取り込む。依存関係はユーザーの `config.toml`、版は `<ユーザー領域>/lock.json` に記録し（9.6）、取得元はユーザーの `[scopes]` だけを使う（9.5）。プロジェクトは要らない。`library vscode --write` は案内しない。
 - 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.d-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
 - 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）。
 - 出力: 追加・更新・削除したライブラリの名前・版・エントリー数（ライブラリごとに 1 行。`--json` の `entries` も数）。エントリーの一覧は `library search --library <名前>` で見る。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
@@ -671,8 +691,10 @@ hint: run `d-png-cli library vscode --write` to use it in VS Code
 ### 9.13 `library update`
 
 ```
-d-png-cli library update [NAME...] [--latest] [--dry-run] [--json]
+d-png-cli library update [NAME...] [--latest] [--dry-run] [--global] [--json]
 ```
+
+`--global` ではグローバルの取り込んだライブラリを対象にする（9.12 と同じ記録先）。
 
 - 取り込んだライブラリ（省略時はすべて）を、範囲内の最新の版にして `lock.json` を書き換える（npm の `npm update`）。
 - `--latest`: 範囲を超えて最新の版にし、範囲を `^<版>` に書き換える。
@@ -697,8 +719,10 @@ d-png-cli library pack SOURCE... --name @SCOPE/NAME --version X.Y.Z --to DIR [--
 ### 9.15 `library remove`
 
 ```
-d-png-cli library remove REF [--json]
+d-png-cli library remove REF [--global] [--json]
 ```
+
+`--global` ではグローバルのライブラリを対象にし、ユーザー領域のファイル・`lock.json` とユーザーの `config.toml` の `[dependencies]` を変える。
 
 | `REF` | 処理 |
 | --- | --- |
@@ -712,8 +736,10 @@ d-png-cli library remove REF [--json]
 ### 9.16 `library sync`
 
 ```
-d-png-cli library sync [NAME...] [--check] [--json]
+d-png-cli library sync [NAME...] [--check] [--global] [--json]
 ```
+
+`--global` ではグローバルのライブラリを対象にする。
 
 draw.io Desktop のライブラリ編集や手作業で変わったプロジェクト専用のライブラリを 9.3 の書式に戻し、`id` のないエントリーに ID を付ける。既存の `id` は変えない。取り込んだライブラリは書き換えない（`LIBRARY_MANAGED`）。
 
@@ -728,6 +754,7 @@ d-png-cli library vscode [--entry-id TEXT] [--write] [--json]
 VS Code 拡張の `hediet.vscode-drawio.customLibraries` の値を出力する。詳細は [vscode.md](vscode.md)。
 
 - プロジェクト専用のライブラリと取り込んだライブラリを出す。`file` は `${workspaceFolder}/<プロジェクトからの相対パス>`。ワークスペースのフォルダーはプロジェクト領域の親ディレクトリとみなす。
+- グローバルのライブラリは出さない。拡張はワークスペースのファイルを読む前提で、devcontainer・WSL ではホスト側の拡張からユーザー領域を読めない可能性がある（[13 章](#13-未決定事項)）。
 - `entryId` は、プロジェクト専用のライブラリが `d-png-cli`、取り込んだライブラリが `d-png-cli @<スコープ>`。拡張はこの値を見出しにしてライブラリをまとめ、見出しごとに表示・非表示を切り替えられる。`--entry-id` で `d-png-cli` の部分を変えられる。
 - `libName` はライブラリの表示名。
 - `--write`: `<プロジェクト>/.vscode/settings.json` の `hediet.vscode-drawio.customLibraries` のうち、`entryId` が `d-png-cli` か `d-png-cli @` で始まる項目だけを置き換える。他の項目・設定・コメントは保持する。ファイルがなければ作る。JSONC として解析できなければ何も書かずにエラーにする。
@@ -778,6 +805,8 @@ v0.1.0 の後に開発版（`main` ブランチ）に入り、リリースしな
 - `group` の幅・高さの上書き（子セルの比例配置）を許すか。
 - 既存の図面のセルをエントリーとして登録する機能（`library add diagram.drawio --cell ID`）。
 - リモート環境（devcontainer・WSL）での VS Code 拡張によるライブラリの読み込み（[vscode.md](vscode.md#7-注意と未検証の事項)）。
+- グローバルのライブラリを VS Code 拡張で使う方法（VS Code のユーザー設定に絶対パスで書くか。リモート環境での読み込みは未確認）。
+- プロジェクトの図面がグローバルのライブラリを参照したときに警告するか（参照を含む XML は、ほかの人の環境・CI では展開できない。現案は警告しない）。
 - 指紋の長さ（12 桁）の妥当性。
 - 取り込んだライブラリを Git にコミットするか（現案は npm と同じく `.gitignore` で除外し、`library install` で復元する。コミットすれば CI・VS Code で取得元への接続が要らなくなるが、リポジトリが大きくなる）。
 - 版の範囲の書き方（現案は完全一致・`^`・`~`・`*` だけ）とプレリリース版、公開した版の取り下げ（npm の `deprecate`・`unpublish`）。

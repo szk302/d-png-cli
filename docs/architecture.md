@@ -26,13 +26,13 @@ adapters ──▶ app ──▶ domain
 
 | ポート | 役割 | 実装（アダプター） |
 | --- | --- | --- |
-| `LibraryRepository` | 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`InstalledLibraries`（スコープ付き） |
+| `LibraryRepository` | 1 つの領域（プロジェクトかグローバル）の 1 つの名前空間のライブラリを名前で読む・一覧する（読み取り専用のリポジトリ） | `ProjectLibraries`（スコープなし）、`InstalledLibraries`（スコープ付き）。どちらもプロジェクト領域とユーザー領域（グローバル）に 1 つずつ |
 | `LibraryStore` | `LibraryRepository` に加えてライブラリを保存・削除する | `ProjectLibraries` |
 | `Renderer` | 図面 XML の 1 ページを PNG の画素にする | `ChromiumRenderer`（`vscode`・`desktop-compat`・`raw`）、`DesktopAppRenderer` |
 | `Registry` | スコープの取得元から `versions.json` と版のファイルを得る。ネットワークを使う唯一のポート | `Sources`（`file:`・Git・HTTPS とキャッシュ） |
 | `LockStore` | `lock.json` を読み書きする | `ProjectLock` |
 | `InstalledStore` | 取り込んだライブラリのファイルを置く・消す・調べる | `InstalledLibraries` |
-| `DependencyStore` | 設定を読み、`[dependencies]` を書き換える | `Configuration`（プロジェクトとユーザーの `config.toml`） |
+| `DependencyStore` | 設定を読み、`[dependencies]` を書き換える | `Configuration`（プロジェクトとユーザーの `config.toml`。グローバルではユーザーのものだけ） |
 | `Publication` | `library pack` が版を書き込む取得元のディレクトリ | `SourceDirectory` |
 | `EditorSettings` | エディターの設定にライブラリを登録する | `VsCodeSettings`（`.vscode/settings.json`） |
 
@@ -47,7 +47,8 @@ adapters ──▶ app ──▶ domain
 
 - 入力はドメインの値（図面のバイト列、参照、オプションの構造体）で受け取り、結果は構造体で返す。標準出力への表示、終了コード、環境変数の読み取りはしない。表示形式（テキスト・`--json`）は CLI アダプターが決める。
 - 1 件目で止めずに集めた問題は `Diagnostics`（複数の `Diagnostic`）として返す。
-- 参照の解決は `Libraries`（`src/app/libraries.rs`）が行う。参照のスコープからリポジトリを選び（スコープなし → プロジェクト、スコープ付き → 取り込み）、エントリーをドメインの展開処理に渡す。展開処理自体はリポジトリを知らない。
+- 参照の解決は `Libraries`（`src/app/libraries.rs`）が行う。参照のスコープからリポジトリを選び（スコープなし → プロジェクト専用、スコープ付き → 取り込み）、プロジェクトのリポジトリ → グローバルのリポジトリの順に探して、エントリーをドメインの展開処理に渡す。展開処理自体はリポジトリを知らない。
+- ライブラリを変えるユースケース（`register`・`install`）は、どの領域のリポジトリ・設定を渡されたかを知らない。`--global` は CLI アダプターがユーザー領域のアダプターを組み立てて表す。
 
 ## 4. ドメイン（`src/domain/`）
 
@@ -76,7 +77,7 @@ adapters ──▶ app ──▶ domain
 | --- | --- |
 | `cli` | `clap` の定義、ユースケースの呼び出し、テキスト・JSON の出力、診断の表示、終了コード |
 | `fs` | 上限付きの読み込み、アトミックな書き込み |
-| `project` | プロジェクト領域（`.d-png/`）の探索と `init`、`ProjectLibraries`（`libraries/<名前>.xml`）、`InstalledLibraries`（`libraries/@<スコープ>/<名前>.xml`）、`ProjectLock`（`lock.json`） |
+| `project` | プロジェクト領域（`.d-png/`）の探索と `init`、ライブラリを置く領域 `LibraryArea`（プロジェクト領域か、グローバルのライブラリのユーザー領域）と、その `ProjectLibraries`（`libraries/<名前>.xml`）・`InstalledLibraries`（`libraries/@<スコープ>/<名前>.xml`）・`ProjectLock`（`lock.json`） |
 | `config` | `config.toml`（プロジェクト・ユーザー）の読み込みと、コメントを保った `[dependencies]` の書き換え |
 | `sources` | 取得元（`file:`・`git` コマンド・`curl` コマンド）、取得したファイルのキャッシュ、`library pack` の書き込み先 |
 | `vscode` | `.vscode/settings.json`（コメント・末尾のカンマを含む JSON）の `customLibraries` の書き換え |
