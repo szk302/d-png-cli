@@ -78,6 +78,7 @@ d-png-cli write "$tmp/diagram.xml" -o diagram.drawio.png
 
 draw.io の図形（AWS など）、ロゴやアイコンは、style や Base64 を推測で書かず、プロジェクトに登録されたライブラリの**参照文字列**で書く。
 CLI はライブラリを同梱していない。必要な図形が見つからなければ、ユーザーに登録（`library add`）を依頼する。
+検索結果が空で `hint:` が出たら、プロジェクトかライブラリがない。その案内をユーザーに伝える。
 
 ```sh
 d-png-cli library search cylinder             # 参照・種類・サイズ・タイトル。先頭の列が参照文字列

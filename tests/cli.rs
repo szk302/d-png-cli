@@ -226,6 +226,34 @@ fn atomic_save_keeps_permissions() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn new_files_follow_the_umask() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempdir().unwrap();
+    let input = directory.path().join("model.xml");
+    fs::write(&input, MODEL).unwrap();
+    for (umask, mode) in [("022", 0o644), ("027", 0o640), ("077", 0o600)] {
+        let output = directory.path().join(format!("{umask}.drawio.png"));
+        let run = std::process::Command::new("sh")
+            .args(["-c", &format!("umask {umask} && exec \"$0\" \"$@\"")])
+            .arg(env!("CARGO_BIN_EXE_d-png-cli"))
+            .args(["write", "--metadata-only", "-o"])
+            .arg(&output)
+            .arg(&input)
+            .env_remove("D_PNG_PROJECT")
+            .current_dir(directory.path())
+            .output()
+            .unwrap();
+        assert!(run.status.success(), "{run:?}");
+        assert_eq!(
+            fs::metadata(&output).unwrap().permissions().mode() & 0o777,
+            mode,
+            "umask {umask}"
+        );
+    }
+}
+
 #[test]
 fn commands_without_rendering_ignore_invalid_desktop_options() {
     let directory = tempdir().unwrap();

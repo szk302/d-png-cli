@@ -37,7 +37,7 @@ d-png-cli library <操作> [引数] [オプション]
 | --- | --- |
 | 図面の入力 | 位置引数 `INPUT` を 1 つ取る。省略または `-` で標準入力。XML（`<mxfile>`・`<mxGraphModel>`）と `.drawio.png` のどちらも受け付け、拡張子ではなく内容（PNG シグネチャ）で判別する |
 | 出力先 | `-o`, `--output`。テキスト（XML・JSON・表）は省略時に標準出力。PNG は必須で、`-o -` を明示した場合だけ標準出力に書く |
-| 上書き | 出力先は入力と同じパスでもよい。同じディレクトリの一時ファイルに書き、同期後にアトミックに置き換える。失敗時は既存の出力を変更しない。出力先ディレクトリは作成しない |
+| 上書き | 出力先は入力と同じパスでもよい。同じディレクトリの一時ファイルに書き、同期後にアトミックに置き換える。失敗時は既存の出力を変更しない。出力先ディレクトリは作成しない。既存のファイルは権限を引き継ぎ、新しいファイルは umask に従う（umask が `022` なら `644`）。`config.toml`・`lock.json`・ライブラリなど CLI が書くファイルはすべて同じ |
 | 機械向け出力 | `--json` は `skill`・`licenses` を除く全コマンド共通で、標準出力に JSON 値を 1 つだけ出す。主出力（XML）を標準出力に出すコマンドで `--json` を使う場合は `-o` を必須にする。標準出力には主出力か JSON のどちらか 1 つしか出さない |
 | 診断 | 警告・エラーは標準エラー。`--json` 指定時は [2.3](#23-エラーと警告) の JSON |
 | 終了コード | `0` 成功、`1` 入力・参照・描画・保存のエラー、`2` 引数のエラー |
@@ -556,6 +556,12 @@ d-png-cli library list [--scope SCOPE] [--json]
 
 `normalized` は 9.3 の書式どおりか。`false` なら `library sync` を案内する。依存にあって取り込まれていないライブラリ（clone の直後など）は、`--json` では名前・版・範囲に `"installed":false` を付けて出し、テキストではエントリー数を `-`、表示名を `(not installed)` として、標準エラーで `library install` を案内する。
 
+ライブラリが 1 つもなければ、終了コード `0` のまま標準エラーで案内する。プロジェクトがなければ `init` を、あれば `library add` と `library install`（取得元のあるスコープがあればその名前）を示す。
+
+```
+hint: no libraries yet; register a file with `d-png-cli library add FILE`, or install one with `d-png-cli library install @SCOPE/NAME` (scopes with a source: @acme)
+```
+
 ### 9.8 `library search`
 
 ```
@@ -565,6 +571,7 @@ d-png-cli library search [QUERY...] [--library NAME] [--scope SCOPE] [--kind KIN
 - 語を空白で区切り、すべての語がタイトルか ID に含まれる（大文字小文字を区別しない）エントリーを出す。語を省略すると全エントリー。
 - 順序: タイトル・ID の完全一致 → 前方一致 → 部分一致。同順位はプロジェクト → 取り込み、ライブラリ名順、エントリー順。
 - `--limit` の既定は `50`（`0` で無制限）。打ち切った場合は全件数を標準エラーに出す。
+- 1 件もなく、プロジェクトかライブラリがなければ、9.7 と同じ案内を標準エラーに出す。
 - テキスト: `参照<TAB>種類<TAB>幅x高さ<TAB>タイトル`（タイトルの改行・タブは空白にして表示）。先頭の列をそのまま XML に写せる。
 
 ```json
@@ -654,11 +661,10 @@ d-png-cli library install [NAME[@範囲]...] [--frozen] [--offline] [--json]
 - `--offline`: 取得元に接続せず、キャッシュ（2.2）だけを使う。
 - 取得したファイルは `versions.json` の完全性と照合し、9.3 の書式であることを確かめてから `.d-png/libraries/@<スコープ>/<名前>.xml` に置く。1 つでも失敗したら、どのファイルも `config.toml`・`lock.json` も変えない。
 - 名前はスコープ付きだけ。スコープなしの名前は `USAGE`（`library add` を案内する）。
-- 出力: 追加・更新・削除したライブラリの名前・版・エントリー数。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
+- 出力: 追加・更新・削除したライブラリの名前・版・エントリー数（ライブラリごとに 1 行。`--json` の `entries` も数）。エントリーの一覧は `library search --library <名前>` で見る。VS Code の設定にないライブラリがあれば `library vscode --write` を案内する。
 
 ```
 installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries
-  @acme/brand/logo	image	240x120	Logo
 hint: run `d-png-cli library vscode --write` to use it in VS Code
 ```
 

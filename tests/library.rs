@@ -97,6 +97,70 @@ fn list_shows_the_project_libraries() {
 }
 
 #[test]
+fn empty_list_and_search_say_what_to_do() {
+    let user = tempdir().unwrap();
+    let outputs = |dir: &Path, args: &[&str]| {
+        let output = cli()
+            .current_dir(dir)
+            .env("D_PNG_HOME", user.path())
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        (
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+    let elsewhere = tempdir().unwrap();
+    for args in [
+        &["library", "list"][..],
+        &["library", "search", "--json", "x"],
+    ] {
+        let (out, err) = outputs(elsewhere.path(), args);
+        assert!(out.is_empty() || out == "[]\n", "{out}");
+        assert_eq!(
+            err, "hint: no project (.d-png/) here or above; run `d-png-cli init`\n",
+            "{args:?}"
+        );
+    }
+    let empty = tempdir().unwrap();
+    cli().arg("init").arg(empty.path()).assert().success();
+    let (out, err) = outputs(empty.path(), &["library", "list"]);
+    assert_eq!(out, "");
+    assert_eq!(
+        err,
+        "hint: no libraries yet; register a file with `d-png-cli library add FILE`, or give a scope a source in [scopes] of config.toml and run `d-png-cli library install @SCOPE/NAME`\n"
+    );
+    // The scopes that have a source, from either config.toml.
+    fs::write(
+        user.path().join("config.toml"),
+        "[scopes]\nmine = \"file:~/d-png-libraries\"\nacme = \"file:../acme\"\n",
+    )
+    .unwrap();
+    let (_, err) = outputs(empty.path(), &["library", "search", "aws"]);
+    assert!(
+        err.ends_with(
+            "`d-png-cli library install @SCOPE/NAME` (scopes with a source: @acme, @mine)\n"
+        ),
+        "{err}"
+    );
+    // No hint when libraries exist and only the query or scope finds nothing.
+    let dir = project();
+    for args in [
+        &["library", "list", "--scope", "acme"][..],
+        &["library", "search", "zzz"],
+    ] {
+        assert_eq!(
+            outputs(dir.path(), args),
+            (String::new(), String::new()),
+            "{args:?}"
+        );
+    }
+}
+
+#[test]
 fn search_prints_references_without_content() {
     let dir = project();
     let all = run(dir.path(), &["library", "search", "--library", "icons"]);

@@ -115,7 +115,7 @@ fn packed_and_installed_files_are_the_examples() {
     let out = w.run(&["library", "install", "@acme/brand"]);
     assert_eq!(
         out,
-        "installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries\n  @acme/brand/logo\timage\t240x120\tLogo\n"
+        "installed @acme/brand@1.0.0 (1 entry) from file:../acme-d-png-libraries\n"
     );
     assert_eq!(
         w.lock(),
@@ -223,7 +223,13 @@ fn a_clone_restores_the_locked_versions() {
     // Without the cache, the source has it.
     fs::remove_dir_all(w.root().join("cache")).unwrap();
     fs::remove_dir_all(w.installed().parent().unwrap()).unwrap();
-    w.run(&["library", "install", "--frozen"]);
+    // The summary counts the entries; library search lists them.
+    let json: serde_json::Value =
+        serde_json::from_str(&w.run(&["library", "install", "--frozen", "--json"])).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!([{"action": "installed", "name": "@acme/brand", "version": "1.0.0", "resolved": "file:../acme-d-png-libraries", "entries": 1}])
+    );
     validate(&w, 0);
     // A changed installed file is noticed.
     fs::write(
